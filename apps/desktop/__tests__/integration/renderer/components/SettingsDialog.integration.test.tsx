@@ -1,6 +1,6 @@
 /**
  * Integration tests for SettingsDialog component
- * Tests dialog rendering, API key management, model selection, and debug mode
+ * Tests dialog rendering, wizard navigation, API key management, and debug mode
  * @module __tests__/integration/renderer/components/SettingsDialog.integration.test
  * @vitest-environment jsdom
  */
@@ -19,16 +19,42 @@ vi.mock('@/lib/analytics', () => ({
   },
 }));
 
+// Mock i18next
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string, fallbackOrOptions?: string | Record<string, unknown>, options?: Record<string, unknown>) => {
+      // Handle both t(key, fallback) and t(key, fallback, { count: n }) formats
+      let fallback = typeof fallbackOrOptions === 'string' ? fallbackOrOptions : key;
+      const interpolations = typeof fallbackOrOptions === 'object' ? fallbackOrOptions : options;
+
+      // Simple interpolation for {{variable}} patterns
+      if (interpolations) {
+        Object.entries(interpolations).forEach(([k, v]) => {
+          fallback = fallback.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), String(v));
+        });
+      }
+      return fallback;
+    },
+    i18n: {
+      changeLanguage: vi.fn(),
+    },
+  }),
+}));
+
 // Create mock functions for accomplish API
 const mockGetApiKeys = vi.fn();
 const mockGetDebugMode = vi.fn();
 const mockGetVersion = vi.fn();
 const mockGetSelectedModel = vi.fn();
+const mockGetLanguage = vi.fn();
 const mockSetDebugMode = vi.fn();
 const mockSetSelectedModel = vi.fn();
+const mockSetLanguage = vi.fn();
 const mockAddApiKey = vi.fn();
 const mockRemoveApiKey = vi.fn();
 const mockValidateApiKeyForProvider = vi.fn();
+const mockTestOllamaConnection = vi.fn();
+const mockSetOllamaConfig = vi.fn();
 
 // Mock accomplish API
 const mockAccomplish = {
@@ -36,11 +62,15 @@ const mockAccomplish = {
   getDebugMode: mockGetDebugMode,
   getVersion: mockGetVersion,
   getSelectedModel: mockGetSelectedModel,
+  getLanguage: mockGetLanguage,
   setDebugMode: mockSetDebugMode,
   setSelectedModel: mockSetSelectedModel,
+  setLanguage: mockSetLanguage,
   addApiKey: mockAddApiKey,
   removeApiKey: mockRemoveApiKey,
   validateApiKeyForProvider: mockValidateApiKeyForProvider,
+  testOllamaConnection: mockTestOllamaConnection,
+  setOllamaConfig: mockSetOllamaConfig,
 };
 
 // Mock the accomplish module
@@ -97,11 +127,15 @@ describe('SettingsDialog Integration', () => {
     mockGetDebugMode.mockResolvedValue(false);
     mockGetVersion.mockResolvedValue('1.0.0');
     mockGetSelectedModel.mockResolvedValue({ provider: 'anthropic', model: 'anthropic/claude-opus-4-5' });
+    mockGetLanguage.mockResolvedValue('en');
     mockSetDebugMode.mockResolvedValue(undefined);
     mockSetSelectedModel.mockResolvedValue(undefined);
+    mockSetLanguage.mockResolvedValue(undefined);
     mockValidateApiKeyForProvider.mockResolvedValue({ valid: true });
     mockAddApiKey.mockResolvedValue({ id: 'key-1', provider: 'anthropic', keyPrefix: 'sk-ant-...' });
     mockRemoveApiKey.mockResolvedValue(undefined);
+    mockTestOllamaConnection.mockResolvedValue({ success: false, error: 'Connection failed' });
+    mockSetOllamaConfig.mockResolvedValue(undefined);
   });
 
   describe('dialog rendering', () => {
@@ -129,7 +163,7 @@ describe('SettingsDialog Integration', () => {
 
       // Assert
       await waitFor(() => {
-        expect(screen.getByText('Settings')).toBeInTheDocument();
+        expect(screen.getByText('settings.title')).toBeInTheDocument();
       });
     });
 
@@ -142,7 +176,7 @@ describe('SettingsDialog Integration', () => {
         expect(mockGetApiKeys).toHaveBeenCalled();
         expect(mockGetDebugMode).toHaveBeenCalled();
         expect(mockGetVersion).toHaveBeenCalled();
-        expect(mockGetSelectedModel).toHaveBeenCalled();
+        expect(mockGetLanguage).toHaveBeenCalled();
       });
     });
 
@@ -156,22 +190,46 @@ describe('SettingsDialog Integration', () => {
     });
   });
 
-  describe('API key section', () => {
-    it('should render API key section title', async () => {
+  describe('wizard navigation', () => {
+    it('should show Choose Model step initially', async () => {
       // Arrange & Act
       render(<SettingsDialog {...defaultProps} />);
 
       // Assert
       await waitFor(() => {
-        expect(screen.getByText('Bring Your Own Model/API Key')).toBeInTheDocument();
+        expect(screen.getByText('Choose Model')).toBeInTheDocument();
+        expect(screen.getByText('Cloud')).toBeInTheDocument();
+        expect(screen.getByText('Local')).toBeInTheDocument();
       });
     });
 
-    it('should render provider selection buttons', async () => {
-      // Arrange & Act
+    it('should navigate to Select Provider when Cloud is clicked', async () => {
+      // Arrange
       render(<SettingsDialog {...defaultProps} />);
 
+      // Act
+      await waitFor(() => {
+        expect(screen.getByText('Cloud')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Cloud'));
+
       // Assert
+      await waitFor(() => {
+        expect(screen.getByText('Select Provider')).toBeInTheDocument();
+      });
+    });
+
+    it('should show provider buttons on Select Provider step', async () => {
+      // Arrange
+      render(<SettingsDialog {...defaultProps} />);
+
+      // Act - Navigate to Select Provider
+      await waitFor(() => {
+        expect(screen.getByText('Cloud')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Cloud'));
+
+      // Assert - All providers should be visible
       await waitFor(() => {
         expect(screen.getByText('Anthropic')).toBeInTheDocument();
         expect(screen.getByText('OpenAI')).toBeInTheDocument();
@@ -180,205 +238,129 @@ describe('SettingsDialog Integration', () => {
       });
     });
 
-    it('should render API key input field', async () => {
+    it('should navigate to Ollama Setup when Local is clicked', async () => {
+      // Arrange
+      render(<SettingsDialog {...defaultProps} />);
+
+      // Act
+      await waitFor(() => {
+        expect(screen.getByText('Local')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Local'));
+
+      // Assert
+      await waitFor(() => {
+        expect(screen.getByText('Local Models')).toBeInTheDocument();
+      });
+    });
+
+    it('should show Ollama URL input on Local Models step', async () => {
+      // Arrange
+      render(<SettingsDialog {...defaultProps} />);
+
+      // Act
+      await waitFor(() => {
+        expect(screen.getByText('Local')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Local'));
+
+      // Assert
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('http://localhost:11434')).toBeInTheDocument();
+        expect(screen.getByText('Test')).toBeInTheDocument();
+      });
+    });
+
+    it('should navigate back from Select Provider to Choose Model', async () => {
+      // Arrange
+      render(<SettingsDialog {...defaultProps} />);
+
+      // Act - Navigate to Select Provider
+      await waitFor(() => {
+        expect(screen.getByText('Cloud')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Cloud'));
+
+      // Verify we're on Select Provider
+      await waitFor(() => {
+        expect(screen.getByText('Select Provider')).toBeInTheDocument();
+      });
+
+      // Act - Click Back button
+      fireEvent.click(screen.getByText('Back'));
+
+      // Assert - Back at Choose Model
+      await waitFor(() => {
+        expect(screen.getByText('Choose Model')).toBeInTheDocument();
+        expect(screen.getByText('Cloud')).toBeInTheDocument();
+      });
+    });
+
+    it('should navigate back from Local Models to Choose Model', async () => {
+      // Arrange
+      render(<SettingsDialog {...defaultProps} />);
+
+      // Act - Navigate to Local Models
+      await waitFor(() => {
+        expect(screen.getByText('Local')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Local'));
+
+      // Verify we're on Local Models
+      await waitFor(() => {
+        expect(screen.getByText('Local Models')).toBeInTheDocument();
+      });
+
+      // Act - Click Back button
+      fireEvent.click(screen.getByText('Back'));
+
+      // Assert - Back at Choose Model
+      await waitFor(() => {
+        expect(screen.getByText('Choose Model')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('API keys section', () => {
+    it('should render API Keys section', async () => {
       // Arrange & Act
       render(<SettingsDialog {...defaultProps} />);
 
       // Assert
       await waitFor(() => {
-        const input = screen.getByPlaceholderText('sk-ant-...');
-        expect(input).toBeInTheDocument();
-        expect(input).toHaveAttribute('type', 'password');
+        expect(screen.getByText('API Keys')).toBeInTheDocument();
       });
     });
 
-    it('should render Save API Key button', async () => {
+    it('should render Add API Key button', async () => {
       // Arrange & Act
       render(<SettingsDialog {...defaultProps} />);
 
       // Assert
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /save api key/i })).toBeInTheDocument();
+        expect(screen.getByText('Add API Key')).toBeInTheDocument();
       });
     });
-  });
 
-  describe('provider selection', () => {
-    it('should change provider when button is clicked', async () => {
+    it('should show add form when Add API Key is clicked', async () => {
       // Arrange
       render(<SettingsDialog {...defaultProps} />);
 
       // Act
       await waitFor(() => {
-        expect(screen.getByText('Google AI')).toBeInTheDocument();
+        expect(screen.getByText('Add API Key')).toBeInTheDocument();
       });
-      fireEvent.click(screen.getByText('Google AI'));
+      fireEvent.click(screen.getByText('Add API Key'));
 
-      // Assert
+      // Assert - Form should appear with provider buttons
       await waitFor(() => {
-        expect(screen.getByPlaceholderText('AIza...')).toBeInTheDocument();
-      });
-    });
-
-    it('should update input placeholder when provider changes', async () => {
-      // Arrange
-      render(<SettingsDialog {...defaultProps} />);
-
-      // Act - Click Google AI provider
-      await waitFor(() => {
-        expect(screen.getByText('Google AI')).toBeInTheDocument();
-      });
-      fireEvent.click(screen.getByText('Google AI'));
-
-      // Assert
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText('AIza...')).toBeInTheDocument();
-      });
-    });
-
-    it('should highlight selected provider', async () => {
-      // Arrange
-      render(<SettingsDialog {...defaultProps} />);
-
-      // Assert - Anthropic is selected by default and should have highlight class
-      await waitFor(() => {
-        const anthropicButton = screen.getByText('Anthropic').closest('button');
-        expect(anthropicButton?.className).toContain('border-primary');
-      });
-    });
-  });
-
-  describe('API key input and saving', () => {
-    it('should show error when saving empty API key', async () => {
-      // Arrange
-      render(<SettingsDialog {...defaultProps} />);
-
-      // Act
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /save api key/i })).toBeInTheDocument();
-      });
-      fireEvent.click(screen.getByRole('button', { name: /save api key/i }));
-
-      // Assert
-      await waitFor(() => {
-        expect(screen.getByText('Please enter an API key.')).toBeInTheDocument();
-      });
-    });
-
-    it('should show error when API key format is invalid', async () => {
-      // Arrange
-      render(<SettingsDialog {...defaultProps} />);
-
-      // Act
-      await waitFor(() => {
+        expect(screen.getByText('Add New API Key')).toBeInTheDocument();
+        expect(screen.getByText('Anthropic')).toBeInTheDocument();
         expect(screen.getByPlaceholderText('sk-ant-...')).toBeInTheDocument();
-      });
-      fireEvent.change(screen.getByPlaceholderText('sk-ant-...'), { target: { value: 'invalid-key' } });
-      fireEvent.click(screen.getByRole('button', { name: /save api key/i }));
-
-      // Assert
-      await waitFor(() => {
-        expect(screen.getByText(/invalid api key format/i)).toBeInTheDocument();
+        expect(screen.getByText('Save API Key')).toBeInTheDocument();
       });
     });
 
-    it('should validate and save valid API key', async () => {
-      // Arrange
-      mockValidateApiKeyForProvider.mockResolvedValue({ valid: true });
-      mockAddApiKey.mockResolvedValue({ id: 'key-1', provider: 'anthropic', keyPrefix: 'sk-ant-...' });
-      render(<SettingsDialog {...defaultProps} />);
-
-      // Act
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText('sk-ant-...')).toBeInTheDocument();
-      });
-      fireEvent.change(screen.getByPlaceholderText('sk-ant-...'), { target: { value: 'sk-ant-test123' } });
-      fireEvent.click(screen.getByRole('button', { name: /save api key/i }));
-
-      // Assert
-      await waitFor(() => {
-        expect(mockValidateApiKeyForProvider).toHaveBeenCalledWith('anthropic', 'sk-ant-test123');
-        expect(mockAddApiKey).toHaveBeenCalledWith('anthropic', 'sk-ant-test123');
-      });
-    });
-
-    it('should show error when API key validation fails', async () => {
-      // Arrange
-      mockValidateApiKeyForProvider.mockResolvedValue({ valid: false, error: 'Invalid API key' });
-      render(<SettingsDialog {...defaultProps} />);
-
-      // Act
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText('sk-ant-...')).toBeInTheDocument();
-      });
-      fireEvent.change(screen.getByPlaceholderText('sk-ant-...'), { target: { value: 'sk-ant-invalid' } });
-      fireEvent.click(screen.getByRole('button', { name: /save api key/i }));
-
-      // Assert
-      await waitFor(() => {
-        expect(screen.getByText('Invalid API key')).toBeInTheDocument();
-      });
-    });
-
-    it('should show success message after saving API key', async () => {
-      // Arrange
-      mockValidateApiKeyForProvider.mockResolvedValue({ valid: true });
-      mockAddApiKey.mockResolvedValue({ id: 'key-1', provider: 'anthropic', keyPrefix: 'sk-ant-...' });
-      render(<SettingsDialog {...defaultProps} />);
-
-      // Act
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText('sk-ant-...')).toBeInTheDocument();
-      });
-      fireEvent.change(screen.getByPlaceholderText('sk-ant-...'), { target: { value: 'sk-ant-valid123' } });
-      fireEvent.click(screen.getByRole('button', { name: /save api key/i }));
-
-      // Assert
-      await waitFor(() => {
-        expect(screen.getByText(/anthropic api key saved securely/i)).toBeInTheDocument();
-      });
-    });
-
-    it('should call onApiKeySaved callback after saving', async () => {
-      // Arrange
-      const onApiKeySaved = vi.fn();
-      mockValidateApiKeyForProvider.mockResolvedValue({ valid: true });
-      mockAddApiKey.mockResolvedValue({ id: 'key-1', provider: 'anthropic', keyPrefix: 'sk-ant-...' });
-      render(<SettingsDialog {...defaultProps} onApiKeySaved={onApiKeySaved} />);
-
-      // Act
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText('sk-ant-...')).toBeInTheDocument();
-      });
-      fireEvent.change(screen.getByPlaceholderText('sk-ant-...'), { target: { value: 'sk-ant-valid123' } });
-      fireEvent.click(screen.getByRole('button', { name: /save api key/i }));
-
-      // Assert
-      await waitFor(() => {
-        expect(onApiKeySaved).toHaveBeenCalled();
-      });
-    });
-
-    it('should show Saving... while saving is in progress', async () => {
-      // Arrange
-      mockValidateApiKeyForProvider.mockImplementation(
-        () => new Promise((resolve) => setTimeout(() => resolve({ valid: true }), 100))
-      );
-      render(<SettingsDialog {...defaultProps} />);
-
-      // Act
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText('sk-ant-...')).toBeInTheDocument();
-      });
-      fireEvent.change(screen.getByPlaceholderText('sk-ant-...'), { target: { value: 'sk-ant-valid123' } });
-      fireEvent.click(screen.getByRole('button', { name: /save api key/i }));
-
-      // Assert
-      expect(screen.getByText('Saving...')).toBeInTheDocument();
-    });
-  });
-
-  describe('saved keys display', () => {
     it('should render saved API keys', async () => {
       // Arrange
       const savedKeys: ApiKeyConfig[] = [
@@ -390,7 +372,6 @@ describe('SettingsDialog Integration', () => {
 
       // Assert
       await waitFor(() => {
-        expect(screen.getByText('Saved Keys')).toBeInTheDocument();
         expect(screen.getByText('sk-ant-abc...')).toBeInTheDocument();
         expect(screen.getByText('sk-xyz...')).toBeInTheDocument();
       });
@@ -462,132 +443,238 @@ describe('SettingsDialog Integration', () => {
         expect(screen.queryByText('Are you sure?')).not.toBeInTheDocument();
       });
     });
+  });
 
-    it('should show loading skeleton while fetching keys', async () => {
+  describe('API key input and saving', () => {
+    it('should show error when saving empty API key', async () => {
       // Arrange
-      mockGetApiKeys.mockImplementation(
-        () => new Promise((resolve) => setTimeout(() => resolve([]), 500))
+      render(<SettingsDialog {...defaultProps} />);
+
+      // Act - Open add form
+      await waitFor(() => {
+        expect(screen.getByText('Add API Key')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Add API Key'));
+
+      // Act - Try to save without entering a key
+      await waitFor(() => {
+        expect(screen.getByText('Save API Key')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Save API Key'));
+
+      // Assert
+      await waitFor(() => {
+        expect(screen.getByText('Please enter an API key.')).toBeInTheDocument();
+      });
+    });
+
+    it('should show error when API key format is invalid', async () => {
+      // Arrange
+      render(<SettingsDialog {...defaultProps} />);
+
+      // Act - Open add form
+      await waitFor(() => {
+        expect(screen.getByText('Add API Key')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Add API Key'));
+
+      // Act - Enter invalid key and save
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('sk-ant-...')).toBeInTheDocument();
+      });
+      fireEvent.change(screen.getByPlaceholderText('sk-ant-...'), { target: { value: 'invalid-key' } });
+      fireEvent.click(screen.getByText('Save API Key'));
+
+      // Assert
+      await waitFor(() => {
+        expect(screen.getByText(/Invalid API key format/i)).toBeInTheDocument();
+      });
+    });
+
+    it('should validate and save valid API key', async () => {
+      // Arrange
+      mockValidateApiKeyForProvider.mockResolvedValue({ valid: true });
+      mockAddApiKey.mockResolvedValue({ id: 'key-1', provider: 'anthropic', keyPrefix: 'sk-ant-...' });
+      render(<SettingsDialog {...defaultProps} />);
+
+      // Act - Open add form
+      await waitFor(() => {
+        expect(screen.getByText('Add API Key')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Add API Key'));
+
+      // Act - Enter valid key and save
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('sk-ant-...')).toBeInTheDocument();
+      });
+      fireEvent.change(screen.getByPlaceholderText('sk-ant-...'), { target: { value: 'sk-ant-test123' } });
+      fireEvent.click(screen.getByText('Save API Key'));
+
+      // Assert
+      await waitFor(() => {
+        expect(mockValidateApiKeyForProvider).toHaveBeenCalledWith('anthropic', 'sk-ant-test123');
+        expect(mockAddApiKey).toHaveBeenCalledWith('anthropic', 'sk-ant-test123');
+      });
+    });
+
+    it('should show error when API key validation fails', async () => {
+      // Arrange
+      mockValidateApiKeyForProvider.mockResolvedValue({ valid: false, error: 'Invalid API key' });
+      render(<SettingsDialog {...defaultProps} />);
+
+      // Act - Open add form
+      await waitFor(() => {
+        expect(screen.getByText('Add API Key')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Add API Key'));
+
+      // Act - Enter key and save
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('sk-ant-...')).toBeInTheDocument();
+      });
+      fireEvent.change(screen.getByPlaceholderText('sk-ant-...'), { target: { value: 'sk-ant-invalid' } });
+      fireEvent.click(screen.getByText('Save API Key'));
+
+      // Assert
+      await waitFor(() => {
+        expect(screen.getByText('Invalid API key')).toBeInTheDocument();
+      });
+    });
+
+    it('should show Saving... while saving is in progress', async () => {
+      // Arrange
+      mockValidateApiKeyForProvider.mockImplementation(
+        () => new Promise((resolve) => setTimeout(() => resolve({ valid: true }), 100))
       );
       render(<SettingsDialog {...defaultProps} />);
 
-      // Assert - Check for skeleton animation
+      // Act - Open add form
       await waitFor(() => {
-        const skeletons = document.querySelectorAll('.animate-pulse');
-        expect(skeletons.length).toBeGreaterThan(0);
+        expect(screen.getByText('Add API Key')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Add API Key'));
+
+      // Act - Enter key and save
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('sk-ant-...')).toBeInTheDocument();
+      });
+      fireEvent.change(screen.getByPlaceholderText('sk-ant-...'), { target: { value: 'sk-ant-valid123' } });
+      fireEvent.click(screen.getByText('Save API Key'));
+
+      // Assert
+      expect(screen.getByText('Saving...')).toBeInTheDocument();
+    });
+
+    it('should change provider in add form when button is clicked', async () => {
+      // Arrange
+      render(<SettingsDialog {...defaultProps} />);
+
+      // Act - Open add form
+      await waitFor(() => {
+        expect(screen.getByText('Add API Key')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Add API Key'));
+
+      // Act - Click Google AI provider
+      await waitFor(() => {
+        expect(screen.getByText('Google AI')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Google AI'));
+
+      // Assert - Placeholder should change to Google AI format
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('AIza...')).toBeInTheDocument();
       });
     });
   });
 
-  describe('model selection', () => {
-    it('should render Model section', async () => {
-      // Arrange & Act
-      render(<SettingsDialog {...defaultProps} />);
-
-      // Assert
-      await waitFor(() => {
-        expect(screen.getByText('Model')).toBeInTheDocument();
-      });
-    });
-
-    it('should render model selection dropdown', async () => {
+  describe('ollama setup', () => {
+    it('should show Test button on Ollama setup', async () => {
       // Arrange
-      const savedKeys: ApiKeyConfig[] = [
-        { id: 'key-1', provider: 'anthropic', keyPrefix: 'sk-ant-...' },
-      ];
-      mockGetApiKeys.mockResolvedValue(savedKeys);
       render(<SettingsDialog {...defaultProps} />);
+
+      // Act - Navigate to Local
+      await waitFor(() => {
+        expect(screen.getByText('Local')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Local'));
 
       // Assert
       await waitFor(() => {
-        const select = screen.getByRole('combobox');
-        expect(select).toBeInTheDocument();
+        expect(screen.getByText('Test')).toBeInTheDocument();
       });
     });
 
-    it('should show model options grouped by provider', async () => {
+    it('should show Testing... when connection is being tested', async () => {
       // Arrange
-      const savedKeys: ApiKeyConfig[] = [
-        { id: 'key-1', provider: 'anthropic', keyPrefix: 'sk-ant-...' },
-      ];
-      mockGetApiKeys.mockResolvedValue(savedKeys);
+      mockTestOllamaConnection.mockImplementation(
+        () => new Promise((resolve) => setTimeout(() => resolve({ success: false }), 100))
+      );
       render(<SettingsDialog {...defaultProps} />);
 
-      // Assert - Check for Anthropic group
+      // Act - Navigate to Local and click Test
       await waitFor(() => {
-        const optgroups = document.querySelectorAll('optgroup');
-        expect(optgroups.length).toBeGreaterThan(0);
+        expect(screen.getByText('Local')).toBeInTheDocument();
       });
-    });
+      fireEvent.click(screen.getByText('Local'));
 
-    it('should disable models without API keys', async () => {
-      // Arrange - No Google AI API key
-      const savedKeys: ApiKeyConfig[] = [
-        { id: 'key-1', provider: 'anthropic', keyPrefix: 'sk-ant-...' },
-      ];
-      mockGetApiKeys.mockResolvedValue(savedKeys);
-      render(<SettingsDialog {...defaultProps} />);
+      await waitFor(() => {
+        expect(screen.getByText('Test')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Test'));
 
       // Assert
-      await waitFor(() => {
-        const option = screen.getByRole('option', { name: /gemini 3 pro \(no api key\)/i });
-        expect(option).toBeDisabled();
-      });
+      expect(screen.getByText('Testing...')).toBeInTheDocument();
     });
 
-    it('should call setSelectedModel when model is changed', async () => {
+    it('should show error message when Ollama connection fails', async () => {
       // Arrange
-      const savedKeys: ApiKeyConfig[] = [
-        { id: 'key-1', provider: 'anthropic', keyPrefix: 'sk-ant-...' },
-      ];
-      mockGetApiKeys.mockResolvedValue(savedKeys);
+      mockTestOllamaConnection.mockResolvedValue({ success: false, error: 'Connection refused' });
       render(<SettingsDialog {...defaultProps} />);
 
-      // Act
+      // Act - Navigate to Local and test connection
       await waitFor(() => {
-        expect(screen.getByRole('combobox')).toBeInTheDocument();
+        expect(screen.getByText('Local')).toBeInTheDocument();
       });
-      fireEvent.change(screen.getByRole('combobox'), { target: { value: 'anthropic/claude-sonnet-4-5' } });
+      fireEvent.click(screen.getByText('Local'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Test')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Test'));
 
       // Assert
       await waitFor(() => {
-        expect(mockSetSelectedModel).toHaveBeenCalledWith({
-          provider: 'anthropic',
-          model: 'anthropic/claude-sonnet-4-5',
-        });
+        expect(screen.getByText('Connection refused')).toBeInTheDocument();
       });
     });
 
-    it('should show model updated message after selection', async () => {
+    it('should show model selection when Ollama connects successfully', async () => {
       // Arrange
-      const savedKeys: ApiKeyConfig[] = [
-        { id: 'key-1', provider: 'anthropic', keyPrefix: 'sk-ant-...' },
-      ];
-      mockGetApiKeys.mockResolvedValue(savedKeys);
+      mockTestOllamaConnection.mockResolvedValue({
+        success: true,
+        models: [
+          { id: 'llama2', displayName: 'Llama 2', size: 4000000000 },
+          { id: 'codellama', displayName: 'Code Llama', size: 7000000000 },
+        ],
+      });
       render(<SettingsDialog {...defaultProps} />);
 
-      // Act
+      // Act - Navigate to Local and test connection
       await waitFor(() => {
-        expect(screen.getByRole('combobox')).toBeInTheDocument();
+        expect(screen.getByText('Local')).toBeInTheDocument();
       });
-      fireEvent.change(screen.getByRole('combobox'), { target: { value: 'anthropic/claude-sonnet-4-5' } });
+      fireEvent.click(screen.getByText('Local'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Test')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Test'));
 
       // Assert
       await waitFor(() => {
-        expect(screen.getByText(/model updated to/i)).toBeInTheDocument();
-      });
-    });
-
-    it('should show warning when selected model has no API key', async () => {
-      // Arrange - Selected Google AI model but no Google AI key
-      mockGetSelectedModel.mockResolvedValue({ provider: 'google', model: 'google/gemini-3-pro-preview' });
-      mockGetApiKeys.mockResolvedValue([
-        { id: 'key-1', provider: 'anthropic', keyPrefix: 'sk-ant-...' },
-      ]);
-      render(<SettingsDialog {...defaultProps} />);
-
-      // Assert
-      await waitFor(() => {
-        expect(screen.getByText(/no api key configured for google/i)).toBeInTheDocument();
+        expect(screen.getByText(/Connected - 2 model\(s\) available/)).toBeInTheDocument();
+        expect(screen.getByText('Use This Model')).toBeInTheDocument();
       });
     });
   });
@@ -609,7 +696,7 @@ describe('SettingsDialog Integration', () => {
 
       // Assert
       await waitFor(() => {
-        expect(screen.getByText('Debug Mode')).toBeInTheDocument();
+        expect(screen.getByText('settings.debug.title')).toBeInTheDocument();
       });
     });
 
@@ -620,7 +707,7 @@ describe('SettingsDialog Integration', () => {
 
       // Assert
       await waitFor(() => {
-        const toggle = screen.getByRole('button', { name: '' });
+        const toggle = screen.getByTestId('settings-debug-toggle');
         expect(toggle.className).toContain('bg-muted');
       });
     });
@@ -630,17 +717,11 @@ describe('SettingsDialog Integration', () => {
       mockGetDebugMode.mockResolvedValue(false);
       render(<SettingsDialog {...defaultProps} />);
 
-      // Find the toggle button in the Developer section
+      // Act - Find and click the toggle
       await waitFor(() => {
-        expect(screen.getByText('Debug Mode')).toBeInTheDocument();
+        expect(screen.getByTestId('settings-debug-toggle')).toBeInTheDocument();
       });
-
-      // Act - Find toggle by its appearance (the switch button)
-      const developerSection = screen.getByText('Debug Mode').closest('section');
-      const toggleButton = developerSection?.querySelector('button[class*="rounded-full"]');
-      if (toggleButton) {
-        fireEvent.click(toggleButton);
-      }
+      fireEvent.click(screen.getByTestId('settings-debug-toggle'));
 
       // Assert
       await waitFor(() => {
@@ -655,7 +736,7 @@ describe('SettingsDialog Integration', () => {
 
       // Assert
       await waitFor(() => {
-        expect(screen.getByText(/debug mode is enabled/i)).toBeInTheDocument();
+        expect(screen.getByText(/Debug mode is enabled/i)).toBeInTheDocument();
       });
     });
 
@@ -666,7 +747,7 @@ describe('SettingsDialog Integration', () => {
       );
       render(<SettingsDialog {...defaultProps} />);
 
-      // Assert - Check for skeleton animation near debug toggle
+      // Assert - Check for skeleton animation
       await waitFor(() => {
         const skeletons = document.querySelectorAll('.animate-pulse');
         expect(skeletons.length).toBeGreaterThan(0);
@@ -679,16 +760,11 @@ describe('SettingsDialog Integration', () => {
       mockSetDebugMode.mockRejectedValue(new Error('Save failed'));
       render(<SettingsDialog {...defaultProps} />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Debug Mode')).toBeInTheDocument();
-      });
-
       // Act
-      const developerSection = screen.getByText('Debug Mode').closest('section');
-      const toggleButton = developerSection?.querySelector('button[class*="rounded-full"]');
-      if (toggleButton) {
-        fireEvent.click(toggleButton);
-      }
+      await waitFor(() => {
+        expect(screen.getByTestId('settings-debug-toggle')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByTestId('settings-debug-toggle'));
 
       // Assert - Mock should have been called and error handled
       await waitFor(() => {
@@ -704,7 +780,7 @@ describe('SettingsDialog Integration', () => {
 
       // Assert
       await waitFor(() => {
-        expect(screen.getByText('About')).toBeInTheDocument();
+        expect(screen.getByText('settings.about.title')).toBeInTheDocument();
       });
     });
 
@@ -748,6 +824,46 @@ describe('SettingsDialog Integration', () => {
       // Assert
       await waitFor(() => {
         expect(screen.getByText('Version 0.1.0')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('language selection', () => {
+    it('should render Language section', async () => {
+      // Arrange & Act
+      render(<SettingsDialog {...defaultProps} />);
+
+      // Assert
+      await waitFor(() => {
+        expect(screen.getByText('settings.language.title')).toBeInTheDocument();
+      });
+    });
+
+    it('should show English selected by default', async () => {
+      // Arrange
+      mockGetLanguage.mockResolvedValue('en');
+      render(<SettingsDialog {...defaultProps} />);
+
+      // Assert
+      await waitFor(() => {
+        const select = screen.getByRole('combobox');
+        expect(select).toHaveValue('en');
+      });
+    });
+
+    it('should call setLanguage when language is changed', async () => {
+      // Arrange
+      render(<SettingsDialog {...defaultProps} />);
+
+      // Act
+      await waitFor(() => {
+        expect(screen.getByRole('combobox')).toBeInTheDocument();
+      });
+      fireEvent.change(screen.getByRole('combobox'), { target: { value: 'ja' } });
+
+      // Assert
+      await waitFor(() => {
+        expect(mockSetLanguage).toHaveBeenCalledWith('ja');
       });
     });
   });

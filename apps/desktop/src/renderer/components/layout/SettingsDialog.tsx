@@ -3,17 +3,26 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getAccomplish } from '@/lib/accomplish';
-import { analytics } from '@/lib/analytics';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Trash2, Globe } from 'lucide-react';
-import type { ApiKeyConfig, SelectedModel } from '@accomplish/shared';
-import { DEFAULT_PROVIDERS } from '@accomplish/shared';
+import { Globe } from 'lucide-react';
+import type { ApiKeyConfig } from '@accomplish/shared';
 import logoImage from '/assets/logo.png';
+import {
+  ChooseModelType,
+  SelectProvider,
+  AddApiKey,
+  SelectModel,
+  OllamaSetup,
+  ApiKeysSection,
+  type WizardStep,
+  type ModelType,
+  type ProviderId,
+} from './settings';
 
 interface SettingsDialogProps {
   open: boolean;
@@ -21,44 +30,32 @@ interface SettingsDialogProps {
   onApiKeySaved?: () => void;
 }
 
-// Provider configuration
-const API_KEY_PROVIDERS = [
-  { id: 'anthropic', name: 'Anthropic', prefix: 'sk-ant-', placeholder: 'sk-ant-...' },
-  { id: 'openai', name: 'OpenAI', prefix: 'sk-', placeholder: 'sk-...' },
-  { id: 'google', name: 'Google AI', prefix: 'AIza', placeholder: 'AIza...' },
-  { id: 'xai', name: 'xAI (Grok)', prefix: 'xai-', placeholder: 'xai-...' },
-] as const;
-
-type ProviderId = typeof API_KEY_PROVIDERS[number]['id'];
-
 export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: SettingsDialogProps) {
   const { t, i18n } = useTranslation();
-  const [apiKey, setApiKey] = useState('');
-  const [provider, setProvider] = useState<ProviderId>('anthropic');
-  const [isSaving, setIsSaving] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+
+  // Wizard state
+  const [wizardStep, setWizardStep] = useState<WizardStep>('choose-type');
+  const [selectedModelType, setSelectedModelType] = useState<ModelType>(null);
+  const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(null);
+
+  // Data state
   const [savedKeys, setSavedKeys] = useState<ApiKeyConfig[]>([]);
   const [loadingKeys, setLoadingKeys] = useState(true);
   const [debugMode, setDebugMode] = useState(false);
   const [loadingDebug, setLoadingDebug] = useState(true);
   const [appVersion, setAppVersion] = useState('');
-  const [selectedModel, setSelectedModel] = useState<SelectedModel | null>(null);
-  const [loadingModel, setLoadingModel] = useState(true);
-  const [modelStatusMessage, setModelStatusMessage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'cloud' | 'local'>('cloud');
-  const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
-  const [ollamaModels, setOllamaModels] = useState<Array<{ id: string; displayName: string; size: number }>>([]);
-  const [ollamaConnected, setOllamaConnected] = useState(false);
-  const [ollamaError, setOllamaError] = useState<string | null>(null);
-  const [testingOllama, setTestingOllama] = useState(false);
-  const [selectedOllamaModel, setSelectedOllamaModel] = useState<string>('');
-  const [savingOllama, setSavingOllama] = useState(false);
-  const [keyToDelete, setKeyToDelete] = useState<string | null>(null);
   const [currentLanguage, setCurrentLanguage] = useState('en');
+  const [completionMessage, setCompletionMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      // Reset wizard when dialog closes
+      setWizardStep('choose-type');
+      setSelectedModelType(null);
+      setSelectedProvider(null);
+      setCompletionMessage(null);
+      return;
+    }
 
     const accomplish = getAccomplish();
 
@@ -93,36 +90,6 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
       }
     };
 
-    const fetchSelectedModel = async () => {
-      try {
-        const model = await accomplish.getSelectedModel();
-        setSelectedModel(model as SelectedModel | null);
-      } catch (err) {
-        console.error('Failed to fetch selected model:', err);
-      } finally {
-        setLoadingModel(false);
-      }
-    };
-
-    const fetchOllamaConfig = async () => {
-      try {
-        const config = await accomplish.getOllamaConfig();
-        if (config) {
-          setOllamaUrl(config.baseUrl);
-          // Auto-test connection if previously configured
-          if (config.enabled) {
-            const result = await accomplish.testOllamaConnection(config.baseUrl);
-            if (result.success && result.models) {
-              setOllamaConnected(true);
-              setOllamaModels(result.models);
-            }
-          }
-        }
-      } catch (err) {
-        console.error('Failed to fetch Ollama config:', err);
-      }
-    };
-
     const fetchLanguage = async () => {
       try {
         const language = await accomplish.getLanguage();
@@ -135,8 +102,6 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
     fetchKeys();
     fetchDebugSetting();
     fetchVersion();
-    fetchSelectedModel();
-    fetchOllamaConfig();
     fetchLanguage();
   }, [open]);
 
@@ -144,156 +109,12 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
     const accomplish = getAccomplish();
     const newValue = !debugMode;
     setDebugMode(newValue);
-    analytics.trackToggleDebugMode(newValue);
     try {
       await accomplish.setDebugMode(newValue);
     } catch (err) {
       console.error('Failed to save debug setting:', err);
       setDebugMode(!newValue);
     }
-  };
-
-  const handleModelChange = async (fullId: string) => {
-    const accomplish = getAccomplish();
-    const allModels = DEFAULT_PROVIDERS.flatMap((p) => p.models);
-    const model = allModels.find((m) => m.fullId === fullId);
-    if (model) {
-      analytics.trackSelectModel(model.displayName);
-      const newSelection: SelectedModel = {
-        provider: model.provider,
-        model: model.fullId,
-      };
-      setModelStatusMessage(null);
-      try {
-        await accomplish.setSelectedModel(newSelection);
-        setSelectedModel(newSelection);
-        setModelStatusMessage(`Model updated to ${model.displayName}`);
-      } catch (err) {
-        console.error('Failed to save model selection:', err);
-      }
-    }
-  };
-
-  const handleSaveApiKey = async () => {
-    const accomplish = getAccomplish();
-    const trimmedKey = apiKey.trim();
-    const currentProvider = API_KEY_PROVIDERS.find((p) => p.id === provider)!;
-
-    if (!trimmedKey) {
-      setError('Please enter an API key.');
-      return;
-    }
-
-    if (!trimmedKey.startsWith(currentProvider.prefix)) {
-      setError(`Invalid API key format. Key should start with ${currentProvider.prefix}`);
-      return;
-    }
-
-    setIsSaving(true);
-    setError(null);
-    setStatusMessage(null);
-
-    try {
-      // Validate first
-      const validation = await accomplish.validateApiKeyForProvider(provider, trimmedKey);
-      if (!validation.valid) {
-        setError(validation.error || 'Invalid API key');
-        setIsSaving(false);
-        return;
-      }
-
-      const savedKey = await accomplish.addApiKey(provider, trimmedKey);
-      analytics.trackSaveApiKey(currentProvider.name);
-      setApiKey('');
-      setStatusMessage(`${currentProvider.name} API key saved securely.`);
-      setSavedKeys((prev) => {
-        const filtered = prev.filter((k) => k.provider !== savedKey.provider);
-        return [...filtered, savedKey];
-      });
-      onApiKeySaved?.();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to save API key.';
-      setError(message);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleDeleteApiKey = async (id: string, providerName: string) => {
-    const accomplish = getAccomplish();
-    const providerConfig = API_KEY_PROVIDERS.find((p) => p.id === providerName);
-    try {
-      await accomplish.removeApiKey(id);
-      setSavedKeys((prev) => prev.filter((k) => k.id !== id));
-      setStatusMessage(`${providerConfig?.name || providerName} API key removed.`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to remove API key.';
-      setError(message);
-    }
-  };
-
-  const handleTestOllama = async () => {
-    const accomplish = getAccomplish();
-    setTestingOllama(true);
-    setOllamaError(null);
-    setOllamaConnected(false);
-    setOllamaModels([]);
-
-    try {
-      const result = await accomplish.testOllamaConnection(ollamaUrl);
-      if (result.success && result.models) {
-        setOllamaConnected(true);
-        setOllamaModels(result.models);
-        if (result.models.length > 0) {
-          setSelectedOllamaModel(result.models[0].id);
-        }
-      } else {
-        setOllamaError(result.error || 'Connection failed');
-      }
-    } catch (err) {
-      setOllamaError(err instanceof Error ? err.message : 'Connection failed');
-    } finally {
-      setTestingOllama(false);
-    }
-  };
-
-  const handleSaveOllama = async () => {
-    const accomplish = getAccomplish();
-    setSavingOllama(true);
-
-    try {
-      // Save the Ollama config
-      await accomplish.setOllamaConfig({
-        baseUrl: ollamaUrl,
-        enabled: true,
-        lastValidated: Date.now(),
-        models: ollamaModels,  // Include discovered models
-      });
-
-      // Set as selected model
-      await accomplish.setSelectedModel({
-        provider: 'ollama',
-        model: `ollama/${selectedOllamaModel}`,
-        baseUrl: ollamaUrl,
-      });
-
-      setSelectedModel({
-        provider: 'ollama',
-        model: `ollama/${selectedOllamaModel}`,
-        baseUrl: ollamaUrl,
-      });
-
-      setModelStatusMessage(`Model updated to ${selectedOllamaModel}`);
-    } catch (err) {
-      setOllamaError(err instanceof Error ? err.message : 'Failed to save');
-    } finally {
-      setSavingOllama(false);
-    }
-  };
-
-  const formatBytes = (bytes: number): string => {
-    const gb = bytes / (1024 * 1024 * 1024);
-    return `${gb.toFixed(1)} GB`;
   };
 
   const handleLanguageChange = async (language: string) => {
@@ -307,6 +128,101 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
     }
   };
 
+  // Wizard navigation handlers
+  const handleModelTypeSelect = (type: ModelType) => {
+    setSelectedModelType(type);
+    if (type === 'cloud') {
+      setWizardStep('select-provider');
+    } else {
+      setWizardStep('ollama-setup');
+    }
+  };
+
+  const handleProviderSelect = (providerId: ProviderId) => {
+    setSelectedProvider(providerId);
+    // Check if API key exists for this provider
+    const hasKey = savedKeys.some((k) => k.provider === providerId);
+    if (hasKey) {
+      setWizardStep('select-model');
+    } else {
+      setWizardStep('add-api-key');
+    }
+  };
+
+  const handleApiKeySuccess = async () => {
+    // Refresh keys
+    const accomplish = getAccomplish();
+    const keys = await accomplish.getApiKeys();
+    setSavedKeys(keys);
+    onApiKeySaved?.();
+    setWizardStep('select-model');
+  };
+
+  const handleModelDone = (modelName: string) => {
+    setCompletionMessage(t('settings.wizard.modelSetTo', 'Model set to {{model}}', { model: modelName }));
+    // Close dialog after brief delay
+    setTimeout(() => {
+      onOpenChange(false);
+    }, 1500);
+  };
+
+  const handleBack = () => {
+    switch (wizardStep) {
+      case 'select-provider':
+        setWizardStep('choose-type');
+        setSelectedModelType(null);
+        break;
+      case 'add-api-key':
+        setWizardStep('select-provider');
+        setSelectedProvider(null);
+        break;
+      case 'select-model':
+        setWizardStep('select-provider');
+        setSelectedProvider(null);
+        break;
+      case 'ollama-setup':
+        setWizardStep('choose-type');
+        setSelectedModelType(null);
+        break;
+    }
+  };
+
+  const renderWizardStep = () => {
+    if (completionMessage) {
+      return (
+        <div className="flex items-center justify-center py-8">
+          <div className="text-center">
+            <div className="mb-2 text-success">
+              <svg className="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <p className="text-lg font-medium text-foreground">{completionMessage}</p>
+          </div>
+        </div>
+      );
+    }
+
+    switch (wizardStep) {
+      case 'choose-type':
+        return <ChooseModelType onSelect={handleModelTypeSelect} />;
+      case 'select-provider':
+        return <SelectProvider onSelect={handleProviderSelect} onBack={handleBack} />;
+      case 'add-api-key':
+        return selectedProvider ? (
+          <AddApiKey providerId={selectedProvider} onSuccess={handleApiKeySuccess} onBack={handleBack} />
+        ) : null;
+      case 'select-model':
+        return selectedProvider ? (
+          <SelectModel providerId={selectedProvider} onDone={handleModelDone} onBack={handleBack} />
+        ) : null;
+      case 'ollama-setup':
+        return <OllamaSetup onDone={handleModelDone} onBack={handleBack} />;
+      default:
+        return null;
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -315,319 +231,21 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
         </DialogHeader>
 
         <div className="space-y-8 mt-4">
-          {/* Model Selection Section */}
+          {/* Wizard Section */}
           <section>
-            <h2 className="mb-4 text-base font-medium text-foreground">{t('settings.model.title', 'Model')}</h2>
             <div className="rounded-lg border border-border bg-card p-5">
-              {/* Tabs */}
-              <div className="flex gap-2 mb-5">
-                <button
-                  onClick={() => setActiveTab('cloud')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    activeTab === 'cloud'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {t('settings.model.cloudProviders', 'Cloud Providers')}
-                </button>
-                <button
-                  onClick={() => setActiveTab('local')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    activeTab === 'local'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {t('settings.model.localModels', 'Local Models')}
-                </button>
-              </div>
-
-              {activeTab === 'cloud' ? (
-                <>
-                  <p className="mb-4 text-sm text-muted-foreground leading-relaxed">
-                    {t('settings.model.cloudDescription', 'Select a cloud AI model. Requires an API key for the provider.')}
-                  </p>
-                  {loadingModel ? (
-                    <div className="h-10 animate-pulse rounded-md bg-muted" />
-                  ) : (
-                    <select
-                      data-testid="settings-model-select"
-                      value={selectedModel?.provider !== 'ollama' ? selectedModel?.model || '' : ''}
-                      onChange={(e) => handleModelChange(e.target.value)}
-                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    >
-                      <option value="" disabled>{t('settings.model.selectModel', 'Select a model...')}</option>
-                      {DEFAULT_PROVIDERS.filter((p) => p.requiresApiKey).map((provider) => {
-                        const hasApiKey = savedKeys.some((k) => k.provider === provider.id);
-                        return (
-                          <optgroup key={provider.id} label={provider.name}>
-                            {provider.models.map((model) => (
-                              <option
-                                key={model.fullId}
-                                value={model.fullId}
-                                disabled={!hasApiKey}
-                              >
-                                {model.displayName}{!hasApiKey ? ` (${t('settings.model.noApiKey', 'No API key')})` : ''}
-                              </option>
-                            ))}
-                          </optgroup>
-                        );
-                      })}
-                    </select>
-                  )}
-                  {modelStatusMessage && (
-                    <p className="mt-3 text-sm text-success">{modelStatusMessage}</p>
-                  )}
-                  {selectedModel && selectedModel.provider !== 'ollama' && !savedKeys.some((k) => k.provider === selectedModel.provider) && (
-                    <p className="mt-3 text-sm text-warning">
-                      {t('settings.model.noApiKeyWarning', 'No API key configured for {{provider}}. Add one below.', { provider: DEFAULT_PROVIDERS.find((p) => p.id === selectedModel.provider)?.name })}
-                    </p>
-                  )}
-                </>
-              ) : (
-                <>
-                  <p className="mb-4 text-sm text-muted-foreground leading-relaxed">
-                    {t('settings.model.localDescription', 'Connect to a local Ollama server to use models running on your machine.')}
-                  </p>
-
-                  {/* Ollama URL Input */}
-                  <div className="mb-4">
-                    <label className="mb-2 block text-sm font-medium text-foreground">
-                      {t('settings.model.ollamaUrl', 'Ollama Server URL')}
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={ollamaUrl}
-                        onChange={(e) => {
-                          setOllamaUrl(e.target.value);
-                          setOllamaConnected(false);
-                          setOllamaModels([]);
-                        }}
-                        placeholder="http://localhost:11434"
-                        className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      />
-                      <button
-                        onClick={handleTestOllama}
-                        disabled={testingOllama}
-                        className="rounded-md bg-muted px-4 py-2 text-sm font-medium hover:bg-muted/80 disabled:opacity-50"
-                      >
-                        {testingOllama ? t('settings.model.testing', 'Testing...') : t('settings.model.test', 'Test')}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Connection Status */}
-                  {ollamaConnected && (
-                    <div className="mb-4 flex items-center gap-2 text-sm text-success">
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      {t('settings.model.connected', 'Connected - {{count}} model(s) available', { count: ollamaModels.length })}
-                    </div>
-                  )}
-
-                  {ollamaError && (
-                    <div className="mb-4 flex items-center gap-2 text-sm text-destructive">
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                      {ollamaError}
-                    </div>
-                  )}
-
-                  {/* Model Selection (only show when connected) */}
-                  {ollamaConnected && ollamaModels.length > 0 && (
-                    <div className="mb-4">
-                      <label className="mb-2 block text-sm font-medium text-foreground">
-                        {t('settings.model.selectModelLabel', 'Select Model')}
-                      </label>
-                      <select
-                        value={selectedOllamaModel}
-                        onChange={(e) => setSelectedOllamaModel(e.target.value)}
-                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      >
-                        {ollamaModels.map((model) => (
-                          <option key={model.id} value={model.id}>
-                            {model.displayName} ({formatBytes(model.size)})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {/* Save Button */}
-                  {ollamaConnected && selectedOllamaModel && (
-                    <button
-                      onClick={handleSaveOllama}
-                      disabled={savingOllama}
-                      className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                    >
-                      {savingOllama ? t('settings.model.saving', 'Saving...') : t('settings.model.useThisModel', 'Use This Model')}
-                    </button>
-                  )}
-
-                  {/* Help text when not connected */}
-                  {!ollamaConnected && !ollamaError && (
-                    <p className="text-sm text-muted-foreground">
-                      {t('settings.model.ollamaHelp', 'Make sure Ollama is installed and running, then click Test to connect.')}{' '}
-                      <a
-                        href="https://ollama.ai"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline"
-                      >
-                        Ollama
-                      </a>
-                    </p>
-                  )}
-
-                  {/* Current Ollama selection indicator */}
-                  {selectedModel?.provider === 'ollama' && (
-                    <div className="mt-4 rounded-lg bg-muted p-3">
-                      <p className="text-sm text-foreground">
-                        <span className="font-medium">{t('settings.model.currentlyUsing', 'Currently using:')}</span>{' '}
-                        {selectedModel.model.replace('ollama/', '')}
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
+              {renderWizardStep()}
             </div>
           </section>
 
-          {/* API Key Section - Only show for cloud providers */}
-          {activeTab === 'cloud' && (
-            <section>
-              <h2 className="mb-4 text-base font-medium text-foreground">{t('settings.apiKey.title', 'Bring Your Own Model/API Key')}</h2>
-            <div className="rounded-lg border border-border bg-card p-5">
-              <p className="mb-5 text-sm text-muted-foreground leading-relaxed">
-                {t('settings.apiKey.description')}
-              </p>
-
-              {/* Provider Selection */}
-              <div className="mb-5">
-                <label className="mb-2.5 block text-sm font-medium text-foreground">
-                  {t('settings.apiKey.provider')}
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  {API_KEY_PROVIDERS.map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => {
-                        analytics.trackSelectProvider(p.name);
-                        setProvider(p.id);
-                      }}
-                      className={`rounded-xl border p-4 text-center transition-all duration-200 ease-accomplish ${
-                        provider === p.id
-                          ? 'border-primary bg-muted'
-                          : 'border-border hover:border-ring'
-                      }`}
-                    >
-                      <div className="font-medium text-foreground">{p.name}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* API Key Input */}
-              <div className="mb-5">
-                <label className="mb-2.5 block text-sm font-medium text-foreground">
-                  {API_KEY_PROVIDERS.find((p) => p.id === provider)?.name} {t('settings.apiKey.apiKey')}
-                </label>
-                <input
-                  data-testid="settings-api-key-input"
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder={API_KEY_PROVIDERS.find((p) => p.id === provider)?.placeholder}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                />
-              </div>
-
-              {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
-              {statusMessage && (
-                <p className="mb-4 text-sm text-success">{statusMessage}</p>
-              )}
-
-              <button
-                className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-                onClick={handleSaveApiKey}
-                disabled={isSaving}
-              >
-                {isSaving ? t('settings.apiKey.saving') : t('settings.apiKey.saveButton')}
-              </button>
-
-              {/* Saved Keys */}
-              {loadingKeys ? (
-                <div className="mt-6 animate-pulse">
-                  <div className="h-4 w-24 rounded bg-muted mb-3" />
-                  <div className="h-14 rounded-xl bg-muted" />
-                </div>
-              ) : savedKeys.length > 0 && (
-                 <div className="mt-6">
-                   <h3 className="mb-3 text-sm font-medium text-foreground">{t('settings.apiKey.savedKeys')}</h3>
-                  <div className="space-y-2">
-                    {savedKeys.map((key) => {
-                      const providerConfig = API_KEY_PROVIDERS.find((p) => p.id === key.provider);
-                      return (
-                        <div
-                          key={key.id}
-                          className="flex items-center justify-between rounded-xl border border-border bg-muted p-3.5"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-                              <span className="text-xs font-bold text-primary">
-                                {providerConfig?.name.charAt(0) || key.provider.charAt(0).toUpperCase()}
-                              </span>
-                            </div>
-                            <div>
-                              <div className="text-sm font-medium text-foreground">
-                                {providerConfig?.name || key.provider}
-                              </div>
-                              <div className="text-xs text-muted-foreground font-mono">
-                                {key.keyPrefix}
-                              </div>
-                            </div>
-                          </div>
-                          {keyToDelete === key.id ? (
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-muted-foreground">{t('settings.apiKey.deleteConfirm')}</span>
-                              <button
-                                onClick={() => {
-                                  handleDeleteApiKey(key.id, key.provider);
-                                  setKeyToDelete(null);
-                                }}
-                                className="rounded px-2 py-1 text-xs font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
-                              >
-                                {t('common.yes')}
-                              </button>
-                              <button
-                                onClick={() => setKeyToDelete(null)}
-                                className="rounded px-2 py-1 text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
-                              >
-                                {t('common.no')}
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => setKeyToDelete(key.id)}
-                              className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors duration-200 ease-accomplish"
-                              title={t('settings.apiKey.removeTitle')}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-            </section>
-          )}
+          {/* API Keys Section */}
+          <ApiKeysSection
+            savedKeys={savedKeys}
+            onKeysChange={(keys) => {
+              setSavedKeys(keys);
+              onApiKeySaved?.();
+            }}
+          />
 
           {/* Language Selection Section */}
           <section>
@@ -668,12 +286,12 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
                     <button
                       data-testid="settings-debug-toggle"
                       onClick={handleDebugToggle}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-accomplish ${
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                         debugMode ? 'bg-primary' : 'bg-muted'
                       }`}
                     >
                       <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform duration-200 ease-accomplish ${
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
                           debugMode ? 'translate-x-6' : 'translate-x-1'
                         }`}
                       />
@@ -684,8 +302,7 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
               {debugMode && (
                 <div className="mt-4 rounded-xl bg-warning/10 p-3.5">
                   <p className="text-sm text-warning">
-                    Debug mode is enabled. Backend logs will appear in the task view
-                    when running tasks.
+                    Debug mode is enabled. Backend logs will appear in the task view when running tasks.
                   </p>
                 </div>
               )}
@@ -697,21 +314,20 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
             <h2 className="mb-4 text-base font-medium text-foreground">{t('settings.about.title')}</h2>
             <div className="rounded-lg border border-border bg-card p-5">
               <div className="flex items-center gap-4">
-                <img
-                  src={logoImage}
-                  alt="Openwork"
-                  className="h-12 w-12 rounded-xl"
-                />
+                <img src={logoImage} alt="Openwork" className="h-12 w-12 rounded-xl" />
                 <div>
                   <div className="font-medium text-foreground">Openwork</div>
                   <div className="text-sm text-muted-foreground">Version {appVersion || '0.1.0'}</div>
                 </div>
               </div>
               <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
-              Openwork is a local computer-use AI agent for your Mac that reads your files, creates documents, and automates repetitive knowledge work—all open-source with your AI models of choice.
+                Openwork is a local computer-use AI agent for your Mac that reads your files, creates documents, and automates repetitive knowledge work—all open-source with your AI models of choice.
               </p>
               <p className="mt-3 text-sm text-muted-foreground">
-              Any questions or feedback? <a href="mailto:openwork-support@accomplish.ai" className="text-primary hover:underline">Click here to contact us</a>.
+                Any questions or feedback?{' '}
+                <a href="mailto:openwork-support@accomplish.ai" className="text-primary hover:underline">
+                  Click here to contact us
+                </a>.
               </p>
             </div>
           </section>
