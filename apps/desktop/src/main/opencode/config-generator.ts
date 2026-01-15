@@ -2,6 +2,7 @@ import { app } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { PERMISSION_API_PORT } from '../permission-api';
+import { getPortOffset } from '../utils/agent-config';
 
 /**
  * Agent name used by Accomplish
@@ -356,7 +357,10 @@ export async function generateOpenCodeConfig(): Promise<string> {
 
   // Get skills directory path and inject into system prompt
   const skillsPath = getSkillsPath();
-  const systemPrompt = ACCOMPLISH_SYSTEM_PROMPT_TEMPLATE.replace(/\{\{SKILLS_PATH\}\}/g, skillsPath);
+  const devBrowserPort = 9224 + getPortOffset();
+  const systemPrompt = ACCOMPLISH_SYSTEM_PROMPT_TEMPLATE
+    .replace(/\{\{SKILLS_PATH\}\}/g, skillsPath)
+    .replace(/9224/g, String(devBrowserPort));
 
   console.log('[OpenCode Config] Skills path:', skillsPath);
 
