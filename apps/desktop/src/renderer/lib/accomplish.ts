@@ -43,11 +43,15 @@ interface AccomplishAPI {
 
   // Settings
   getApiKeys(): Promise<ApiKeyConfig[]>;
-  addApiKey(provider: 'anthropic' | 'openai' | 'google' | 'groq' | 'custom', key: string, label?: string): Promise<ApiKeyConfig>;
+  addApiKey(provider: 'anthropic' | 'openai' | 'google' | 'xai' | 'custom', key: string, label?: string): Promise<ApiKeyConfig>;
   removeApiKey(id: string): Promise<void>;
   getDebugMode(): Promise<boolean>;
   setDebugMode(enabled: boolean): Promise<void>;
-  getAppSettings(): Promise<{ debugMode: boolean; onboardingComplete: boolean }>;
+  getAppSettings(): Promise<{ debugMode: boolean; onboardingComplete: boolean; language: string }>;
+
+  // Language management
+  getLanguage(): Promise<string>;
+  setLanguage(language: string): Promise<void>;
 
   // API Key management
   hasApiKey(): Promise<boolean>;
@@ -65,13 +69,22 @@ interface AccomplishAPI {
   getOnboardingComplete(): Promise<boolean>;
   setOnboardingComplete(complete: boolean): Promise<void>;
 
-  // Claude CLI
-  checkClaudeCli(): Promise<{ installed: boolean; version: string | null; installCommand: string }>;
-  getClaudeVersion(): Promise<string | null>;
+  // OpenCode CLI
+  checkOpenCodeCli(): Promise<{ installed: boolean; version: string | null; installCommand: string }>;
+  getOpenCodeVersion(): Promise<string | null>;
 
   // Model selection
-  getSelectedModel(): Promise<{ provider: string; model: string } | null>;
-  setSelectedModel(model: { provider: string; model: string }): Promise<void>;
+  getSelectedModel(): Promise<{ provider: string; model: string; baseUrl?: string } | null>;
+  setSelectedModel(model: { provider: string; model: string; baseUrl?: string }): Promise<void>;
+
+  // Ollama configuration
+  testOllamaConnection(url: string): Promise<{
+    success: boolean;
+    models?: Array<{ id: string; displayName: string; size: number }>;
+    error?: string;
+  }>;
+  getOllamaConfig(): Promise<{ baseUrl: string; enabled: boolean; lastValidated?: number; models?: Array<{ id: string; displayName: string; size: number }> } | null>;
+  setOllamaConfig(config: { baseUrl: string; enabled: boolean; lastValidated?: number; models?: Array<{ id: string; displayName: string; size: number }> } | null): Promise<void>;
 
   // Event subscriptions
   onTaskUpdate(callback: (event: TaskUpdateEvent) => void): () => void;

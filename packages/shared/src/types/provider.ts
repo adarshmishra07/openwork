@@ -2,7 +2,7 @@
  * Provider and model configuration types for multi-provider support
  */
 
-export type ProviderType = 'anthropic' | 'openai' | 'google' | 'local' | 'custom';
+export type ProviderType = 'anthropic' | 'openai' | 'google' | 'xai' | 'ollama' | 'custom';
 
 export interface ProviderConfig {
   id: ProviderType;
@@ -26,6 +26,26 @@ export interface ModelConfig {
 export interface SelectedModel {
   provider: ProviderType;
   model: string; // Full ID: "anthropic/claude-sonnet-4-5"
+  baseUrl?: string;  // For Ollama: the server URL
+}
+
+/**
+ * Ollama model info from API
+ */
+export interface OllamaModelInfo {
+  id: string;        // e.g., "qwen3:latest"
+  displayName: string;
+  size: number;
+}
+
+/**
+ * Ollama server configuration
+ */
+export interface OllamaConfig {
+  baseUrl: string;
+  enabled: boolean;
+  lastValidated?: number;
+  models?: OllamaModelInfo[];  // Discovered models from Ollama API
 }
 
 /**
@@ -105,15 +125,26 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     ],
   },
   {
-    id: 'local',
-    name: 'Local Models',
-    requiresApiKey: false,
+    id: 'xai',
+    name: 'xAI',
+    requiresApiKey: true,
+    apiKeyEnvVar: 'XAI_API_KEY',
+    baseUrl: 'https://api.x.ai',
     models: [
       {
-        id: 'ollama',
-        displayName: 'Ollama (Local)',
-        provider: 'local',
-        fullId: 'ollama/llama3',
+        id: 'grok-4',
+        displayName: 'Grok 4',
+        provider: 'xai',
+        fullId: 'xai/grok-4',
+        contextWindow: 256000,
+        supportsVision: true,
+      },
+      {
+        id: 'grok-3',
+        displayName: 'Grok 3',
+        provider: 'xai',
+        fullId: 'xai/grok-3',
+        contextWindow: 131000,
         supportsVision: false,
       },
     ],

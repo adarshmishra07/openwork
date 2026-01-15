@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getAccomplish } from '@/lib/accomplish';
 import { analytics } from '@/lib/analytics';
 import {
@@ -9,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Globe } from 'lucide-react';
 import type { ApiKeyConfig, SelectedModel } from '@accomplish/shared';
 import { DEFAULT_PROVIDERS } from '@accomplish/shared';
 import logoImage from '/assets/logo.png';
@@ -25,16 +26,13 @@ const API_KEY_PROVIDERS = [
   { id: 'anthropic', name: 'Anthropic', prefix: 'sk-ant-', placeholder: 'sk-ant-...' },
   { id: 'openai', name: 'OpenAI', prefix: 'sk-', placeholder: 'sk-...' },
   { id: 'google', name: 'Google AI', prefix: 'AIza', placeholder: 'AIza...' },
-] as const;
-
-// Coming soon providers (displayed but not selectable)
-const COMING_SOON_PROVIDERS = [
-  { id: 'groq', name: 'Groq' },
+  { id: 'xai', name: 'xAI (Grok)', prefix: 'xai-', placeholder: 'xai-...' },
 ] as const;
 
 type ProviderId = typeof API_KEY_PROVIDERS[number]['id'];
 
 export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: SettingsDialogProps) {
+  const { t, i18n } = useTranslation();
   const [apiKey, setApiKey] = useState('');
   const [provider, setProvider] = useState<ProviderId>('anthropic');
   const [isSaving, setIsSaving] = useState(false);
@@ -48,7 +46,16 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
   const [selectedModel, setSelectedModel] = useState<SelectedModel | null>(null);
   const [loadingModel, setLoadingModel] = useState(true);
   const [modelStatusMessage, setModelStatusMessage] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'cloud' | 'local'>('cloud');
+  const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
+  const [ollamaModels, setOllamaModels] = useState<Array<{ id: string; displayName: string; size: number }>>([]);
+  const [ollamaConnected, setOllamaConnected] = useState(false);
+  const [ollamaError, setOllamaError] = useState<string | null>(null);
+  const [testingOllama, setTestingOllama] = useState(false);
+  const [selectedOllamaModel, setSelectedOllamaModel] = useState<string>('');
+  const [savingOllama, setSavingOllama] = useState(false);
   const [keyToDelete, setKeyToDelete] = useState<string | null>(null);
+  const [currentLanguage, setCurrentLanguage] = useState('en');
 
   useEffect(() => {
     if (!open) return;
@@ -97,10 +104,40 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
       }
     };
 
+    const fetchOllamaConfig = async () => {
+      try {
+        const config = await accomplish.getOllamaConfig();
+        if (config) {
+          setOllamaUrl(config.baseUrl);
+          // Auto-test connection if previously configured
+          if (config.enabled) {
+            const result = await accomplish.testOllamaConnection(config.baseUrl);
+            if (result.success && result.models) {
+              setOllamaConnected(true);
+              setOllamaModels(result.models);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch Ollama config:', err);
+      }
+    };
+
+    const fetchLanguage = async () => {
+      try {
+        const language = await accomplish.getLanguage();
+        setCurrentLanguage(language);
+      } catch (err) {
+        console.error('Failed to fetch language:', err);
+      }
+    };
+
     fetchKeys();
     fetchDebugSetting();
     fetchVersion();
     fetchSelectedModel();
+    fetchOllamaConfig();
+    fetchLanguage();
   }, [open]);
 
   const handleDebugToggle = async () => {
@@ -195,71 +232,284 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
     }
   };
 
+  const handleTestOllama = async () => {
+    const accomplish = getAccomplish();
+    setTestingOllama(true);
+    setOllamaError(null);
+    setOllamaConnected(false);
+    setOllamaModels([]);
+
+    try {
+      const result = await accomplish.testOllamaConnection(ollamaUrl);
+      if (result.success && result.models) {
+        setOllamaConnected(true);
+        setOllamaModels(result.models);
+        if (result.models.length > 0) {
+          setSelectedOllamaModel(result.models[0].id);
+        }
+      } else {
+        setOllamaError(result.error || 'Connection failed');
+      }
+    } catch (err) {
+      setOllamaError(err instanceof Error ? err.message : 'Connection failed');
+    } finally {
+      setTestingOllama(false);
+    }
+  };
+
+  const handleSaveOllama = async () => {
+    const accomplish = getAccomplish();
+    setSavingOllama(true);
+
+    try {
+      // Save the Ollama config
+      await accomplish.setOllamaConfig({
+        baseUrl: ollamaUrl,
+        enabled: true,
+        lastValidated: Date.now(),
+        models: ollamaModels,  // Include discovered models
+      });
+
+      // Set as selected model
+      await accomplish.setSelectedModel({
+        provider: 'ollama',
+        model: `ollama/${selectedOllamaModel}`,
+        baseUrl: ollamaUrl,
+      });
+
+      setSelectedModel({
+        provider: 'ollama',
+        model: `ollama/${selectedOllamaModel}`,
+        baseUrl: ollamaUrl,
+      });
+
+      setModelStatusMessage(`Model updated to ${selectedOllamaModel}`);
+    } catch (err) {
+      setOllamaError(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setSavingOllama(false);
+    }
+  };
+
+  const formatBytes = (bytes: number): string => {
+    const gb = bytes / (1024 * 1024 * 1024);
+    return `${gb.toFixed(1)} GB`;
+  };
+
+  const handleLanguageChange = async (language: string) => {
+    const accomplish = getAccomplish();
+    try {
+      await accomplish.setLanguage(language);
+      setCurrentLanguage(language);
+      i18n.changeLanguage(language);
+    } catch (err) {
+      console.error('Failed to save language setting:', err);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Settings</DialogTitle>
+          <DialogTitle>{t('settings.title')}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-8 mt-4">
           {/* Model Selection Section */}
           <section>
-            <h2 className="mb-4 text-base font-medium text-foreground">Model</h2>
+            <h2 className="mb-4 text-base font-medium text-foreground">{t('settings.model.title', 'Model')}</h2>
             <div className="rounded-lg border border-border bg-card p-5">
-              <p className="mb-4 text-sm text-muted-foreground leading-relaxed">
-                Select the AI model to use for task execution.
-              </p>
-              {loadingModel ? (
-                <div className="h-10 animate-pulse rounded-md bg-muted" />
-              ) : (
-                <select
-                  data-testid="settings-model-select"
-                  value={selectedModel?.model || ''}
-                  onChange={(e) => handleModelChange(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              {/* Tabs */}
+              <div className="flex gap-2 mb-5">
+                <button
+                  onClick={() => setActiveTab('cloud')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === 'cloud'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:text-foreground'
+                  }`}
                 >
-                  {DEFAULT_PROVIDERS.filter((p) => p.requiresApiKey).map((provider) => {
-                    const hasApiKey = savedKeys.some((k) => k.provider === provider.id);
-                    return (
-                      <optgroup key={provider.id} label={provider.name}>
-                        {provider.models.map((model) => (
-                          <option
-                            key={model.fullId}
-                            value={model.fullId}
-                            disabled={!hasApiKey}
-                          >
-                            {model.displayName}{!hasApiKey ? ' (No API key)' : ''}
+                  {t('settings.model.cloudProviders', 'Cloud Providers')}
+                </button>
+                <button
+                  onClick={() => setActiveTab('local')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === 'local'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {t('settings.model.localModels', 'Local Models')}
+                </button>
+              </div>
+
+              {activeTab === 'cloud' ? (
+                <>
+                  <p className="mb-4 text-sm text-muted-foreground leading-relaxed">
+                    {t('settings.model.cloudDescription', 'Select a cloud AI model. Requires an API key for the provider.')}
+                  </p>
+                  {loadingModel ? (
+                    <div className="h-10 animate-pulse rounded-md bg-muted" />
+                  ) : (
+                    <select
+                      data-testid="settings-model-select"
+                      value={selectedModel?.provider !== 'ollama' ? selectedModel?.model || '' : ''}
+                      onChange={(e) => handleModelChange(e.target.value)}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="" disabled>{t('settings.model.selectModel', 'Select a model...')}</option>
+                      {DEFAULT_PROVIDERS.filter((p) => p.requiresApiKey).map((provider) => {
+                        const hasApiKey = savedKeys.some((k) => k.provider === provider.id);
+                        return (
+                          <optgroup key={provider.id} label={provider.name}>
+                            {provider.models.map((model) => (
+                              <option
+                                key={model.fullId}
+                                value={model.fullId}
+                                disabled={!hasApiKey}
+                              >
+                                {model.displayName}{!hasApiKey ? ` (${t('settings.model.noApiKey', 'No API key')})` : ''}
+                              </option>
+                            ))}
+                          </optgroup>
+                        );
+                      })}
+                    </select>
+                  )}
+                  {modelStatusMessage && (
+                    <p className="mt-3 text-sm text-success">{modelStatusMessage}</p>
+                  )}
+                  {selectedModel && selectedModel.provider !== 'ollama' && !savedKeys.some((k) => k.provider === selectedModel.provider) && (
+                    <p className="mt-3 text-sm text-warning">
+                      {t('settings.model.noApiKeyWarning', 'No API key configured for {{provider}}. Add one below.', { provider: DEFAULT_PROVIDERS.find((p) => p.id === selectedModel.provider)?.name })}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="mb-4 text-sm text-muted-foreground leading-relaxed">
+                    {t('settings.model.localDescription', 'Connect to a local Ollama server to use models running on your machine.')}
+                  </p>
+
+                  {/* Ollama URL Input */}
+                  <div className="mb-4">
+                    <label className="mb-2 block text-sm font-medium text-foreground">
+                      {t('settings.model.ollamaUrl', 'Ollama Server URL')}
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={ollamaUrl}
+                        onChange={(e) => {
+                          setOllamaUrl(e.target.value);
+                          setOllamaConnected(false);
+                          setOllamaModels([]);
+                        }}
+                        placeholder="http://localhost:11434"
+                        className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      />
+                      <button
+                        onClick={handleTestOllama}
+                        disabled={testingOllama}
+                        className="rounded-md bg-muted px-4 py-2 text-sm font-medium hover:bg-muted/80 disabled:opacity-50"
+                      >
+                        {testingOllama ? t('settings.model.testing', 'Testing...') : t('settings.model.test', 'Test')}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Connection Status */}
+                  {ollamaConnected && (
+                    <div className="mb-4 flex items-center gap-2 text-sm text-success">
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      {t('settings.model.connected', 'Connected - {{count}} model(s) available', { count: ollamaModels.length })}
+                    </div>
+                  )}
+
+                  {ollamaError && (
+                    <div className="mb-4 flex items-center gap-2 text-sm text-destructive">
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      {ollamaError}
+                    </div>
+                  )}
+
+                  {/* Model Selection (only show when connected) */}
+                  {ollamaConnected && ollamaModels.length > 0 && (
+                    <div className="mb-4">
+                      <label className="mb-2 block text-sm font-medium text-foreground">
+                        {t('settings.model.selectModelLabel', 'Select Model')}
+                      </label>
+                      <select
+                        value={selectedOllamaModel}
+                        onChange={(e) => setSelectedOllamaModel(e.target.value)}
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      >
+                        {ollamaModels.map((model) => (
+                          <option key={model.id} value={model.id}>
+                            {model.displayName} ({formatBytes(model.size)})
                           </option>
                         ))}
-                      </optgroup>
-                    );
-                  })}
-                </select>
-              )}
-              {modelStatusMessage && (
-                <p className="mt-3 text-sm text-success">{modelStatusMessage}</p>
-              )}
-              {selectedModel && !savedKeys.some((k) => k.provider === selectedModel.provider) && (
-                <p className="mt-3 text-sm text-warning">
-                  No API key configured for {DEFAULT_PROVIDERS.find((p) => p.id === selectedModel.provider)?.name}. Add one below to use this model.
-                </p>
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Save Button */}
+                  {ollamaConnected && selectedOllamaModel && (
+                    <button
+                      onClick={handleSaveOllama}
+                      disabled={savingOllama}
+                      className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      {savingOllama ? t('settings.model.saving', 'Saving...') : t('settings.model.useThisModel', 'Use This Model')}
+                    </button>
+                  )}
+
+                  {/* Help text when not connected */}
+                  {!ollamaConnected && !ollamaError && (
+                    <p className="text-sm text-muted-foreground">
+                      {t('settings.model.ollamaHelp', 'Make sure Ollama is installed and running, then click Test to connect.')}{' '}
+                      <a
+                        href="https://ollama.ai"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        Ollama
+                      </a>
+                    </p>
+                  )}
+
+                  {/* Current Ollama selection indicator */}
+                  {selectedModel?.provider === 'ollama' && (
+                    <div className="mt-4 rounded-lg bg-muted p-3">
+                      <p className="text-sm text-foreground">
+                        <span className="font-medium">{t('settings.model.currentlyUsing', 'Currently using:')}</span>{' '}
+                        {selectedModel.model.replace('ollama/', '')}
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </section>
 
-          {/* API Key Section */}
-          <section>
-            <h2 className="mb-4 text-base font-medium text-foreground">Bring Your Own Model/API Key</h2>
+          {/* API Key Section - Only show for cloud providers */}
+          {activeTab === 'cloud' && (
+            <section>
+              <h2 className="mb-4 text-base font-medium text-foreground">{t('settings.apiKey.title', 'Bring Your Own Model/API Key')}</h2>
             <div className="rounded-lg border border-border bg-card p-5">
               <p className="mb-5 text-sm text-muted-foreground leading-relaxed">
-                Setup the API key and model for your own AI coworker.
+                {t('settings.apiKey.description')}
               </p>
 
               {/* Provider Selection */}
               <div className="mb-5">
                 <label className="mb-2.5 block text-sm font-medium text-foreground">
-                  Provider
+                  {t('settings.apiKey.provider')}
                 </label>
                 <div className="grid grid-cols-2 gap-3">
                   {API_KEY_PROVIDERS.map((p) => (
@@ -278,22 +528,13 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
                       <div className="font-medium text-foreground">{p.name}</div>
                     </button>
                   ))}
-                  {COMING_SOON_PROVIDERS.map((p) => (
-                    <div
-                      key={p.id}
-                      className="rounded-xl border border-dashed border-muted-foreground/30 p-4 text-center opacity-60 cursor-not-allowed"
-                    >
-                      <div className="font-medium text-muted-foreground">{p.name}</div>
-                      <div className="text-xs text-muted-foreground/70 mt-1">Coming Soon</div>
-                    </div>
-                  ))}
                 </div>
               </div>
 
               {/* API Key Input */}
               <div className="mb-5">
                 <label className="mb-2.5 block text-sm font-medium text-foreground">
-                  {API_KEY_PROVIDERS.find((p) => p.id === provider)?.name} API Key
+                  {API_KEY_PROVIDERS.find((p) => p.id === provider)?.name} {t('settings.apiKey.apiKey')}
                 </label>
                 <input
                   data-testid="settings-api-key-input"
@@ -315,7 +556,7 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
                 onClick={handleSaveApiKey}
                 disabled={isSaving}
               >
-                {isSaving ? 'Saving...' : 'Save API Key'}
+                {isSaving ? t('settings.apiKey.saving') : t('settings.apiKey.saveButton')}
               </button>
 
               {/* Saved Keys */}
@@ -325,8 +566,8 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
                   <div className="h-14 rounded-xl bg-muted" />
                 </div>
               ) : savedKeys.length > 0 && (
-                <div className="mt-6">
-                  <h3 className="mb-3 text-sm font-medium text-foreground">Saved Keys</h3>
+                 <div className="mt-6">
+                   <h3 className="mb-3 text-sm font-medium text-foreground">{t('settings.apiKey.savedKeys')}</h3>
                   <div className="space-y-2">
                     {savedKeys.map((key) => {
                       const providerConfig = API_KEY_PROVIDERS.find((p) => p.id === key.provider);
@@ -352,7 +593,7 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
                           </div>
                           {keyToDelete === key.id ? (
                             <div className="flex items-center gap-2">
-                              <span className="text-xs text-muted-foreground">Are you sure?</span>
+                              <span className="text-xs text-muted-foreground">{t('settings.apiKey.deleteConfirm')}</span>
                               <button
                                 onClick={() => {
                                   handleDeleteApiKey(key.id, key.provider);
@@ -360,20 +601,20 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
                                 }}
                                 className="rounded px-2 py-1 text-xs font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
                               >
-                                Yes
+                                {t('common.yes')}
                               </button>
                               <button
                                 onClick={() => setKeyToDelete(null)}
                                 className="rounded px-2 py-1 text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
                               >
-                                No
+                                {t('common.no')}
                               </button>
                             </div>
                           ) : (
                             <button
                               onClick={() => setKeyToDelete(key.id)}
                               className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors duration-200 ease-accomplish"
-                              title="Remove API key"
+                              title={t('settings.apiKey.removeTitle')}
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
@@ -385,18 +626,39 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
                 </div>
               )}
             </div>
+            </section>
+          )}
+
+          {/* Language Selection Section */}
+          <section>
+            <h2 className="mb-4 text-base font-medium text-foreground flex items-center gap-2">
+              <Globe className="h-4 w-4" />
+              {t('settings.language.title')}
+            </h2>
+            <div className="rounded-lg border border-border bg-card p-5">
+              <p className="mb-4 text-sm text-muted-foreground leading-relaxed">
+                {t('settings.language.description')}
+              </p>
+              <select
+                value={currentLanguage}
+                onChange={(e) => handleLanguageChange(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="en">English</option>
+                <option value="ja">日本語</option>
+              </select>
+            </div>
           </section>
 
           {/* Developer Section */}
           <section>
-            <h2 className="mb-4 text-base font-medium text-foreground">Developer</h2>
+            <h2 className="mb-4 text-base font-medium text-foreground">{t('settings.developer.title', 'Developer')}</h2>
             <div className="rounded-lg border border-border bg-card p-5">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
-                  <div className="font-medium text-foreground">Debug Mode</div>
+                  <div className="font-medium text-foreground">{t('settings.debug.title')}</div>
                   <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
-                    Show detailed backend logs including Claude CLI commands, flags,
-                    and stdout/stderr output in the task view.
+                    {t('settings.debug.description')}
                   </p>
                 </div>
                 <div className="ml-4">
@@ -432,7 +694,7 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
 
           {/* About Section */}
           <section>
-            <h2 className="mb-4 text-base font-medium text-foreground">About</h2>
+            <h2 className="mb-4 text-base font-medium text-foreground">{t('settings.about.title')}</h2>
             <div className="rounded-lg border border-border bg-card p-5">
               <div className="flex items-center gap-4">
                 <img

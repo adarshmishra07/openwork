@@ -42,7 +42,7 @@ const accomplishAPI = {
   // Settings
   getApiKeys: (): Promise<unknown[]> => ipcRenderer.invoke('settings:api-keys'),
   addApiKey: (
-    provider: 'anthropic' | 'openai' | 'google' | 'groq' | 'custom',
+    provider: 'anthropic' | 'openai' | 'google' | 'xai' | 'custom',
     key: string,
     label?: string
   ): Promise<unknown> =>
@@ -53,8 +53,14 @@ const accomplishAPI = {
     ipcRenderer.invoke('settings:debug-mode'),
   setDebugMode: (enabled: boolean): Promise<void> =>
     ipcRenderer.invoke('settings:set-debug-mode', enabled),
-  getAppSettings: (): Promise<{ debugMode: boolean; onboardingComplete: boolean }> =>
+  getAppSettings: (): Promise<{ debugMode: boolean; onboardingComplete: boolean; language: string }> =>
     ipcRenderer.invoke('settings:app-settings'),
+
+  // Language management
+  getLanguage: (): Promise<string> =>
+    ipcRenderer.invoke('language:get'),
+  setLanguage: (language: string): Promise<void> =>
+    ipcRenderer.invoke('language:set', language),
 
   // API Key management (new simplified handlers)
   hasApiKey: (): Promise<boolean> =>
@@ -86,9 +92,9 @@ const accomplishAPI = {
     ipcRenderer.invoke('opencode:version'),
 
   // Model selection
-  getSelectedModel: (): Promise<{ provider: string; model: string } | null> =>
+  getSelectedModel: (): Promise<{ provider: string; model: string; baseUrl?: string } | null> =>
     ipcRenderer.invoke('model:get'),
-  setSelectedModel: (model: { provider: string; model: string }): Promise<void> =>
+  setSelectedModel: (model: { provider: string; model: string; baseUrl?: string }): Promise<void> =>
     ipcRenderer.invoke('model:set', model),
 
   // Multi-provider API keys
@@ -96,6 +102,19 @@ const accomplishAPI = {
     ipcRenderer.invoke('api-keys:all'),
   hasAnyApiKey: (): Promise<boolean> =>
     ipcRenderer.invoke('api-keys:has-any'),
+
+  // Ollama configuration
+  testOllamaConnection: (url: string): Promise<{
+    success: boolean;
+    models?: Array<{ id: string; displayName: string; size: number }>;
+    error?: string;
+  }> => ipcRenderer.invoke('ollama:test-connection', url),
+
+  getOllamaConfig: (): Promise<{ baseUrl: string; enabled: boolean; lastValidated?: number; models?: Array<{ id: string; displayName: string; size: number }> } | null> =>
+    ipcRenderer.invoke('ollama:get-config'),
+
+  setOllamaConfig: (config: { baseUrl: string; enabled: boolean; lastValidated?: number; models?: Array<{ id: string; displayName: string; size: number }> } | null): Promise<void> =>
+    ipcRenderer.invoke('ollama:set-config', config),
 
   // Event subscriptions
   onTaskUpdate: (callback: (event: unknown) => void) => {

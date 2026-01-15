@@ -1,5 +1,5 @@
 import Store from 'electron-store';
-import type { SelectedModel, DEFAULT_MODEL } from '@accomplish/shared';
+import type { SelectedModel, OllamaConfig } from '@accomplish/shared';
 
 /**
  * App settings schema
@@ -11,6 +11,10 @@ interface AppSettingsSchema {
   onboardingComplete: boolean;
   /** Selected AI model (provider/model format) */
   selectedModel: SelectedModel | null;
+  /** Ollama server configuration */
+  ollamaConfig: OllamaConfig | null;
+  /** Selected language ('en' | 'ja' | ...) */
+  language: string;
 }
 
 const appSettingsStore = new Store<AppSettingsSchema>({
@@ -22,6 +26,8 @@ const appSettingsStore = new Store<AppSettingsSchema>({
       provider: 'anthropic',
       model: 'anthropic/claude-opus-4-5',
     },
+    ollamaConfig: null,
+    language: 'en',
   },
 });
 
@@ -68,6 +74,34 @@ export function setSelectedModel(model: SelectedModel): void {
 }
 
 /**
+ * Get Ollama configuration
+ */
+export function getOllamaConfig(): OllamaConfig | null {
+  return appSettingsStore.get('ollamaConfig');
+}
+
+/**
+ * Set Ollama configuration
+ */
+export function setOllamaConfig(config: OllamaConfig | null): void {
+  appSettingsStore.set('ollamaConfig', config);
+}
+
+/**
+ * Get selected language
+ */
+export function getLanguage(): string {
+  return appSettingsStore.get('language');
+}
+
+/**
+ * Set selected language
+ */
+export function setLanguage(language: string): void {
+  appSettingsStore.set('language', language);
+}
+
+/**
  * Get all app settings
  */
 export function getAppSettings(): AppSettingsSchema {
@@ -75,6 +109,8 @@ export function getAppSettings(): AppSettingsSchema {
     debugMode: appSettingsStore.get('debugMode'),
     onboardingComplete: appSettingsStore.get('onboardingComplete'),
     selectedModel: appSettingsStore.get('selectedModel'),
+    ollamaConfig: appSettingsStore.get('ollamaConfig'),
+    language: appSettingsStore.get('language'),
   };
 }
 
