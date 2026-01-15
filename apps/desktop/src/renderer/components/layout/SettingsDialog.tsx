@@ -45,6 +45,7 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
   const [selectedModel, setSelectedModel] = useState<SelectedModel | null>(null);
   const [loadingModel, setLoadingModel] = useState(true);
   const [modelStatusMessage, setModelStatusMessage] = useState<string | null>(null);
+  const [keyToDelete, setKeyToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -210,6 +211,7 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
                 <div className="h-10 animate-pulse rounded-md bg-muted" />
               ) : (
                 <select
+                  data-testid="settings-model-select"
                   value={selectedModel?.model || ''}
                   onChange={(e) => handleModelChange(e.target.value)}
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -282,6 +284,7 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
                   {API_KEY_PROVIDERS.find((p) => p.id === provider)?.name} API Key
                 </label>
                 <input
+                  data-testid="settings-api-key-input"
                   type="password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
@@ -335,13 +338,34 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
                               </div>
                             </div>
                           </div>
-                          <button
-                            onClick={() => handleDeleteApiKey(key.id, key.provider)}
-                            className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors duration-200 ease-accomplish"
-                            title="Remove API key"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {keyToDelete === key.id ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground">Are you sure?</span>
+                              <button
+                                onClick={() => {
+                                  handleDeleteApiKey(key.id, key.provider);
+                                  setKeyToDelete(null);
+                                }}
+                                className="rounded px-2 py-1 text-xs font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
+                              >
+                                Yes
+                              </button>
+                              <button
+                                onClick={() => setKeyToDelete(null)}
+                                className="rounded px-2 py-1 text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+                              >
+                                No
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setKeyToDelete(key.id)}
+                              className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors duration-200 ease-accomplish"
+                              title="Remove API key"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       );
                     })}
@@ -368,6 +392,7 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
                     <div className="h-6 w-11 animate-pulse rounded-full bg-muted" />
                   ) : (
                     <button
+                      data-testid="settings-debug-toggle"
                       onClick={handleDebugToggle}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-accomplish ${
                         debugMode ? 'bg-primary' : 'bg-muted'
