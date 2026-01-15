@@ -9,6 +9,7 @@
 import { OpenCodeAdapter, isOpenCodeCliInstalled, OpenCodeCliNotFoundError } from './adapter';
 import { getSkillsPath } from './config-generator';
 import { getNpxPath, getBundledNodePaths } from '../utils/bundled-node';
+import { getPortOffset } from '../utils/agent-config';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -187,6 +188,11 @@ async function ensureDevBrowserServer(
       spawnEnv.NODE_BIN_PATH = bundledPaths.binDir;
     }
 
+    // Pass agent-specific ports to dev-browser
+    const portOffset = getPortOffset();
+    spawnEnv.DEV_BROWSER_PORT = String(9224 + portOffset);
+    spawnEnv.DEV_BROWSER_CDP_PORT = String(9225 + portOffset);
+
     // Spawn server in background (detached, unref to not block)
     const child = spawn('bash', [serverScript], {
       detached: true,
@@ -196,7 +202,7 @@ async function ensureDevBrowserServer(
     });
     child.unref();
 
-    console.log('[TaskManager] Dev-browser server spawn initiated');
+    console.log(`[TaskManager] Dev-browser server spawn initiated (ports: ${9224 + portOffset}/${9225 + portOffset})`);
   } catch (error) {
     console.error('[TaskManager] Failed to start dev-browser server:', error);
   }
