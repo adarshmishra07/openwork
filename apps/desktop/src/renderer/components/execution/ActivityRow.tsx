@@ -58,14 +58,129 @@ export interface ActivityRowProps {
   status: 'running' | 'complete' | 'error';
 }
 
-// Format JSON with syntax highlighting-friendly output
-function formatJson(obj: unknown): string {
-  if (obj === null || obj === undefined) return '';
-  if (typeof obj === 'string') return obj;
-  try {
-    return JSON.stringify(obj, null, 2);
-  } catch {
-    return String(obj);
+// Format request in a readable way based on tool type
+function formatRequest(tool: string, input: unknown): string {
+  if (input === null || input === undefined) return '';
+  const inp = input as Record<string, unknown>;
+
+  switch (tool) {
+    case 'Read': {
+      const filePath = inp?.file_path as string;
+      const offset = inp?.offset as number;
+      const limit = inp?.limit as number;
+      const lines: string[] = [];
+      if (filePath) lines.push(`file: ${filePath}`);
+      if (offset) lines.push(`offset: ${offset}`);
+      if (limit) lines.push(`limit: ${limit}`);
+      return lines.join('\n') || JSON.stringify(input, null, 2);
+    }
+
+    case 'Write': {
+      const filePath = inp?.file_path as string;
+      const content = inp?.content as string;
+      const lines: string[] = [];
+      if (filePath) lines.push(`file: ${filePath}`);
+      if (content) {
+        const preview = content.length > 200 ? content.slice(0, 200) + '...' : content;
+        lines.push(`content: ${preview}`);
+      }
+      return lines.join('\n') || JSON.stringify(input, null, 2);
+    }
+
+    case 'Edit': {
+      const filePath = inp?.file_path as string;
+      const oldString = inp?.old_string as string;
+      const newString = inp?.new_string as string;
+      const lines: string[] = [];
+      if (filePath) lines.push(`file: ${filePath}`);
+      if (oldString) {
+        const preview = oldString.length > 100 ? oldString.slice(0, 100) + '...' : oldString;
+        lines.push(`old: ${preview}`);
+      }
+      if (newString) {
+        const preview = newString.length > 100 ? newString.slice(0, 100) + '...' : newString;
+        lines.push(`new: ${preview}`);
+      }
+      return lines.join('\n') || JSON.stringify(input, null, 2);
+    }
+
+    case 'Glob': {
+      const pattern = inp?.pattern as string;
+      const path = inp?.path as string;
+      const lines: string[] = [];
+      if (pattern) lines.push(`pattern: ${pattern}`);
+      if (path) lines.push(`path: ${path}`);
+      return lines.join('\n') || JSON.stringify(input, null, 2);
+    }
+
+    case 'Grep': {
+      const pattern = inp?.pattern as string;
+      const path = inp?.path as string;
+      const glob = inp?.glob as string;
+      const lines: string[] = [];
+      if (pattern) lines.push(`pattern: ${pattern}`);
+      if (path) lines.push(`path: ${path}`);
+      if (glob) lines.push(`glob: ${glob}`);
+      return lines.join('\n') || JSON.stringify(input, null, 2);
+    }
+
+    case 'WebFetch': {
+      const url = inp?.url as string;
+      const prompt = inp?.prompt as string;
+      const lines: string[] = [];
+      if (url) lines.push(`url: ${url}`);
+      if (prompt) lines.push(`prompt: ${prompt}`);
+      return lines.join('\n') || JSON.stringify(input, null, 2);
+    }
+
+    case 'WebSearch': {
+      const query = inp?.query as string;
+      if (query) return `query: ${query}`;
+      return JSON.stringify(input, null, 2);
+    }
+
+    case 'Bash': {
+      const description = inp?.description as string;
+      const command = inp?.command as string;
+      const workdir = inp?.workdir as string;
+      const lines: string[] = [];
+      if (description) lines.push(`description: ${description}`);
+      if (command) {
+        // Show short commands fully, truncate long ones
+        if (command.length <= 100) {
+          lines.push(`command: ${command}`);
+        } else {
+          lines.push(`command: (${command.length} chars)`);
+        }
+      }
+      if (workdir) {
+        // Show just the last part of the path
+        const shortPath = workdir.split('/').slice(-2).join('/');
+        lines.push(`workdir: .../${shortPath}`);
+      }
+      return lines.join('\n') || JSON.stringify(input, null, 2);
+    }
+
+    case 'Task': {
+      const description = inp?.description as string;
+      const prompt = inp?.prompt as string;
+      const lines: string[] = [];
+      if (description) lines.push(`description: ${description}`);
+      if (prompt) {
+        const preview = prompt.length > 200 ? prompt.slice(0, 200) + '...' : prompt;
+        lines.push(`prompt: ${preview}`);
+      }
+      return lines.join('\n') || JSON.stringify(input, null, 2);
+    }
+
+    default:
+      // For unknown tools, show a clean JSON but limit size
+      try {
+        const json = JSON.stringify(input, null, 2);
+        return json.length > 500 ? json.slice(0, 500) + '\n...(truncated)' : json;
+      } catch {
+        return String(input);
+      }
   }
 }
 
@@ -172,7 +287,7 @@ export const ActivityRow = memo(function ActivityRow({
   const Icon = TOOL_ICONS[normalizedTool] || Wrench;
   const fallbackName = TOOL_DISPLAY_NAMES[normalizedTool] || normalizedTool;
   const summary = getSummary(normalizedTool, input, fallbackName);
-  const formattedInput = formatJson(input);
+  const formattedInput = formatRequest(normalizedTool, input);
   const formattedOutput = output || '';
 
   return (
