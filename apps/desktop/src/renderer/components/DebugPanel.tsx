@@ -22,28 +22,6 @@ interface DebugPanelProps {
 }
 
 // Animation variants
-const panelVariants = {
-  hidden: {
-    x: '100%',
-    opacity: 0,
-    transition: {
-      type: 'spring' as const,
-      damping: 30,
-      stiffness: 300
-    }
-  },
-  visible: {
-    x: 0,
-    opacity: 1,
-    transition: {
-      type: 'spring' as const,
-      damping: 25,
-      stiffness: 200,
-      staggerChildren: 0.02
-    }
-  }
-};
-
 const toggleButtonVariants = {
   hidden: {
     x: 20,

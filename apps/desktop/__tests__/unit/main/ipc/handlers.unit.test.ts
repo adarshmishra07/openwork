@@ -200,6 +200,8 @@ vi.mock('@main/store/appSettings', () => ({
   setSelectedModel: vi.fn((model: { provider: string; model: string }) => {
     mockSelectedModel = model;
   }),
+  getOllamaConfig: vi.fn(() => null),
+  setOllamaConfig: vi.fn(),
 }));
 
 // Mock config
