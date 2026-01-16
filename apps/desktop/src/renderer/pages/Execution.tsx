@@ -452,7 +452,6 @@ export default function ExecutionPage() {
                     input={message.toolInput}
                     output={message.content}
                     status="complete"
-                    debugMode={debugMode}
                   />
                 );
               }
@@ -500,7 +499,6 @@ export default function ExecutionPage() {
                     input={message.toolInput}
                     output={message.content}
                     status={isLastTool && currentTask.status === 'running' ? 'running' : 'complete'}
-                    debugMode={debugMode}
                   />
                 );
               }

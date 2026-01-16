@@ -56,8 +56,6 @@ export interface ActivityRowProps {
   input: unknown;
   output?: string;
   status: 'running' | 'complete' | 'error';
-  /** When true, shows expandable Request/Response details */
-  debugMode?: boolean;
 }
 
 // Clean output by removing common noise/warnings
@@ -307,7 +305,6 @@ export const ActivityRow = memo(function ActivityRow({
   input,
   output,
   status,
-  debugMode = false,
 }: ActivityRowProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -318,9 +315,8 @@ export const ActivityRow = memo(function ActivityRow({
   const formattedInput = formatRequest(normalizedTool, input);
   const formattedOutput = cleanOutput(output || '');
 
-  // Only allow expansion in debug mode
-  const canExpand = debugMode && (formattedInput || formattedOutput);
-  const handleClick = canExpand ? () => setIsExpanded(!isExpanded) : undefined;
+  // Always allow expansion if there's content to show
+  const canExpand = !!(formattedInput || formattedOutput);
 
   return (
     <motion.div
@@ -332,9 +328,9 @@ export const ActivityRow = memo(function ActivityRow({
       {/* Timeline connector dot */}
       <div className="absolute -left-[21px] top-3 w-2 h-2 rounded-full bg-muted-foreground/50" />
 
-      {/* Row - clickable only in debug mode */}
-      <div
-        onClick={handleClick}
+      {/* Row - always clickable if expandable */}
+      <button
+        onClick={canExpand ? () => setIsExpanded(!isExpanded) : undefined}
         className={cn(
           'w-full flex items-center gap-2 px-3 py-2 rounded-lg',
           'text-left text-sm',
@@ -356,7 +352,7 @@ export const ActivityRow = memo(function ActivityRow({
           <CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" />
         )}
 
-        {/* Expand/collapse chevron - only in debug mode */}
+        {/* Expand/collapse chevron */}
         {canExpand && (
           isExpanded ? (
             <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -364,7 +360,7 @@ export const ActivityRow = memo(function ActivityRow({
             <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
           )
         )}
-      </div>
+      </button>
 
       {/* Expanded details - Request/Response blocks */}
       <AnimatePresence>
