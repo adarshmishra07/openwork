@@ -56,6 +56,3 @@ prisma/*.db-journal
 
 # Bundled Node.js binaries (downloaded via `pnpm -F @accomplish/desktop download:nodejs`)
 apps/desktop/resources/nodejs/
-
-# Git worktrees
-.worktrees/
