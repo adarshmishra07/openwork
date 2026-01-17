@@ -43,10 +43,13 @@ You MUST call this tool to display a modal in the UI.
 - `options` (optional): Array of selectable choices (2-4 recommended)
 - `multiSelect` (optional): Allow selecting multiple options (default: false)
 
-**Tip:** Add an "Other" option to allow custom text input:
+**Custom text input:** To allow users to type their own response, include an option with label "Other" (case-insensitive). When selected, the UI shows a text input field.
+
 ```json
 { "label": "Other", "description": "Type your own response" }
 ```
+
+**Important:** When "Other" is selected, the response will be `User responded: [their text]` instead of `User selected: Other`. You must wait for and handle this text response - do NOT proceed as if they selected a predefined option.
 
 ## Examples
 

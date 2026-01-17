@@ -315,6 +315,14 @@ Parameters:
   }]
 }
 
+Response format:
+- "User selected: Option 1" - predefined option selected
+- "User responded: [text]" - custom text (when "Other" option selected)
+- "User declined to answer" - user cancelled
+
+Custom text input: Add { "label": "Other" } to options. When selected, user types custom text.
+The response will be "User responded: [their text]" - handle this text, don't treat as predefined option.
+
 WRONG (user won't see this):
   I'll help organize your files. How would you like them organized?
   - By type
