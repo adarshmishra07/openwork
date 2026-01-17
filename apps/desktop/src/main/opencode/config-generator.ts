@@ -281,69 +281,10 @@ For saving/downloading content:
 </filesystem>
 </skill>
 
-<tool name="AskUserQuestion">
-Use this MCP tool to ask users questions and get their responses.
-This is the ONLY way to communicate with the user - they CANNOT see CLI/terminal output.
-
-WHEN TO USE:
-- Clarifying questions before starting ambiguous tasks
-- Asking user preferences (e.g., "How would you like files organized?")
-- Confirming actions before executing (especially destructive/irreversible ones)
-- Getting approval for sensitive actions (financial, messaging, deletion, etc.)
-
-<parameters>
-Input:
-{
-  "questions": [{
-    "question": "Your question to the user",
-    "header": "Short label (max 12 chars)",
-    "options": [
-      { "label": "Option 1", "description": "What this does" },
-      { "label": "Option 2", "description": "What this does" }
-    ],
-    "multiSelect": false  // true to allow selecting multiple options
-  }]
-}
-</parameters>
-
-<example>
-AskUserQuestion({
-  "questions": [{
-    "question": "How would you like to organize your Downloads folder?",
-    "header": "Organize",
-    "options": [
-      { "label": "By file type", "description": "Group into Documents, Images, Videos, etc." },
-      { "label": "By date", "description": "Group by month/year" },
-      { "label": "By project", "description": "You'll help me name project folders" }
-    ]
-  }]
-})
-</example>
-</tool>
-
 <important name="user-communication">
-##############################################################################
-# CRITICAL: USER COMMUNICATION - MUST USE AskUserQuestion TOOL
-##############################################################################
-
-The user CANNOT see your text output or CLI prompts!
+CRITICAL: The user CANNOT see your text output or CLI prompts!
 To ask ANY question or get user input, you MUST use the AskUserQuestion MCP tool.
-
-If you write "Let me ask you..." and then just output text - THE USER WILL NOT SEE IT.
-You MUST call the AskUserQuestion tool to display a modal in the UI.
-
-ALWAYS use AskUserQuestion for:
-- Clarifying ambiguous requests before starting work
-- Choosing between multiple approaches
-- Confirming sensitive actions (financial, messaging, deletion, posting, settings, sharing)
-- Any situation where you need user input to proceed
-
-WRONG (user won't see this):
-  Output text: "How would you like me to organize the files?"
-
-CORRECT (user will see a modal):
-  AskUserQuestion({ questions: [{ question: "How would you like me to organize the files?", ... }] })
-##############################################################################
+See the ask-user-question skill for full documentation and examples.
 </important>
 
 <behavior>
