@@ -1111,31 +1111,51 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
                             />
                           </div>
 
-                          {/* Model List */}
-                          <div className="max-h-[300px] overflow-y-auto space-y-4" data-testid="litellm-model-list">
+                          {/* Grouped Model List */}
+                          <div className="mb-4 max-h-64 overflow-y-auto rounded-md border border-input" data-testid="litellm-model-list">
                             {Object.entries(groupedLitellmModels)
-                              .sort(([a], [b]) => a.localeCompare(b))
+                              .sort(([a], [b]) => {
+                                const priorityA = LITELLM_PROVIDER_PRIORITY.indexOf(a);
+                                const priorityB = LITELLM_PROVIDER_PRIORITY.indexOf(b);
+                                // If both have priority, sort by priority
+                                if (priorityA !== -1 && priorityB !== -1) return priorityA - priorityB;
+                                // Priority providers come first
+                                if (priorityA !== -1) return -1;
+                                if (priorityB !== -1) return 1;
+                                // Otherwise alphabetical
+                                return a.localeCompare(b);
+                              })
                               .map(([provider, models]) => (
                                 <div key={provider}>
-                                  <h4 className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">
+                                  <div className="sticky top-0 bg-muted px-3 py-2 text-xs font-semibold text-muted-foreground uppercase">
                                     {provider}
-                                  </h4>
-                                  <div className="space-y-1">
-                                    {models.map((model) => (
-                                      <button
-                                        key={model.id}
-                                        onClick={() => setSelectedLitellmModel(model.id)}
-                                        className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-                                          selectedLitellmModel === model.id
-                                            ? 'bg-primary text-primary-foreground'
-                                            : 'hover:bg-muted'
-                                        }`}
-                                        data-testid={`litellm-model-${model.id}`}
-                                      >
-                                        <div className="font-medium">{model.name}</div>
-                                      </button>
-                                    ))}
                                   </div>
+                                  {models.map((model) => (
+                                    <label
+                                      key={model.id}
+                                      className={`flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-muted/50 ${
+                                        selectedLitellmModel === model.id ? 'bg-muted' : ''
+                                      }`}
+                                    >
+                                      <input
+                                        type="radio"
+                                        name="litellm-model"
+                                        value={model.id}
+                                        checked={selectedLitellmModel === model.id}
+                                        onChange={(e) => setSelectedLitellmModel(e.target.value)}
+                                        className="h-4 w-4"
+                                        data-testid={`litellm-model-${model.id}`}
+                                      />
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-sm font-medium text-foreground truncate">
+                                          {model.name}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground truncate">
+                                          {model.id}
+                                        </div>
+                                      </div>
+                                    </label>
+                                  ))}
                                 </div>
                               ))}
                           </div>
