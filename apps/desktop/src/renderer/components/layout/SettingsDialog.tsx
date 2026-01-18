@@ -278,6 +278,8 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
         await accomplish.setSelectedModel(newSelection);
         setSelectedModel(newSelection);
         setModelStatusMessage(`Model updated to ${model.displayName}`);
+        // If dialog was opened for task setup, close and run the task
+        onApiKeySaved?.();
       } catch (err) {
         console.error('Failed to save model selection:', err);
       }
@@ -442,7 +444,7 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
       // Clear sensitive fields
       setBedrockSecretKey('');
       setBedrockSessionToken('');
-      onApiKeySaved?.();
+      // Don't call onApiKeySaved here - user still needs to select a model from the dropdown above
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save credentials.';
       setBedrockError(message);
