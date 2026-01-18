@@ -12,21 +12,16 @@ Browser automation that maintains page state across script executions. Write sma
 # MANDATORY: Browser scripts must use .mts extension to enable ESM mode.
 # tsx treats .mts files as ES modules, enabling top-level await.
 #
-# CORRECT (always do this - two steps):
-#   1. Write script to temp file with .mts extension:
-#      cat > /tmp/accomplish-${ACCOMPLISH_TASK_ID:-default}.mts <<'EOF'
-#      import { connect } from "@/client.js";
-#      ...
-#      EOF
+# 1. Write script to temp file with .mts extension:
+#    cat > /tmp/accomplish-${ACCOMPLISH_TASK_ID:-default}.mts <<'EOF'
+#    import { connect } from "@/client.js";
+#    ...
+#    EOF
 #
-#   2. Run from dev-browser directory with bundled Node:
-#      cd {{SKILLS_PATH}}/dev-browser && PATH="${NODE_BIN_PATH}:$PATH" npx tsx /tmp/accomplish-${ACCOMPLISH_TASK_ID:-default}.mts
+# 2. Run from dev-browser directory (see <environment> for NODE_BIN_PATH):
+#    cd {{SKILLS_PATH}}/dev-browser && PATH="${NODE_BIN_PATH}:$PATH" npx tsx /tmp/accomplish-${ACCOMPLISH_TASK_ID:-default}.mts
 #
-# WRONG (will fail - .ts files in /tmp default to CJS mode):
-#   cat > /tmp/script.ts <<'EOF'
-#   import { connect } from "@/client.js";  # Top-level await won't work!
-#   EOF
-#
+# WRONG: .ts files in /tmp default to CJS mode - top-level await won't work!
 # ALWAYS use .mts extension for temp scripts!
 ##############################################################################
 </critical-requirement>
