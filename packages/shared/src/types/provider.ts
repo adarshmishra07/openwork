@@ -67,6 +67,26 @@ export interface OpenRouterConfig {
 }
 
 /**
+ * LiteLLM model info from API
+ */
+export interface LiteLLMModel {
+  id: string;           // e.g., "openai/gpt-4"
+  name: string;         // Display name (same as id for LiteLLM)
+  provider: string;     // Extracted from model ID
+  contextLength: number;
+}
+
+/**
+ * LiteLLM configuration
+ */
+export interface LiteLLMConfig {
+  baseUrl: string;      // e.g., "http://localhost:4000"
+  enabled: boolean;
+  lastValidated?: number;
+  models?: LiteLLMModel[];
+}
+
+/**
  * Default providers and models
  */
 export const DEFAULT_PROVIDERS: ProviderConfig[] = [
