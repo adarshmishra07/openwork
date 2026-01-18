@@ -145,10 +145,11 @@ jobs:
                 { type: "divider" },
                 {
                   type: "actions",
+                  block_id: "release_actions",
                   elements: [
-                    { type: "button", text: { type: "plain_text", text: "🔧 Patch → \($patch)", emoji: true }, action_id: "release_patch", style: "primary" },
-                    { type: "button", text: { type: "plain_text", text: "✨ Minor → \($minor)", emoji: true }, action_id: "release_minor" },
-                    { type: "button", text: { type: "plain_text", text: "🚀 Major → \($major)", emoji: true }, action_id: "release_major", style: "danger" }
+                    { type: "button", text: { type: "plain_text", text: "🔧 Patch → \($patch)", emoji: true }, action_id: "release_patch", value: "patch", style: "primary" },
+                    { type: "button", text: { type: "plain_text", text: "✨ Minor → \($minor)", emoji: true }, action_id: "release_minor", value: "minor" },
+                    { type: "button", text: { type: "plain_text", text: "🚀 Major → \($major)", emoji: true }, action_id: "release_major", value: "major", style: "danger" }
                   ]
                 }
               ]

@@ -34,8 +34,18 @@ export default {
       const payload = JSON.parse(params.get('payload'));
 
       // Get action (release_patch, release_minor, release_major)
-      const actionId = payload.actions[0].action_id;
-      const bumpType = actionId.replace('release_', '');
+      // Try action_id first, fall back to value field
+      const action = payload.actions[0];
+      console.log('Action received:', JSON.stringify(action));
+
+      let bumpType;
+      if (action.action_id && action.action_id.startsWith('release_')) {
+        bumpType = action.action_id.replace('release_', '');
+      } else if (action.value) {
+        bumpType = action.value;
+      } else {
+        bumpType = action.action_id; // Will fail validation but show in error
+      }
       const responseUrl = payload.response_url;
 
       // Validate bump type
