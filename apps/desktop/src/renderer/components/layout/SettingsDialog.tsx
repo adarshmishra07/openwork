@@ -119,6 +119,15 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
   const [savingLitellm, setSavingLitellm] = useState(false);
   const [litellmSearch, setLitellmSearch] = useState('');
 
+  // Sync selectedProxyPlatform with the actual selected model's provider
+  useEffect(() => {
+    if (selectedModel?.provider === 'litellm') {
+      setSelectedProxyPlatform('litellm');
+    } else if (selectedModel?.provider === 'openrouter') {
+      setSelectedProxyPlatform('openrouter');
+    }
+  }, [selectedModel]);
+
   useEffect(() => {
     if (!open) return;
 
