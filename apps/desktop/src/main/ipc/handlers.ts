@@ -1312,10 +1312,22 @@ export function registerIPCHandlers(): void {
 
       const data = await response.json() as { data?: Array<{ id: string; object: string; created?: number; owned_by?: string }> };
       const models = (data.data || []).map((m) => {
-        const provider = m.id.split('/')[0] || m.owned_by || 'unknown';
+        // Extract provider from model ID (e.g., "anthropic/claude-sonnet" -> "anthropic")
+        const parts = m.id.split('/');
+        const provider = parts.length > 1 ? parts[0] : (m.owned_by !== 'openai' ? m.owned_by : 'unknown') || 'unknown';
+
+        // Generate display name (e.g., "anthropic/claude-sonnet" -> "Anthropic: Claude Sonnet")
+        const modelPart = parts.length > 1 ? parts.slice(1).join('/') : m.id;
+        const providerDisplay = provider.charAt(0).toUpperCase() + provider.slice(1);
+        const modelDisplay = modelPart
+          .split('-')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+        const displayName = parts.length > 1 ? `${providerDisplay}: ${modelDisplay}` : modelDisplay;
+
         return {
           id: m.id,
-          name: m.id,
+          name: displayName,
           provider,
           contextLength: 0,
         };
