@@ -101,6 +101,12 @@ jobs:
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_RELEASE_WEBHOOK_URL }}
         run: |
+          # Validate secret is configured
+          if [ -z "$SLACK_WEBHOOK" ]; then
+            echo "Error: SLACK_RELEASE_WEBHOOK_URL secret is not configured"
+            exit 1
+          fi
+
           COMMITS=$(cat /tmp/commits.txt)
           COMMIT_COUNT="${{ steps.check.outputs.commit_count }}"
           CURRENT="${{ steps.format.outputs.current_version }}"
@@ -110,66 +116,38 @@ jobs:
 
           WORKFLOW_URL="https://github.com/${{ github.repository }}/actions/workflows/release.yml"
 
-          # Build Slack Block Kit message
-          PAYLOAD=$(cat <<EOF
-          {
-            "blocks": [
-              {
-                "type": "header",
-                "text": {
-                  "type": "plain_text",
-                  "text": "📦 Release Reminder - Openwork",
-                  "emoji": true
+          # Build payload safely using jq to handle special characters in commit messages
+          PAYLOAD=$(jq -n \
+            --arg commit_count "$COMMIT_COUNT" \
+            --arg current "$CURRENT" \
+            --arg commits "$COMMITS" \
+            --arg patch "$PATCH" \
+            --arg minor "$MINOR" \
+            --arg major "$MAJOR" \
+            --arg workflow_url "$WORKFLOW_URL" \
+            '{
+              blocks: [
+                {
+                  type: "header",
+                  text: { type: "plain_text", text: "📦 Release Reminder - Openwork", emoji: true }
+                },
+                {
+                  type: "section",
+                  text: { type: "mrkdwn", text: "*\($commit_count) commits since v\($current):*\n\n\($commits)" }
+                },
+                { type: "divider" },
+                {
+                  type: "actions",
+                  elements: [
+                    { type: "button", text: { type: "plain_text", text: "🔧 Patch → \($patch)", emoji: true }, url: $workflow_url },
+                    { type: "button", text: { type: "plain_text", text: "✨ Minor → \($minor)", emoji: true }, url: $workflow_url },
+                    { type: "button", text: { type: "plain_text", text: "🚀 Major → \($major)", emoji: true }, url: $workflow_url }
+                  ]
                 }
-              },
-              {
-                "type": "section",
-                "text": {
-                  "type": "mrkdwn",
-                  "text": "*${COMMIT_COUNT} commits since v${CURRENT}:*\n\n${COMMITS}"
-                }
-              },
-              {
-                "type": "divider"
-              },
-              {
-                "type": "actions",
-                "elements": [
-                  {
-                    "type": "button",
-                    "text": {
-                      "type": "plain_text",
-                      "text": "🔧 Patch → ${PATCH}",
-                      "emoji": true
-                    },
-                    "url": "${WORKFLOW_URL}"
-                  },
-                  {
-                    "type": "button",
-                    "text": {
-                      "type": "plain_text",
-                      "text": "✨ Minor → ${MINOR}",
-                      "emoji": true
-                    },
-                    "url": "${WORKFLOW_URL}"
-                  },
-                  {
-                    "type": "button",
-                    "text": {
-                      "type": "plain_text",
-                      "text": "🚀 Major → ${MAJOR}",
-                      "emoji": true
-                    },
-                    "url": "${WORKFLOW_URL}"
-                  }
-                ]
-              }
-            ]
-          }
-          EOF
-          )
+              ]
+            }')
 
-          # Send to Slack
-          curl -X POST -H 'Content-type: application/json' \
+          # Send to Slack with error handling
+          curl -f -X POST -H 'Content-type: application/json' \
             --data "$PAYLOAD" \
-            "$SLACK_WEBHOOK"
+            "$SLACK_WEBHOOK" || { echo "Failed to send Slack notification"; exit 1; }
