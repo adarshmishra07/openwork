@@ -78,7 +78,7 @@ export function ProviderGrid({
       {/* Providers - min-h prevents layout shift when switching between providers */}
       {expanded ? (
         /* Expanded: show all in grid with min-height to prevent flickering */
-        <div className="grid grid-cols-4 gap-3 min-h-[280px]">
+        <div className="grid grid-cols-4 gap-3 min-h-[280px] justify-items-center">
           {filteredProviders.map(providerId => (
             <ProviderCard
               key={providerId}
@@ -92,7 +92,7 @@ export function ProviderGrid({
         </div>
       ) : (
         /* Collapsed: single row, 4 providers */
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-4 gap-3 justify-items-center">
           {filteredProviders.slice(0, 4).map(providerId => (
             <ProviderCard
               key={providerId}

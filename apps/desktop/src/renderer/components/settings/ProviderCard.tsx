@@ -68,7 +68,7 @@ export const ProviderCard = memo(function ProviderCard({
     <button
       onClick={handleClick}
       data-testid={`provider-card-${providerId}`}
-      className={`relative flex flex-col items-center justify-center rounded-xl border p-4 min-w-[120px] transition-[background-color,border-color] duration-150 ${
+      className={`relative flex flex-col items-center justify-center rounded-xl border p-4 w-[130px] h-[110px] transition-[background-color,border-color] duration-150 ${
         showGreenBackground
           ? 'border-[#4a4330] border-2 bg-[#e9f7e7]'
           : isSelected
