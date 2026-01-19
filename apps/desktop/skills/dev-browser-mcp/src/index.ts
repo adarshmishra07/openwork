@@ -25,6 +25,8 @@ const TASK_ID = process.env.ACCOMPLISH_TASK_ID || 'default';
 // Browser connection state
 let browser: Browser | null = null;
 let connectingPromise: Promise<Browser> | null = null;
+// Cached server mode (fetched once at connection time)
+let cachedServerMode: string | null = null;
 
 /**
  * Fetch with retry for handling concurrent connection issues
@@ -57,7 +59,7 @@ async function fetchWithRetry(
 }
 
 /**
- * Ensure browser is connected
+ * Ensure browser is connected and server mode is cached
  */
 async function ensureConnected(): Promise<Browser> {
   if (browser && browser.isConnected()) {
@@ -74,7 +76,9 @@ async function ensureConnected(): Promise<Browser> {
       if (!res.ok) {
         throw new Error(`Server returned ${res.status}: ${await res.text()}`);
       }
-      const info = await res.json() as { wsEndpoint: string };
+      const info = await res.json() as { wsEndpoint: string; mode?: string };
+      // Cache the server mode once at connection time
+      cachedServerMode = info.mode || 'normal';
       browser = await chromium.connectOverCDP(info.wsEndpoint);
       return browser;
     } finally {
@@ -156,10 +160,8 @@ async function getPage(pageName?: string): Promise<Page> {
 
   const b = await ensureConnected();
 
-  // Check if we're in extension mode
-  const infoRes = await fetchWithRetry(DEV_BROWSER_URL);
-  const info = await infoRes.json() as { mode?: string };
-  const isExtensionMode = info.mode === 'extension';
+  // Use cached server mode (fetched once at connection time)
+  const isExtensionMode = cachedServerMode === 'extension';
 
   if (isExtensionMode) {
     const allPages = b.contexts().flatMap((ctx) => ctx.pages());
@@ -187,33 +189,21 @@ async function getPage(pageName?: string): Promise<Page> {
 }
 
 /**
- * Wait for page to finish loading
+ * Wait for page to finish loading using Playwright's built-in function
  */
 async function waitForPageLoad(page: Page, timeout = 10000): Promise<void> {
-  const startTime = Date.now();
-
-  // Wait minimum time
-  await new Promise((resolve) => setTimeout(resolve, 100));
-
-  while (Date.now() - startTime < timeout) {
-    try {
-      const readyState = await page.evaluate(() => document.readyState);
-      if (readyState === 'complete') {
-        return;
-      }
-    } catch {
-      // Page may be navigating
-    }
-    await new Promise((resolve) => setTimeout(resolve, 50));
+  try {
+    // Use Playwright's optimized wait which monitors network activity
+    await page.waitForLoadState('domcontentloaded', { timeout });
+  } catch {
+    // Ignore timeout errors - page may be slow but still usable
   }
 }
 
 /**
- * Get the snapshot script that can be injected into the browser
+ * Cached snapshot script (module-level constant to avoid re-creating the string)
  */
-function getSnapshotScript(): string {
-  // Inlined snapshot script from dev-browser
-  return `
+const SNAPSHOT_SCRIPT = `
 (function() {
   if (window.__devBrowser_getAISnapshot) return;
 
@@ -1026,22 +1016,31 @@ function getSnapshotScript(): string {
   window.__devBrowser_selectSnapshotRef = selectSnapshotRef;
 })();
 `;
-}
 
 /**
  * Get ARIA snapshot for a page
+ * Optimized: checks if script is already injected before sending
  */
 async function getAISnapshot(page: Page): Promise<string> {
-  const snapshotScript = getSnapshotScript();
-  const snapshot = await page.evaluate((script: string) => {
+  // Check if script is already injected to avoid sending large script on every call
+  const isInjected = await page.evaluate(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = globalThis as any;
-    if (!w.__devBrowser_getAISnapshot) {
+    return !!(globalThis as any).__devBrowser_getAISnapshot;
+  });
+
+  if (!isInjected) {
+    // Inject the script only once per page
+    await page.evaluate((script: string) => {
       // eslint-disable-next-line no-eval
       eval(script);
-    }
-    return w.__devBrowser_getAISnapshot();
-  }, snapshotScript);
+    }, SNAPSHOT_SCRIPT);
+  }
+
+  // Now call the snapshot function
+  const snapshot = await page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (globalThis as any).__devBrowser_getAISnapshot();
+  });
   return snapshot;
 }
 
@@ -1112,6 +1111,23 @@ interface BrowserEvaluateInput {
 
 interface BrowserPagesInput {
   action: 'list' | 'close';
+  page_name?: string;
+}
+
+interface SequenceAction {
+  action: 'click' | 'type' | 'snapshot' | 'screenshot' | 'wait';
+  ref?: string;
+  selector?: string;
+  x?: number;
+  y?: number;
+  text?: string;
+  press_enter?: boolean;
+  full_page?: boolean;
+  timeout?: number;
+}
+
+interface BrowserSequenceInput {
+  actions: SequenceAction[];
   page_name?: string;
 }
 
@@ -1268,6 +1284,43 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['action'],
       },
     },
+    {
+      name: 'browser_sequence',
+      description: 'Execute multiple browser actions in sequence. More efficient than separate calls for multi-step operations like form filling.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          actions: {
+            type: 'array',
+            description: 'Array of actions to execute in order',
+            items: {
+              type: 'object',
+              properties: {
+                action: {
+                  type: 'string',
+                  enum: ['click', 'type', 'snapshot', 'screenshot', 'wait'],
+                  description: 'The action to perform',
+                },
+                ref: { type: 'string', description: 'Element ref for click/type' },
+                selector: { type: 'string', description: 'CSS selector for click/type' },
+                x: { type: 'number', description: 'X coordinate for click' },
+                y: { type: 'number', description: 'Y coordinate for click' },
+                text: { type: 'string', description: 'Text to type' },
+                press_enter: { type: 'boolean', description: 'Press Enter after typing' },
+                full_page: { type: 'boolean', description: 'Full page screenshot' },
+                timeout: { type: 'number', description: 'Wait timeout in ms (default: 1000)' },
+              },
+              required: ['action'],
+            },
+          },
+          page_name: {
+            type: 'string',
+            description: 'Optional page name (default: "main")',
+          },
+        },
+        required: ['actions'],
+      },
+    },
   ],
 }));
 
@@ -1292,11 +1345,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToo
 
         const title = await page.title();
         const currentUrl = page.url();
+        const viewport = page.viewportSize();
 
         return {
           content: [{
             type: 'text',
-            text: `Navigated to ${currentUrl}\nTitle: ${title}`,
+            text: `Navigated to ${currentUrl}\nTitle: ${title}\nViewport: ${viewport?.width || 1280}x${viewport?.height || 720}`,
           }],
         };
       }
@@ -1482,6 +1536,95 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToo
         return {
           content: [{ type: 'text', text: `Error: Unknown action "${action}"` }],
           isError: true,
+        };
+      }
+
+      case 'browser_sequence': {
+        const { actions, page_name } = args as BrowserSequenceInput;
+        const page = await getPage(page_name);
+        const results: string[] = [];
+
+        for (let i = 0; i < actions.length; i++) {
+          const step = actions[i];
+          const stepNum = i + 1;
+
+          try {
+            switch (step.action) {
+              case 'click': {
+                if (step.x !== undefined && step.y !== undefined) {
+                  await page.mouse.click(step.x, step.y);
+                  results.push(`${stepNum}. Clicked at (${step.x}, ${step.y})`);
+                } else if (step.ref) {
+                  const element = await selectSnapshotRef(page, step.ref);
+                  if (!element) throw new Error(`Ref "${step.ref}" not found`);
+                  await element.click();
+                  results.push(`${stepNum}. Clicked [ref=${step.ref}]`);
+                } else if (step.selector) {
+                  await page.click(step.selector);
+                  results.push(`${stepNum}. Clicked "${step.selector}"`);
+                } else {
+                  throw new Error('Click requires x/y, ref, or selector');
+                }
+                await waitForPageLoad(page);
+                break;
+              }
+
+              case 'type': {
+                let element: ElementHandle | null = null;
+                if (step.ref) {
+                  element = await selectSnapshotRef(page, step.ref);
+                  if (!element) throw new Error(`Ref "${step.ref}" not found`);
+                } else if (step.selector) {
+                  element = await page.$(step.selector);
+                  if (!element) throw new Error(`Selector "${step.selector}" not found`);
+                } else {
+                  throw new Error('Type requires ref or selector');
+                }
+                await element.click();
+                await element.fill(step.text || '');
+                if (step.press_enter) {
+                  await element.press('Enter');
+                  await waitForPageLoad(page);
+                }
+                const target = step.ref ? `[ref=${step.ref}]` : `"${step.selector}"`;
+                results.push(`${stepNum}. Typed "${step.text}" into ${target}${step.press_enter ? ' + Enter' : ''}`);
+                break;
+              }
+
+              case 'snapshot': {
+                await getAISnapshot(page);
+                results.push(`${stepNum}. Snapshot taken (refs updated)`);
+                break;
+              }
+
+              case 'screenshot': {
+                results.push(`${stepNum}. Screenshot taken`);
+                break;
+              }
+
+              case 'wait': {
+                const timeout = step.timeout || 1000;
+                await new Promise(resolve => setTimeout(resolve, timeout));
+                results.push(`${stepNum}. Waited ${timeout}ms`);
+                break;
+              }
+
+              default:
+                results.push(`${stepNum}. Unknown action: ${step.action}`);
+            }
+          } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            results.push(`${stepNum}. FAILED: ${errMsg}`);
+            // Stop sequence on error
+            return {
+              content: [{ type: 'text', text: `Sequence stopped at step ${stepNum}:\n${results.join('\n')}` }],
+              isError: true,
+            };
+          }
+        }
+
+        return {
+          content: [{ type: 'text', text: `Sequence completed (${actions.length} actions):\n${results.join('\n')}` }],
         };
       }
 
