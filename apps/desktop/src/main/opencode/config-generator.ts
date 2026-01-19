@@ -207,6 +207,40 @@ Browser automation using MCP tools. Use these tools directly for web automation 
 - actions: Array of {action, ref?, selector?, x?, y?, text?, press_enter?, timeout?}
 - Supported actions: "click", "type", "snapshot", "screenshot", "wait"
 - Use for multi-step operations like form filling
+
+**browser_keyboard(action, key?, text?, page_name?)** - Keyboard input
+- action: "press" for key combos, "type" for raw text, "down"/"up" for hold/release
+- key: "Enter", "Tab", "Escape", "Meta+v", "Control+c", "Shift+ArrowDown"
+- text: Text to type character by character (for action="type")
+- Use for shortcuts, special keys, or typing into canvas apps like Google Docs
+
+**browser_scroll(direction?, amount?, ref?, selector?, position?, page_name?)** - Scroll page
+- direction + amount: Scroll by pixels (up/down/left/right, default 500px)
+- ref or selector: Scroll element into view
+- position: "top" or "bottom" to jump to page extremes
+
+**browser_hover(ref?, selector?, x?, y?, page_name?)** - Hover over element
+- Triggers hover states, dropdowns, and tooltips
+- Use before clicking nested menus
+
+**browser_select(ref?, selector?, value?, label?, index?, page_name?)** - Select dropdown option
+- For native <select> elements (browser_click won't work on these)
+- value: Select by option's value attribute
+- label: Select by visible text
+- index: Select by 0-based index
+
+**browser_wait(condition, selector?, timeout?, page_name?)** - Wait for condition
+- condition: "selector" (appear), "hidden" (disappear), "navigation", "network_idle", "timeout"
+- selector: CSS selector (required for selector/hidden conditions)
+- timeout: Max wait in ms (default 30000), or duration for "timeout" condition
+
+**browser_file_upload(ref?, selector?, files, page_name?)** - Upload files
+- files: Array of absolute file paths
+- Target element must be an input[type=file]
+
+**browser_drag(source_*, target_*, page_name?)** - Drag and drop
+- Source: source_ref, source_selector, or source_x/source_y
+- Target: target_ref, target_selector, or target_x/target_y
 </tools>
 
 <workflow>
@@ -256,7 +290,7 @@ See the ask-user-question skill for full documentation and examples.
 
 <behavior>
 - Use AskUserQuestion tool for clarifying questions before starting ambiguous tasks
-- Use MCP tools directly - browser_navigate, browser_snapshot, browser_click, browser_type, browser_screenshot, browser_sequence
+- Use MCP tools directly - browser_navigate, browser_snapshot, browser_click, browser_type, browser_keyboard, browser_screenshot, browser_scroll, browser_hover, browser_select, browser_wait, browser_file_upload, browser_drag, browser_sequence
 
 **BROWSER ACTION VERBOSITY - Be descriptive about web interactions:**
 - Before each browser action, briefly explain what you're about to do in user terms
@@ -581,7 +615,12 @@ export async function generateOpenCodeConfig(): Promise<string> {
       },
       'dev-browser-mcp': {
         type: 'local',
-        command: ['npx', 'tsx', path.join(skillsPath, 'dev-browser-mcp', 'src', 'index.ts')],
+        // Must cd to the skill directory first so npx tsx can find node_modules
+        command: [
+          'bash',
+          '-c',
+          `cd "${path.join(skillsPath, 'dev-browser-mcp')}" && npx tsx src/index.ts`,
+        ],
         enabled: true,
         timeout: 30000,  // Longer timeout for browser operations
       },

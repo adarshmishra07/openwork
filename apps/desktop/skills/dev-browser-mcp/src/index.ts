@@ -7,6 +7,12 @@
  * for agents to write scripts. Connects to the dev-browser server on port 9224.
  */
 
+// Early startup logging - this should appear immediately if the script is executed
+console.error('[dev-browser-mcp] Script starting...');
+console.error('[dev-browser-mcp] Node version:', process.version);
+console.error('[dev-browser-mcp] CWD:', process.cwd());
+console.error('[dev-browser-mcp] ACCOMPLISH_TASK_ID:', process.env.ACCOMPLISH_TASK_ID || '(not set)');
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -15,6 +21,8 @@ import {
   type CallToolResult,
 } from '@modelcontextprotocol/sdk/types.js';
 import { chromium, type Browser, type Page, type ElementHandle } from 'playwright';
+
+console.error('[dev-browser-mcp] All imports completed successfully');
 
 const DEV_BROWSER_PORT = 9224;
 const DEV_BROWSER_URL = `http://localhost:${DEV_BROWSER_PORT}`;
@@ -1131,6 +1139,65 @@ interface BrowserSequenceInput {
   page_name?: string;
 }
 
+interface BrowserKeyboardInput {
+  action: 'press' | 'type' | 'down' | 'up';
+  key?: string;
+  text?: string;
+  page_name?: string;
+}
+
+interface BrowserScrollInput {
+  direction?: 'up' | 'down' | 'left' | 'right';
+  amount?: number;
+  ref?: string;
+  selector?: string;
+  position?: 'top' | 'bottom';
+  page_name?: string;
+}
+
+interface BrowserHoverInput {
+  ref?: string;
+  selector?: string;
+  x?: number;
+  y?: number;
+  page_name?: string;
+}
+
+interface BrowserSelectInput {
+  ref?: string;
+  selector?: string;
+  value?: string;
+  label?: string;
+  index?: number;
+  page_name?: string;
+}
+
+interface BrowserWaitInput {
+  condition: 'selector' | 'hidden' | 'navigation' | 'network_idle' | 'timeout';
+  selector?: string;
+  timeout?: number;
+  page_name?: string;
+}
+
+interface BrowserFileUploadInput {
+  ref?: string;
+  selector?: string;
+  files: string[];
+  page_name?: string;
+}
+
+interface BrowserDragInput {
+  source_ref?: string;
+  source_selector?: string;
+  source_x?: number;
+  source_y?: number;
+  target_ref?: string;
+  target_selector?: string;
+  target_x?: number;
+  target_y?: number;
+  page_name?: string;
+}
+
 // Create MCP server
 const server = new Server(
   { name: 'dev-browser-mcp', version: '1.0.0' },
@@ -1319,6 +1386,229 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
         },
         required: ['actions'],
+      },
+    },
+    {
+      name: 'browser_keyboard',
+      description: 'Send keyboard input. Use for shortcuts (Cmd+V, Ctrl+C), special keys (Enter, Tab, Escape), or typing into canvas apps like Google Docs where browser_type does not work.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['press', 'type', 'down', 'up'],
+            description: '"press" for key combo (Enter, Meta+v), "type" for raw text character by character, "down"/"up" for hold/release',
+          },
+          key: {
+            type: 'string',
+            description: 'Key to press: "Enter", "Tab", "Escape", "Meta+v", "Control+c", "Shift+ArrowDown"',
+          },
+          text: {
+            type: 'string',
+            description: 'Text to type character by character (for action="type")',
+          },
+          page_name: {
+            type: 'string',
+            description: 'Optional page name (default: "main")',
+          },
+        },
+        required: ['action'],
+      },
+    },
+    {
+      name: 'browser_scroll',
+      description: 'Scroll the page or scroll an element into view.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          direction: {
+            type: 'string',
+            enum: ['up', 'down', 'left', 'right'],
+            description: 'Scroll direction',
+          },
+          amount: {
+            type: 'number',
+            description: 'Pixels to scroll (default: 500)',
+          },
+          ref: {
+            type: 'string',
+            description: 'Element ref to scroll into view (from browser_snapshot)',
+          },
+          selector: {
+            type: 'string',
+            description: 'CSS selector to scroll into view',
+          },
+          position: {
+            type: 'string',
+            enum: ['top', 'bottom'],
+            description: 'Scroll to page top or bottom',
+          },
+          page_name: {
+            type: 'string',
+            description: 'Optional page name (default: "main")',
+          },
+        },
+      },
+    },
+    {
+      name: 'browser_hover',
+      description: 'Hover over an element to trigger hover states, dropdowns, or tooltips.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          ref: {
+            type: 'string',
+            description: 'Element ref from browser_snapshot',
+          },
+          selector: {
+            type: 'string',
+            description: 'CSS selector',
+          },
+          x: {
+            type: 'number',
+            description: 'X coordinate to hover at',
+          },
+          y: {
+            type: 'number',
+            description: 'Y coordinate to hover at',
+          },
+          page_name: {
+            type: 'string',
+            description: 'Optional page name (default: "main")',
+          },
+        },
+      },
+    },
+    {
+      name: 'browser_select',
+      description: 'Select an option from a <select> dropdown. Native select elements require this tool - browser_click will not work.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          ref: {
+            type: 'string',
+            description: 'Element ref from browser_snapshot',
+          },
+          selector: {
+            type: 'string',
+            description: 'CSS selector for the select element',
+          },
+          value: {
+            type: 'string',
+            description: 'Option value attribute to select',
+          },
+          label: {
+            type: 'string',
+            description: 'Option visible text to select',
+          },
+          index: {
+            type: 'number',
+            description: 'Option index to select (0-based)',
+          },
+          page_name: {
+            type: 'string',
+            description: 'Optional page name (default: "main")',
+          },
+        },
+      },
+    },
+    {
+      name: 'browser_wait',
+      description: 'Wait for a condition before continuing. Useful for dynamic content, SPAs, and loading states.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          condition: {
+            type: 'string',
+            enum: ['selector', 'hidden', 'navigation', 'network_idle', 'timeout'],
+            description: '"selector" waits for element to appear, "hidden" waits for element to disappear, "navigation" waits for page navigation, "network_idle" waits for network to settle, "timeout" waits fixed time',
+          },
+          selector: {
+            type: 'string',
+            description: 'CSS selector (required for "selector" and "hidden" conditions)',
+          },
+          timeout: {
+            type: 'number',
+            description: 'Max wait time in ms (default: 30000). For "timeout" condition, this is the wait duration.',
+          },
+          page_name: {
+            type: 'string',
+            description: 'Optional page name (default: "main")',
+          },
+        },
+        required: ['condition'],
+      },
+    },
+    {
+      name: 'browser_file_upload',
+      description: 'Upload files to a file input element.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          ref: {
+            type: 'string',
+            description: 'Element ref from browser_snapshot',
+          },
+          selector: {
+            type: 'string',
+            description: 'CSS selector for input[type=file]',
+          },
+          files: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Array of absolute file paths to upload',
+          },
+          page_name: {
+            type: 'string',
+            description: 'Optional page name (default: "main")',
+          },
+        },
+        required: ['files'],
+      },
+    },
+    {
+      name: 'browser_drag',
+      description: 'Drag and drop from source to target location.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          source_ref: {
+            type: 'string',
+            description: 'Source element ref from browser_snapshot',
+          },
+          source_selector: {
+            type: 'string',
+            description: 'Source CSS selector',
+          },
+          source_x: {
+            type: 'number',
+            description: 'Source X coordinate',
+          },
+          source_y: {
+            type: 'number',
+            description: 'Source Y coordinate',
+          },
+          target_ref: {
+            type: 'string',
+            description: 'Target element ref from browser_snapshot',
+          },
+          target_selector: {
+            type: 'string',
+            description: 'Target CSS selector',
+          },
+          target_x: {
+            type: 'number',
+            description: 'Target X coordinate',
+          },
+          target_y: {
+            type: 'number',
+            description: 'Target Y coordinate',
+          },
+          page_name: {
+            type: 'string',
+            description: 'Optional page name (default: "main")',
+          },
+        },
       },
     },
   ],
@@ -1628,6 +1918,454 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToo
         };
       }
 
+      case 'browser_keyboard': {
+        const { action, key, text, page_name } = args as BrowserKeyboardInput;
+        const page = await getPage(page_name);
+
+        switch (action) {
+          case 'press': {
+            if (!key) {
+              return {
+                content: [{ type: 'text', text: 'Error: "key" is required for press action' }],
+                isError: true,
+              };
+            }
+            await page.keyboard.press(key);
+            return {
+              content: [{ type: 'text', text: `Pressed key: ${key}` }],
+            };
+          }
+          case 'type': {
+            if (!text) {
+              return {
+                content: [{ type: 'text', text: 'Error: "text" is required for type action' }],
+                isError: true,
+              };
+            }
+            await page.keyboard.type(text);
+            return {
+              content: [{ type: 'text', text: `Typed text: "${text}"` }],
+            };
+          }
+          case 'down': {
+            if (!key) {
+              return {
+                content: [{ type: 'text', text: 'Error: "key" is required for down action' }],
+                isError: true,
+              };
+            }
+            await page.keyboard.down(key);
+            return {
+              content: [{ type: 'text', text: `Key down: ${key}` }],
+            };
+          }
+          case 'up': {
+            if (!key) {
+              return {
+                content: [{ type: 'text', text: 'Error: "key" is required for up action' }],
+                isError: true,
+              };
+            }
+            await page.keyboard.up(key);
+            return {
+              content: [{ type: 'text', text: `Key up: ${key}` }],
+            };
+          }
+          default:
+            return {
+              content: [{ type: 'text', text: `Error: Unknown keyboard action "${action}"` }],
+              isError: true,
+            };
+        }
+      }
+
+      case 'browser_scroll': {
+        const { direction, amount, ref, selector, position, page_name } = args as BrowserScrollInput;
+        const page = await getPage(page_name);
+
+        // Scroll element into view
+        if (ref) {
+          const element = await selectSnapshotRef(page, ref);
+          if (!element) {
+            return {
+              content: [{ type: 'text', text: `Error: Could not find element with ref "${ref}"` }],
+              isError: true,
+            };
+          }
+          await element.scrollIntoViewIfNeeded();
+          return {
+            content: [{ type: 'text', text: `Scrolled [ref=${ref}] into view` }],
+          };
+        }
+
+        if (selector) {
+          const element = await page.$(selector);
+          if (!element) {
+            return {
+              content: [{ type: 'text', text: `Error: Could not find element matching "${selector}"` }],
+              isError: true,
+            };
+          }
+          await element.scrollIntoViewIfNeeded();
+          return {
+            content: [{ type: 'text', text: `Scrolled "${selector}" into view` }],
+          };
+        }
+
+        // Scroll to position
+        if (position) {
+          if (position === 'top') {
+            await page.evaluate(() => window.scrollTo(0, 0));
+            return {
+              content: [{ type: 'text', text: 'Scrolled to top of page' }],
+            };
+          } else if (position === 'bottom') {
+            await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+            return {
+              content: [{ type: 'text', text: 'Scrolled to bottom of page' }],
+            };
+          }
+        }
+
+        // Scroll by direction and amount
+        if (direction) {
+          const scrollAmount = amount || 500;
+          let deltaX = 0;
+          let deltaY = 0;
+
+          switch (direction) {
+            case 'up':
+              deltaY = -scrollAmount;
+              break;
+            case 'down':
+              deltaY = scrollAmount;
+              break;
+            case 'left':
+              deltaX = -scrollAmount;
+              break;
+            case 'right':
+              deltaX = scrollAmount;
+              break;
+          }
+
+          await page.mouse.wheel(deltaX, deltaY);
+          return {
+            content: [{ type: 'text', text: `Scrolled ${direction} by ${scrollAmount}px` }],
+          };
+        }
+
+        return {
+          content: [{ type: 'text', text: 'Error: Provide direction, ref, selector, or position' }],
+          isError: true,
+        };
+      }
+
+      case 'browser_hover': {
+        const { ref, selector, x, y, page_name } = args as BrowserHoverInput;
+        const page = await getPage(page_name);
+
+        if (x !== undefined && y !== undefined) {
+          await page.mouse.move(x, y);
+          return {
+            content: [{ type: 'text', text: `Hovered at coordinates (${x}, ${y})` }],
+          };
+        }
+
+        if (ref) {
+          const element = await selectSnapshotRef(page, ref);
+          if (!element) {
+            return {
+              content: [{ type: 'text', text: `Error: Could not find element with ref "${ref}"` }],
+              isError: true,
+            };
+          }
+          await element.hover();
+          return {
+            content: [{ type: 'text', text: `Hovered over [ref=${ref}]` }],
+          };
+        }
+
+        if (selector) {
+          await page.hover(selector);
+          return {
+            content: [{ type: 'text', text: `Hovered over "${selector}"` }],
+          };
+        }
+
+        return {
+          content: [{ type: 'text', text: 'Error: Provide ref, selector, or x/y coordinates' }],
+          isError: true,
+        };
+      }
+
+      case 'browser_select': {
+        const { ref, selector, value, label, index, page_name } = args as BrowserSelectInput;
+        const page = await getPage(page_name);
+
+        // Build selection option
+        let selectOption: { value?: string; label?: string; index?: number } | undefined;
+        if (value !== undefined) {
+          selectOption = { value };
+        } else if (label !== undefined) {
+          selectOption = { label };
+        } else if (index !== undefined) {
+          selectOption = { index };
+        }
+
+        if (!selectOption) {
+          return {
+            content: [{ type: 'text', text: 'Error: Provide value, label, or index to select' }],
+            isError: true,
+          };
+        }
+
+        let selectSelector: string;
+        if (ref) {
+          const element = await selectSnapshotRef(page, ref);
+          if (!element) {
+            return {
+              content: [{ type: 'text', text: `Error: Could not find element with ref "${ref}"` }],
+              isError: true,
+            };
+          }
+          // Use evaluate to select on the element directly
+          await element.selectOption(selectOption);
+          const selectedBy = value ? `value="${value}"` : label ? `label="${label}"` : `index=${index}`;
+          return {
+            content: [{ type: 'text', text: `Selected option (${selectedBy}) in [ref=${ref}]` }],
+          };
+        }
+
+        if (selector) {
+          selectSelector = selector;
+        } else {
+          return {
+            content: [{ type: 'text', text: 'Error: Provide ref or selector for the select element' }],
+            isError: true,
+          };
+        }
+
+        await page.selectOption(selectSelector, selectOption);
+        const selectedBy = value ? `value="${value}"` : label ? `label="${label}"` : `index=${index}`;
+        return {
+          content: [{ type: 'text', text: `Selected option (${selectedBy}) in "${selectSelector}"` }],
+        };
+      }
+
+      case 'browser_wait': {
+        const { condition, selector, timeout, page_name } = args as BrowserWaitInput;
+        const page = await getPage(page_name);
+        const waitTimeout = timeout || 30000;
+
+        switch (condition) {
+          case 'selector': {
+            if (!selector) {
+              return {
+                content: [{ type: 'text', text: 'Error: "selector" is required for selector condition' }],
+                isError: true,
+              };
+            }
+            await page.waitForSelector(selector, { timeout: waitTimeout });
+            return {
+              content: [{ type: 'text', text: `Element "${selector}" appeared` }],
+            };
+          }
+          case 'hidden': {
+            if (!selector) {
+              return {
+                content: [{ type: 'text', text: 'Error: "selector" is required for hidden condition' }],
+                isError: true,
+              };
+            }
+            await page.waitForSelector(selector, { state: 'hidden', timeout: waitTimeout });
+            return {
+              content: [{ type: 'text', text: `Element "${selector}" is now hidden` }],
+            };
+          }
+          case 'navigation': {
+            await page.waitForNavigation({ timeout: waitTimeout });
+            return {
+              content: [{ type: 'text', text: `Navigation completed. Now at: ${page.url()}` }],
+            };
+          }
+          case 'network_idle': {
+            await page.waitForLoadState('networkidle', { timeout: waitTimeout });
+            return {
+              content: [{ type: 'text', text: 'Network is idle' }],
+            };
+          }
+          case 'timeout': {
+            const waitMs = timeout || 1000;
+            await page.waitForTimeout(waitMs);
+            return {
+              content: [{ type: 'text', text: `Waited ${waitMs}ms` }],
+            };
+          }
+          default:
+            return {
+              content: [{ type: 'text', text: `Error: Unknown wait condition "${condition}"` }],
+              isError: true,
+            };
+        }
+      }
+
+      case 'browser_file_upload': {
+        const { ref, selector, files, page_name } = args as BrowserFileUploadInput;
+        const page = await getPage(page_name);
+
+        if (!files || files.length === 0) {
+          return {
+            content: [{ type: 'text', text: 'Error: At least one file path is required' }],
+            isError: true,
+          };
+        }
+
+        let element: ElementHandle | null = null;
+
+        if (ref) {
+          element = await selectSnapshotRef(page, ref);
+          if (!element) {
+            return {
+              content: [{ type: 'text', text: `Error: Could not find element with ref "${ref}"` }],
+              isError: true,
+            };
+          }
+        } else if (selector) {
+          element = await page.$(selector);
+          if (!element) {
+            return {
+              content: [{ type: 'text', text: `Error: Could not find element matching "${selector}"` }],
+              isError: true,
+            };
+          }
+        } else {
+          return {
+            content: [{ type: 'text', text: 'Error: Provide ref or selector for the file input' }],
+            isError: true,
+          };
+        }
+
+        await element.setInputFiles(files);
+        const target = ref ? `[ref=${ref}]` : `"${selector}"`;
+        const fileCount = files.length;
+        return {
+          content: [{ type: 'text', text: `Uploaded ${fileCount} file(s) to ${target}` }],
+        };
+      }
+
+      case 'browser_drag': {
+        const {
+          source_ref, source_selector, source_x, source_y,
+          target_ref, target_selector, target_x, target_y,
+          page_name
+        } = args as BrowserDragInput;
+        const page = await getPage(page_name);
+
+        // Determine source position
+        let sourcePos: { x: number; y: number } | null = null;
+
+        if (source_x !== undefined && source_y !== undefined) {
+          sourcePos = { x: source_x, y: source_y };
+        } else if (source_ref) {
+          const element = await selectSnapshotRef(page, source_ref);
+          if (!element) {
+            return {
+              content: [{ type: 'text', text: `Error: Could not find source element with ref "${source_ref}"` }],
+              isError: true,
+            };
+          }
+          const box = await element.boundingBox();
+          if (!box) {
+            return {
+              content: [{ type: 'text', text: `Error: Source element [ref=${source_ref}] has no bounding box` }],
+              isError: true,
+            };
+          }
+          sourcePos = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+        } else if (source_selector) {
+          const element = await page.$(source_selector);
+          if (!element) {
+            return {
+              content: [{ type: 'text', text: `Error: Could not find source element "${source_selector}"` }],
+              isError: true,
+            };
+          }
+          const box = await element.boundingBox();
+          if (!box) {
+            return {
+              content: [{ type: 'text', text: `Error: Source element "${source_selector}" has no bounding box` }],
+              isError: true,
+            };
+          }
+          sourcePos = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+        }
+
+        if (!sourcePos) {
+          return {
+            content: [{ type: 'text', text: 'Error: Provide source_ref, source_selector, or source_x/source_y' }],
+            isError: true,
+          };
+        }
+
+        // Determine target position
+        let targetPos: { x: number; y: number } | null = null;
+
+        if (target_x !== undefined && target_y !== undefined) {
+          targetPos = { x: target_x, y: target_y };
+        } else if (target_ref) {
+          const element = await selectSnapshotRef(page, target_ref);
+          if (!element) {
+            return {
+              content: [{ type: 'text', text: `Error: Could not find target element with ref "${target_ref}"` }],
+              isError: true,
+            };
+          }
+          const box = await element.boundingBox();
+          if (!box) {
+            return {
+              content: [{ type: 'text', text: `Error: Target element [ref=${target_ref}] has no bounding box` }],
+              isError: true,
+            };
+          }
+          targetPos = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+        } else if (target_selector) {
+          const element = await page.$(target_selector);
+          if (!element) {
+            return {
+              content: [{ type: 'text', text: `Error: Could not find target element "${target_selector}"` }],
+              isError: true,
+            };
+          }
+          const box = await element.boundingBox();
+          if (!box) {
+            return {
+              content: [{ type: 'text', text: `Error: Target element "${target_selector}" has no bounding box` }],
+              isError: true,
+            };
+          }
+          targetPos = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+        }
+
+        if (!targetPos) {
+          return {
+            content: [{ type: 'text', text: 'Error: Provide target_ref, target_selector, or target_x/target_y' }],
+            isError: true,
+          };
+        }
+
+        // Perform drag and drop using mouse events
+        await page.mouse.move(sourcePos.x, sourcePos.y);
+        await page.mouse.down();
+        await page.mouse.move(targetPos.x, targetPos.y, { steps: 10 });
+        await page.mouse.up();
+
+        const sourceDesc = source_ref ? `[ref=${source_ref}]` : source_selector ? `"${source_selector}"` : `(${source_x}, ${source_y})`;
+        const targetDesc = target_ref ? `[ref=${target_ref}]` : target_selector ? `"${target_selector}"` : `(${target_x}, ${target_y})`;
+        return {
+          content: [{ type: 'text', text: `Dragged from ${sourceDesc} to ${targetDesc}` }],
+        };
+      }
+
       default:
         return {
           content: [{ type: 'text', text: `Error: Unknown tool: ${name}` }],
@@ -1645,12 +2383,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToo
 
 // Start the MCP server
 async function main() {
+  console.error('[dev-browser-mcp] main() called, creating transport...');
   const transport = new StdioServerTransport();
+  console.error('[dev-browser-mcp] Transport created, connecting server...');
   await server.connect(transport);
-  console.error('Dev-Browser MCP Server started');
+  console.error('[dev-browser-mcp] Server connected successfully!');
+  console.error('[dev-browser-mcp] MCP Server ready and listening for tool calls');
 }
 
+console.error('[dev-browser-mcp] Calling main()...');
 main().catch((error) => {
-  console.error('Failed to start server:', error);
+  console.error('[dev-browser-mcp] Failed to start server:', error);
   process.exit(1);
 });
