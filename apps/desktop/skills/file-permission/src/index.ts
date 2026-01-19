@@ -36,8 +36,31 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: 'request_file_permission',
-      description:
-        'Request user permission before performing file operations (create, delete, rename, move, modify, overwrite). Always call this tool BEFORE executing any file modification. Returns "allowed" or "denied".',
+      description: `Request user permission before performing file operations.
+
+CRITICAL WORKFLOW - NEVER SKIP:
+Before using Write, Edit, Bash (with file ops), or ANY tool that touches files:
+1. FIRST: Call this tool and wait for response
+2. ONLY IF "allowed": Proceed with the file operation
+3. IF "denied": Stop and inform the user
+
+WRONG:
+  Write({ path: "/tmp/file.txt" })  <- Permission not requested!
+
+CORRECT:
+  request_file_permission({ operation: "create", filePath: "/tmp/file.txt" })
+  -> Wait for "allowed"
+  Write({ path: "/tmp/file.txt" })  <- OK after permission granted
+
+APPLIES TO:
+- Creating files (Write tool, bash echo/cat, scripts that output files)
+- Renaming files (bash mv, rename commands)
+- Deleting files (bash rm, delete commands)
+- Modifying files (Edit tool, bash sed/awk)
+
+EXCEPTION: Temp scripts matching /tmp/accomplish-*.mts are auto-allowed.
+
+Returns: "allowed" or "denied"`,
       inputSchema: {
         type: 'object',
         properties: {
