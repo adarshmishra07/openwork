@@ -46,18 +46,63 @@ export function getOpenCodeConfigDir(): string {
   }
 }
 
-const ACCOMPLISH_SYSTEM_PROMPT_TEMPLATE = `<identity>
-You are Accomplish, a browser automation assistant.
-</identity>
+/**
+ * Build platform-specific environment setup instructions
+ */
+function getPlatformEnvironmentInstructions(): string {
+  if (process.platform === 'win32') {
+    return `<environment>
+This app bundles Node.js. The bundled path is available in the NODE_BIN_PATH environment variable.
+Before running node/npx/npm commands in PowerShell, prepend it to PATH:
 
-<environment>
+$env:PATH = "$env:NODE_BIN_PATH;$env:PATH"; npx tsx script.ts
+
+Never assume Node.js is installed system-wide. Always use the bundled version.
+
+**IMPORTANT: You are running on Windows.** Use Windows-compatible commands:
+- Use PowerShell syntax, not bash/Unix syntax
+- Use \`$env:TEMP\` for temp directory (not /tmp)
+- Use semicolon (;) for PATH separator (not colon)
+- Use \`$env:VAR\` for environment variables (not $VAR)
+- Don't use heredocs (<<'EOF'). Instead, write files using PowerShell:
+  \`\`\`powershell
+  @'
+  file content here
+  '@ | Out-File -FilePath "$env:TEMP\\filename.mts" -Encoding UTF8
+  \`\`\`
+- Or use single-line echo for simple files:
+  \`\`\`powershell
+  "content" | Out-File -FilePath "$env:TEMP\\file.txt"
+  \`\`\`
+</environment>`;
+  } else {
+    return `<environment>
 This app bundles Node.js. The bundled path is available in the NODE_BIN_PATH environment variable.
 Before running node/npx/npm commands, prepend it to PATH:
 
 PATH="\${NODE_BIN_PATH}:\$PATH" npx tsx script.ts
 
 Never assume Node.js is installed system-wide. Always use the bundled version.
-</environment>
+</environment>`;
+  }
+}
+
+/**
+ * Get platform-specific temp file exception note
+ */
+function getTempFileException(): string {
+  if (process.platform === 'win32') {
+    return 'EXCEPTION: Temp scripts in $env:TEMP\\accomplish-*.mts for browser automation are auto-allowed.';
+  } else {
+    return 'EXCEPTION: Temp scripts in /tmp/accomplish-*.mts for browser automation are auto-allowed.';
+  }
+}
+
+const ACCOMPLISH_SYSTEM_PROMPT_TEMPLATE = `<identity>
+You are Accomplish, a browser automation assistant.
+</identity>
+
+{{ENVIRONMENT_INSTRUCTIONS}}
 
 <capabilities>
 When users ask about your capabilities, mention:
@@ -89,7 +134,7 @@ This applies to ALL file operations:
 - Deleting files (bash rm, delete commands)
 - Modifying files (Edit tool, bash sed/awk, any content changes)
 
-EXCEPTION: Temp scripts in /tmp/accomplish-*.mts for browser automation are auto-allowed.
+{{TEMP_FILE_EXCEPTION}}
 ##############################################################################
 </important>
 
@@ -310,7 +355,11 @@ export async function generateOpenCodeConfig(): Promise<string> {
 
   // Get skills directory path
   const skillsPath = getSkillsPath();
-  const systemPrompt = ACCOMPLISH_SYSTEM_PROMPT_TEMPLATE;
+
+  // Build platform-specific system prompt by replacing placeholders
+  const systemPrompt = ACCOMPLISH_SYSTEM_PROMPT_TEMPLATE
+    .replace(/\{\{ENVIRONMENT_INSTRUCTIONS\}\}/g, getPlatformEnvironmentInstructions())
+    .replace(/\{\{TEMP_FILE_EXCEPTION\}\}/g, getTempFileException());
 
   // Get OpenCode config directory (parent of skills/) for OPENCODE_CONFIG_DIR
   const openCodeConfigDir = getOpenCodeConfigDir();

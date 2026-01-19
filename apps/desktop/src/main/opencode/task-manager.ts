@@ -100,6 +100,7 @@ async function installPlaywrightChromium(
       cwd: devBrowserDir,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: spawnEnv,
+      shell: process.platform === 'win32',
     });
 
     child.stdout?.on('data', (data: Buffer) => {
