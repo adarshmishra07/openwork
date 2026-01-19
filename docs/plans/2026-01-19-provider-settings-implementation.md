@@ -2051,9 +2051,369 @@ git commit -m "feat: complete provider settings redesign implementation"
 
 ---
 
+### Task 15: Integrate Provider Settings with OpenCode Adapter
+
+**Files:**
+- Modify: `apps/desktop/src/main/opencode/adapter.ts`
+- Modify: `apps/desktop/src/main/store/providerSettings.ts`
+
+**Step 1: Add helper functions to providerSettings.ts for adapter integration**
+
+```typescript
+// Add to apps/desktop/src/main/store/providerSettings.ts
+
+/**
+ * Get the active provider's model for CLI args
+ * Returns null if no active provider or no model selected
+ */
+export function getActiveProviderModel(): { provider: ProviderId; model: string; baseUrl?: string } | null {
+  const settings = getProviderSettings();
+  const activeId = settings.activeProviderId;
+
+  if (!activeId) return null;
+
+  const activeProvider = settings.connectedProviders[activeId];
+  if (!activeProvider || !activeProvider.selectedModelId) return null;
+
+  const result: { provider: ProviderId; model: string; baseUrl?: string } = {
+    provider: activeId,
+    model: activeProvider.selectedModelId,
+  };
+
+  // Add baseUrl for Ollama/LiteLLM
+  if (activeProvider.credentials.type === 'ollama') {
+    result.baseUrl = activeProvider.credentials.serverUrl;
+  } else if (activeProvider.credentials.type === 'litellm') {
+    result.baseUrl = activeProvider.credentials.serverUrl;
+  }
+
+  return result;
+}
+
+/**
+ * Check if any provider is ready (connected with model selected)
+ */
+export function hasReadyProvider(): boolean {
+  const settings = getProviderSettings();
+  return Object.values(settings.connectedProviders).some(
+    p => p.connectionStatus === 'connected' && p.selectedModelId !== null
+  );
+}
+
+/**
+ * Get all connected provider IDs for enabled_providers config
+ */
+export function getConnectedProviderIds(): ProviderId[] {
+  const settings = getProviderSettings();
+  return Object.values(settings.connectedProviders)
+    .filter(p => p.connectionStatus === 'connected')
+    .map(p => p.providerId);
+}
+```
+
+**Step 2: Update buildCliArgs in adapter.ts to use new provider settings**
+
+```typescript
+// apps/desktop/src/main/opencode/adapter.ts
+// Replace the import of getSelectedModel with:
+import { getActiveProviderModel } from '../store/providerSettings';
+
+// Update buildCliArgs method:
+private async buildCliArgs(config: TaskConfig): Promise<string[]> {
+  // Get active provider model from new settings
+  const activeModel = getActiveProviderModel();
+
+  const args = [
+    'run',
+    config.prompt,
+    '--format', 'json',
+  ];
+
+  // Add model selection if specified
+  if (activeModel?.model) {
+    if (activeModel.provider === 'zai') {
+      const modelId = activeModel.model.split('/').pop();
+      args.push('--model', `zai-coding-plan/${modelId}`);
+    } else if (activeModel.provider === 'deepseek') {
+      const modelId = activeModel.model.split('/').pop();
+      args.push('--model', `deepseek/${modelId}`);
+    } else if (activeModel.provider === 'openrouter') {
+      args.push('--model', activeModel.model);
+    } else {
+      args.push('--model', activeModel.model);
+    }
+  }
+
+  if (config.sessionId) {
+    args.push('--session', config.sessionId);
+  }
+
+  args.push('--agent', ACCOMPLISH_AGENT_NAME);
+
+  return args;
+}
+```
+
+**Step 3: Update buildEnvironment in adapter.ts**
+
+The `buildEnvironment` method reads API keys from secure storage directly, which is still correct.
+The new ProviderSettings stores credentials metadata (keyPrefix), not the actual keys.
+No changes needed - API keys are still stored in secure storage.
+
+**Step 4: Verify types compile**
+
+Run: `pnpm -F @accomplish/desktop typecheck`
+Expected: No type errors
+
+**Step 5: Commit**
+
+```bash
+git add apps/desktop/src/main/opencode/adapter.ts apps/desktop/src/main/store/providerSettings.ts
+git commit -m "feat: integrate provider settings with OpenCode adapter"
+```
+
 ---
 
-### Task 15: Update Settings Page Object for E2E Tests
+### Task 16: Integrate Provider Settings with Config Generator
+
+**Files:**
+- Modify: `apps/desktop/src/main/opencode/config-generator.ts`
+
+**Step 1: Update imports in config-generator.ts**
+
+```typescript
+// apps/desktop/src/main/opencode/config-generator.ts
+// Replace:
+import { getOllamaConfig } from '../store/appSettings';
+// With:
+import { getProviderSettings, getActiveProviderModel, getConnectedProviderIds } from '../store/providerSettings';
+import type { ProviderId } from '@accomplish/shared';
+```
+
+**Step 2: Update generateOpenCodeConfig to use new provider settings**
+
+```typescript
+// apps/desktop/src/main/opencode/config-generator.ts
+// Inside generateOpenCodeConfig(), replace the enabled_providers logic:
+
+export async function generateOpenCodeConfig(): Promise<string> {
+  // ... existing setup code ...
+
+  // Get connected providers from new settings
+  const connectedIds = getConnectedProviderIds();
+  const activeModel = getActiveProviderModel();
+  const settings = getProviderSettings();
+
+  // Map our provider IDs to OpenCode CLI provider names
+  const providerIdToOpenCode: Record<ProviderId, string> = {
+    anthropic: 'anthropic',
+    openai: 'openai',
+    google: 'google',
+    xai: 'xai',
+    deepseek: 'deepseek',
+    zai: 'zai-coding-plan',
+    bedrock: 'amazon-bedrock',
+    ollama: 'ollama',
+    openrouter: 'openrouter',
+    litellm: 'litellm',
+  };
+
+  const enabledProviders = connectedIds.map(id => providerIdToOpenCode[id]);
+
+  // Build provider configurations
+  const providerConfig: Record<string, ProviderConfig> = {};
+
+  // Configure Ollama if connected
+  const ollamaProvider = settings.connectedProviders.ollama;
+  if (ollamaProvider?.connectionStatus === 'connected' && ollamaProvider.credentials.type === 'ollama') {
+    // Fetch models would need to be stored or re-fetched
+    // For now, if a model is selected, add it
+    if (ollamaProvider.selectedModelId) {
+      providerConfig.ollama = {
+        npm: '@ai-sdk/openai-compatible',
+        name: 'Ollama (local)',
+        options: {
+          baseURL: `${ollamaProvider.credentials.serverUrl}/v1`,
+        },
+        models: {
+          [ollamaProvider.selectedModelId]: {
+            name: ollamaProvider.selectedModelId,
+            tools: true,
+          },
+        },
+      };
+    }
+  }
+
+  // Configure OpenRouter if connected and active
+  const openrouterProvider = settings.connectedProviders.openrouter;
+  if (openrouterProvider?.connectionStatus === 'connected' && activeModel?.provider === 'openrouter') {
+    const modelId = activeModel.model.replace('openrouter/', '');
+    providerConfig.openrouter = {
+      npm: '@ai-sdk/openai-compatible',
+      name: 'OpenRouter',
+      options: {
+        baseURL: 'https://openrouter.ai/api/v1',
+      },
+      models: {
+        [modelId]: {
+          name: modelId,
+          tools: true,
+        },
+      },
+    };
+  }
+
+  // Configure Bedrock if connected
+  const bedrockProvider = settings.connectedProviders.bedrock;
+  if (bedrockProvider?.connectionStatus === 'connected' && bedrockProvider.credentials.type === 'bedrock') {
+    const creds = bedrockProvider.credentials;
+    const bedrockOptions: { region: string; profile?: string } = {
+      region: creds.region || 'us-east-1',
+    };
+    if (creds.authMethod === 'profile' && creds.profileName) {
+      bedrockOptions.profile = creds.profileName;
+    }
+    providerConfig['amazon-bedrock'] = {
+      options: bedrockOptions,
+    };
+  }
+
+  // ... rest of config generation ...
+}
+```
+
+**Step 3: Verify types compile**
+
+Run: `pnpm -F @accomplish/desktop typecheck`
+Expected: No type errors
+
+**Step 4: Commit**
+
+```bash
+git add apps/desktop/src/main/opencode/config-generator.ts
+git commit -m "feat: integrate provider settings with config generator"
+```
+
+---
+
+### Task 17: Add Ready Provider Check to Task Start
+
+**Files:**
+- Modify: `apps/desktop/src/main/ipc/handlers.ts`
+- Modify: `packages/shared/src/types/task.ts`
+
+**Step 1: Add NO_READY_PROVIDER error type to shared types**
+
+```typescript
+// packages/shared/src/types/task.ts
+// Add to existing error types or create new:
+
+export type TaskStartError =
+  | { type: 'NO_READY_PROVIDER'; message: string }
+  | { type: 'CLI_NOT_FOUND'; message: string }
+  | { type: 'UNKNOWN'; message: string };
+```
+
+**Step 2: Update task:start handler to check for ready provider**
+
+```typescript
+// apps/desktop/src/main/ipc/handlers.ts
+import { hasReadyProvider } from '../store/providerSettings';
+
+// In the task:start handler:
+ipcMain.handle('task:start', async (_event, config: TaskConfig) => {
+  // Check for ready provider BEFORE starting task
+  if (!hasReadyProvider()) {
+    return {
+      success: false,
+      error: {
+        type: 'NO_READY_PROVIDER',
+        message: 'No provider is ready. Please connect a provider and select a model in Settings.',
+      },
+    };
+  }
+
+  // ... existing task start logic ...
+});
+```
+
+**Step 3: Verify types compile**
+
+Run: `pnpm typecheck`
+Expected: No type errors
+
+**Step 4: Commit**
+
+```bash
+git add apps/desktop/src/main/ipc/handlers.ts packages/shared/src/types/task.ts
+git commit -m "feat: add ready provider check to task start"
+```
+
+---
+
+### Task 18: Update Task Launch UI to Handle NO_READY_PROVIDER
+
+**Files:**
+- Modify: `apps/desktop/src/renderer/pages/Home.tsx` (or wherever task launch is triggered)
+- Modify: `apps/desktop/src/renderer/stores/taskStore.ts`
+
+**Step 1: Update taskStore to handle NO_READY_PROVIDER error**
+
+```typescript
+// apps/desktop/src/renderer/stores/taskStore.ts
+// Update the startTask action:
+
+startTask: async (prompt: string) => {
+  const result = await window.accomplish.startTask({ description: prompt });
+
+  if (!result.success && result.error?.type === 'NO_READY_PROVIDER') {
+    // Return the error to let the UI handle it
+    return { success: false, error: result.error };
+  }
+
+  // ... existing success handling ...
+},
+```
+
+**Step 2: Update Home page to open settings on NO_READY_PROVIDER**
+
+```typescript
+// apps/desktop/src/renderer/pages/Home.tsx
+// In the task submission handler:
+
+const handleSubmit = async (prompt: string) => {
+  const result = await startTask(prompt);
+
+  if (!result.success && result.error?.type === 'NO_READY_PROVIDER') {
+    // Open settings dialog
+    setSettingsOpen(true);
+    // Optionally show a toast/notification
+    return;
+  }
+
+  // ... existing navigation to execution page ...
+};
+```
+
+**Step 3: Test the flow manually**
+
+1. Clear all provider settings
+2. Try to start a task
+3. Verify settings dialog opens automatically
+4. Connect a provider and select a model
+5. Verify task can now start
+
+**Step 4: Commit**
+
+```bash
+git add apps/desktop/src/renderer/pages/Home.tsx apps/desktop/src/renderer/stores/taskStore.ts
+git commit -m "feat: handle NO_READY_PROVIDER error in task launch UI"
+```
+
+---
+
+### Task 19: Update Settings Page Object for E2E Tests
 
 **Files:**
 - Modify: `apps/desktop/e2e/pages/settings.page.ts`
@@ -2303,7 +2663,7 @@ git commit -m "test: update SettingsPage page object for new provider UI"
 
 ---
 
-### Task 16: Create Provider Settings E2E Test Suite
+### Task 20: Create Provider Settings E2E Test Suite
 
 **Files:**
 - Create: `apps/desktop/e2e/specs/provider-settings.spec.ts`
@@ -2792,7 +3152,7 @@ git commit -m "test: add comprehensive E2E tests for provider settings"
 
 ---
 
-### Task 17: Update Existing Settings E2E Tests
+### Task 21: Update Existing Settings E2E Tests
 
 **Files:**
 - Modify: `apps/desktop/e2e/specs/settings.spec.ts`
@@ -2825,7 +3185,7 @@ git commit -m "test: update existing settings E2E tests for new UI"
 
 ---
 
-### Task 18: Update Bedrock Settings E2E Tests
+### Task 22: Update Bedrock Settings E2E Tests
 
 **Files:**
 - Modify: `apps/desktop/e2e/specs/settings-bedrock.spec.ts`
@@ -2851,7 +3211,7 @@ git commit -m "test: update Bedrock E2E tests for new UI"
 
 ---
 
-### Task 19: Add Task Launch Guard E2E Tests
+### Task 23: Add Task Launch Guard E2E Tests
 
 **Files:**
 - Create: `apps/desktop/e2e/specs/task-launch-guard.spec.ts`
@@ -2926,7 +3286,7 @@ git commit -m "test: add task launch guard E2E tests"
 
 ---
 
-### Task 20: Add data-testid Attributes to Components
+### Task 24: Add data-testid Attributes to Components
 
 **Files:**
 - Modify: All new components in `apps/desktop/src/renderer/components/settings/`
@@ -2984,7 +3344,7 @@ git commit -m "test: add data-testid attributes for E2E testing"
 
 ---
 
-### Task 21: Final E2E Test Run and Verification
+### Task 25: Final E2E Test Run and Verification
 
 **Step 1: Run full E2E test suite**
 
