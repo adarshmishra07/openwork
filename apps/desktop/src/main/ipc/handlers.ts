@@ -708,6 +708,7 @@ export function registerIPCHandlers(): void {
 
     return storedCredentials
       .filter((credential) => credential.account.startsWith('apiKey:'))
+      .filter((credential) => !credential.account.endsWith(':shopify')) // Exclude Shopify - handled separately in Integrations
       .map((credential) => {
         const provider = credential.account.replace('apiKey:', '');
 

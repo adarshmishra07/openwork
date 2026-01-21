@@ -10,8 +10,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Trash2, Store, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
-import type { ApiKeyConfig, SelectedModel } from '@brandwork/shared';
-import { DEFAULT_PROVIDERS } from '@brandwork/shared';
+import type { ApiKeyConfig, SelectedModel, ProviderId } from '@brandwork/shared';
+import { DEFAULT_PROVIDERS, DEFAULT_MODELS } from '@brandwork/shared';
 import logoImage from '/assets/logo.png';
 
 interface SettingsDialogProps {
@@ -356,9 +356,25 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
       }
 
       const savedKey = await accomplish.addApiKey(provider, trimmedKey);
+      
+      // Auto-connect the provider with a default model
+      const providerId = provider as ProviderId;
+      const defaultModel = DEFAULT_MODELS[providerId] || null;
+      await accomplish.setConnectedProvider(providerId, {
+        connectionStatus: 'connected',
+        selectedModelId: defaultModel,
+        connectedAt: new Date().toISOString(),
+      });
+      
+      // Set as active provider if none is active
+      const settings = await accomplish.getProviderSettings();
+      if (!settings.activeProviderId) {
+        await accomplish.setActiveProvider(providerId);
+      }
+      
       analytics.trackSaveApiKey(currentProvider.name);
       setApiKey('');
-      setStatusMessage(`${currentProvider.name} API key saved securely.`);
+      setStatusMessage(`${currentProvider.name} API key saved and connected.`);
       setSavedKeys((prev) => {
         const filtered = prev.filter((k) => k.provider !== savedKey.provider);
         return [...filtered, savedKey];
