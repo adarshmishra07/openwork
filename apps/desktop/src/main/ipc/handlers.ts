@@ -1765,10 +1765,117 @@ export function registerIPCHandlers(): void {
 
   // Shopify: Get connection status
   handle('shopify:status', async () => {
-    // TODO: Implement actual Shopify connection check
-    // For now, return disconnected status
+    const { getShopifyCredentials } = await import('../store/secureStorage');
+    const credentials = await getShopifyCredentials();
+    if (credentials?.shopDomain && credentials?.accessToken) {
+      return { connected: true, shopDomain: credentials.shopDomain };
+    }
     return { connected: false };
   });
+
+  // Shopify: Connect (save credentials)
+  handle('shopify:connect', async (_event: IpcMainInvokeEvent, credentials: { shopDomain: string; accessToken: string }) => {
+    const { saveShopifyCredentials } = await import('../store/secureStorage');
+    await saveShopifyCredentials(credentials.shopDomain, credentials.accessToken);
+    return { success: true, shopDomain: credentials.shopDomain };
+  });
+
+  // Shopify: Disconnect (remove credentials)
+  handle('shopify:disconnect', async () => {
+    const { deleteShopifyCredentials } = await import('../store/secureStorage');
+    await deleteShopifyCredentials();
+    return { success: true };
+  });
+
+  // Shopify: Test connection with provided or stored credentials
+  handle('shopify:test-connection', async (_event: IpcMainInvokeEvent, credentials?: { shopDomain: string; accessToken: string }) => {
+    const { getShopifyCredentials } = await import('../store/secureStorage');
+    
+    // Use provided credentials or fetch stored ones
+    let shopDomain: string;
+    let accessToken: string;
+    
+    if (credentials) {
+      shopDomain = credentials.shopDomain;
+      accessToken = credentials.accessToken;
+    } else {
+      const stored = await getShopifyCredentials();
+      if (!stored?.shopDomain || !stored?.accessToken) {
+        return { success: false, error: 'No Shopify credentials configured' };
+      }
+      shopDomain = stored.shopDomain;
+      accessToken = stored.accessToken;
+    }
+
+    try {
+      // Test the connection by fetching shop info
+      const cleanDomain = shopDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
+      const response = await fetch(`https://${cleanDomain}/admin/api/2024-01/shop.json`, {
+        headers: {
+          'X-Shopify-Access-Token': accessToken,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return { success: false, error: `Shopify API error: ${response.status} - ${errorText}` };
+      }
+
+      const data = await response.json();
+      return {
+        success: true,
+        shop: {
+          name: data.shop?.name || 'Unknown',
+          domain: data.shop?.domain || cleanDomain,
+          email: data.shop?.email || '',
+        },
+      };
+    } catch (error) {
+      return { success: false, error: `Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+    }
+  });
+
+  // ============================================
+  // Space Runtime Handlers
+  // ============================================
+
+  // Space Runtime: Match prompt to space
+  handle('space-runtime:match', async (_event: IpcMainInvokeEvent, prompt: string) => {
+    const { matchPromptToSpaceAsync } = await import('../spaces/space-selector');
+    return matchPromptToSpaceAsync(prompt);
+  });
+
+  // Space Runtime: Get suggestions for a prompt
+  handle('space-runtime:suggestions', async (_event: IpcMainInvokeEvent, prompt: string) => {
+    const { getSuggestedSpaces } = await import('../spaces/space-selector');
+    return getSuggestedSpaces(prompt);
+  });
+
+  // Space Runtime: Check if runtime is available
+  handle('space-runtime:is-available', async () => {
+    const { isSpaceRuntimeAvailable } = await import('../spaces/space-runtime-client');
+    return isSpaceRuntimeAvailable();
+  });
+
+  // Space Runtime: List spaces from remote
+  handle('space-runtime:list-remote', async () => {
+    const { listSpacesFromRuntime } = await import('../spaces/space-runtime-client');
+    return listSpacesFromRuntime();
+  });
+
+  // Space Runtime: Execute a space
+  handle('space-runtime:execute', async (_event: IpcMainInvokeEvent, spaceId: string, inputs: Record<string, unknown>) => {
+    const { executeSpace } = await import('../spaces/space-runtime-client');
+    return executeSpace(spaceId, inputs);
+  });
+
+  // Space Runtime: Get local registry
+  handle('space-runtime:registry', async () => {
+    const { SPACE_REGISTRY } = await import('../spaces/space-registry');
+    return SPACE_REGISTRY;
+  });
+
 }
 
 function createTaskId(): string {
