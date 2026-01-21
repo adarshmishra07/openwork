@@ -1614,8 +1614,8 @@ export function registerIPCHandlers(): void {
 
   // Brand: List all brand profiles
   handle('brand:list', async () => {
-    const { listBrandProfiles } = await import('../store/brandMemory');
-    return listBrandProfiles();
+    const { getAllBrandProfiles } = await import('../store/brandMemory');
+    return getAllBrandProfiles();
   });
 
   // Brand: Update brand profile
@@ -1647,8 +1647,8 @@ export function registerIPCHandlers(): void {
 
   // Brand: Get brand context for prompt injection
   handle('brand:get-context', async (_event: IpcMainInvokeEvent, brandId?: string) => {
-    const { getBrandContext } = await import('../store/brandMemory');
-    return getBrandContext(brandId);
+    const { generateBrandContext } = await import('../store/brandMemory');
+    return generateBrandContext(brandId);
   });
 
   // Brand: Add example to brand memory
@@ -1666,8 +1666,11 @@ export function registerIPCHandlers(): void {
 
   // Brand: Get brand memory
   handle('brand:get-memory', async (_event: IpcMainInvokeEvent, brandId?: string) => {
-    const { getBrandMemory } = await import('../store/brandMemory');
-    return getBrandMemory(brandId);
+    const { getBrandMemory, getActiveBrandMemory } = await import('../store/brandMemory');
+    if (brandId) {
+      return getBrandMemory(brandId);
+    }
+    return getActiveBrandMemory();
   });
 
   // ============================================
@@ -1766,7 +1769,7 @@ export function registerIPCHandlers(): void {
   // Shopify: Get connection status
   handle('shopify:status', async () => {
     const { getShopifyCredentials } = await import('../store/secureStorage');
-    const credentials = await getShopifyCredentials();
+    const credentials = getShopifyCredentials();
     if (credentials?.shopDomain && credentials?.accessToken) {
       return { connected: true, shopDomain: credentials.shopDomain };
     }
@@ -1775,15 +1778,15 @@ export function registerIPCHandlers(): void {
 
   // Shopify: Connect (save credentials)
   handle('shopify:connect', async (_event: IpcMainInvokeEvent, credentials: { shopDomain: string; accessToken: string }) => {
-    const { saveShopifyCredentials } = await import('../store/secureStorage');
-    await saveShopifyCredentials(credentials.shopDomain, credentials.accessToken);
+    const { storeShopifyCredentials } = await import('../store/secureStorage');
+    storeShopifyCredentials({ shopDomain: credentials.shopDomain, accessToken: credentials.accessToken });
     return { success: true, shopDomain: credentials.shopDomain };
   });
 
   // Shopify: Disconnect (remove credentials)
   handle('shopify:disconnect', async () => {
-    const { deleteShopifyCredentials } = await import('../store/secureStorage');
-    await deleteShopifyCredentials();
+    const { deleteApiKey } = await import('../store/secureStorage');
+    deleteApiKey('shopify');
     return { success: true };
   });
 
@@ -1799,7 +1802,7 @@ export function registerIPCHandlers(): void {
       shopDomain = credentials.shopDomain;
       accessToken = credentials.accessToken;
     } else {
-      const stored = await getShopifyCredentials();
+      const stored = getShopifyCredentials();
       if (!stored?.shopDomain || !stored?.accessToken) {
         return { success: false, error: 'No Shopify credentials configured' };
       }
