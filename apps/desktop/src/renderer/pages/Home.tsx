@@ -84,6 +84,8 @@ export default function HomePage() {
   const [prompt, setPrompt] = useState('');
   const [showExamples, setShowExamples] = useState(true);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>(undefined);
+  const [shopifyRefreshKey, setShopifyRefreshKey] = useState(0);
   const { startTask, isLoading, addTaskUpdate, setPermissionRequest } = useTaskStore();
   const navigate = useNavigate();
   const accomplish = getAccomplish();
@@ -132,6 +134,16 @@ export default function HomePage() {
 
   const handleSettingsDialogChange = (open: boolean) => {
     setShowSettingsDialog(open);
+    if (!open) {
+      // Reset to default tab and refresh Shopify status when dialog closes
+      setSettingsInitialTab(undefined);
+      setShopifyRefreshKey(prev => prev + 1);
+    }
+  };
+
+  const handleConnectStore = () => {
+    setSettingsInitialTab('integrations');
+    setShowSettingsDialog(true);
   };
 
   const handleApiKeySaved = async () => {
@@ -152,6 +164,7 @@ export default function HomePage() {
         open={showSettingsDialog}
         onOpenChange={handleSettingsDialogChange}
         onApiKeySaved={handleApiKeySaved}
+        initialTab={settingsInitialTab}
       />
       <div
         className="h-full flex items-center justify-center p-6 overflow-y-auto bg-accent"
@@ -185,6 +198,8 @@ export default function HomePage() {
                 placeholder="Describe a task and let AI handle the rest"
                 large={true}
                 autoFocus={true}
+                onConnectStore={handleConnectStore}
+                shopifyRefreshKey={shopifyRefreshKey}
               />
             </CardContent>
 

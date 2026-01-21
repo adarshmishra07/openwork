@@ -23,6 +23,8 @@ interface TaskInputBarProps {
   files?: string[];
   onFilesChange?: (files: string[]) => void;
   showStop?: boolean;
+  onConnectStore?: () => void;
+  shopifyRefreshKey?: number;
 }
 
 // Get file type from extension
@@ -53,6 +55,8 @@ export default function TaskInputBar({
   files = [],
   onFilesChange,
   showStop = false,
+  onConnectStore,
+  shopifyRefreshKey = 0,
 }: TaskInputBarProps) {
   const isDisabled = disabled && !showStop; // Allow clicking stop even when "disabled"
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -103,7 +107,7 @@ export default function TaskInputBar({
       }
     };
     checkShopifyStatus();
-  }, [accomplish]);
+  }, [accomplish, shopifyRefreshKey]);
 
   // Auto-focus on mount
   useEffect(() => {
@@ -189,13 +193,19 @@ export default function TaskInputBar({
             </button>
 
             {/* Store Status Pill */}
-            <div 
+            <button 
+                type="button"
+                onClick={() => {
+                  if (!shopifyConnected && onConnectStore) {
+                    onConnectStore();
+                  }
+                }}
                 className={`flex items-center gap-1.5 h-8 px-3 rounded-full border text-sm font-medium transition-colors ${
                   shopifyConnected 
-                    ? 'border-foreground/20 bg-foreground/5 text-foreground' 
-                    : 'border-border bg-background text-muted-foreground'
+                    ? 'border-foreground/20 bg-foreground/5 text-foreground cursor-default' 
+                    : 'border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground cursor-pointer'
                 }`}
-                title={shopifyConnected ? `Connected to ${shopDomain}` : 'No store connected'}
+                title={shopifyConnected ? `Connected to ${shopDomain}` : 'Click to connect a store'}
             >
                 {shopifyConnected ? (
                   <>
@@ -208,7 +218,7 @@ export default function TaskInputBar({
                     <span>No Store</span>
                   </>
                 )}
-            </div>
+            </button>
         </div>
 
         {/* Submit/Stop button */}

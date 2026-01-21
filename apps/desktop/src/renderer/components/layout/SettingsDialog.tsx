@@ -18,6 +18,7 @@ interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onApiKeySaved?: () => void;
+  initialTab?: string;
 }
 
 // Provider configuration
@@ -62,7 +63,7 @@ const LITELLM_PROVIDER_PRIORITY = [
   'amazon',
 ];
 
-export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: SettingsDialogProps) {
+export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, initialTab }: SettingsDialogProps) {
   const [apiKey, setApiKey] = useState('');
   const [provider, setProvider] = useState<ProviderId>('anthropic');
   const [isSaving, setIsSaving] = useState(false);
@@ -277,6 +278,19 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
     fetchLiteLLMConfig();
     fetchShopifyStatus();
   }, [open]);
+
+  // Scroll to integrations section when initialTab is set
+  useEffect(() => {
+    if (open && initialTab === 'integrations') {
+      // Wait for dialog to render, then scroll to integrations section
+      setTimeout(() => {
+        const integrationsSection = document.getElementById('settings-integrations-section');
+        if (integrationsSection) {
+          integrationsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
+    }
+  }, [open, initialTab]);
 
   const handleDebugToggle = async () => {
     const accomplish = getAccomplish();
@@ -1569,7 +1583,7 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
           )}
 
           {/* Integrations Section */}
-          <section>
+          <section id="settings-integrations-section">
             <h2 className="mb-4 text-base font-medium text-foreground">Integrations</h2>
             <div className="rounded-lg border border-border bg-card p-5">
               {/* Shopify Connection */}
