@@ -1588,6 +1588,176 @@ export function registerIPCHandlers(): void {
   handle('provider-settings:get-debug', async () => {
     return getProviderDebugMode();
   });
+
+  // ============================================
+  // Brand Memory Handlers
+  // ============================================
+
+  // Brand: Save brand profile
+  handle('brand:save', async (_event: IpcMainInvokeEvent, profile: unknown) => {
+    const { saveBrandProfile } = await import('../store/brandMemory');
+    saveBrandProfile(profile as import('@brandwork/shared').BrandProfile);
+    return { success: true };
+  });
+
+  // Brand: Get active brand profile
+  handle('brand:get-active', async () => {
+    const { getActiveBrandProfile } = await import('../store/brandMemory');
+    return getActiveBrandProfile();
+  });
+
+  // Brand: Get brand profile by ID
+  handle('brand:get', async (_event: IpcMainInvokeEvent, id: string) => {
+    const { getBrandProfile } = await import('../store/brandMemory');
+    return getBrandProfile(id);
+  });
+
+  // Brand: List all brand profiles
+  handle('brand:list', async () => {
+    const { listBrandProfiles } = await import('../store/brandMemory');
+    return listBrandProfiles();
+  });
+
+  // Brand: Update brand profile
+  handle('brand:update', async (_event: IpcMainInvokeEvent, id: string, updates: unknown) => {
+    const { updateBrandProfile } = await import('../store/brandMemory');
+    updateBrandProfile(id, updates as Partial<import('@brandwork/shared').BrandProfile>);
+    return { success: true };
+  });
+
+  // Brand: Delete brand profile
+  handle('brand:delete', async (_event: IpcMainInvokeEvent, id: string) => {
+    const { deleteBrandProfile } = await import('../store/brandMemory');
+    deleteBrandProfile(id);
+    return { success: true };
+  });
+
+  // Brand: Set active brand profile
+  handle('brand:set-active', async (_event: IpcMainInvokeEvent, id: string) => {
+    const { setActiveBrandProfile } = await import('../store/brandMemory');
+    setActiveBrandProfile(id);
+    return { success: true };
+  });
+
+  // Brand: Check if any brand profile exists
+  handle('brand:has-profile', async () => {
+    const { hasBrandProfile } = await import('../store/brandMemory');
+    return hasBrandProfile();
+  });
+
+  // Brand: Get brand context for prompt injection
+  handle('brand:get-context', async (_event: IpcMainInvokeEvent, brandId?: string) => {
+    const { getBrandContext } = await import('../store/brandMemory');
+    return getBrandContext(brandId);
+  });
+
+  // Brand: Add example to brand memory
+  handle('brand:add-example', async (_event: IpcMainInvokeEvent, brandId: string, exampleType: string, inputText: string | null, outputText: string, rating?: number) => {
+    const { addBrandExample } = await import('../store/brandMemory');
+    addBrandExample(brandId, exampleType, inputText, outputText, rating);
+    return { success: true };
+  });
+
+  // Brand: Import brand memory data
+  handle('brand:import-memory', async (_event: IpcMainInvokeEvent, brandId: string, memoryData: unknown) => {
+    const { importBrandMemory } = await import('../store/brandMemory');
+    return importBrandMemory(brandId, memoryData as import('@brandwork/shared').BrandMemory);
+  });
+
+  // Brand: Get brand memory
+  handle('brand:get-memory', async (_event: IpcMainInvokeEvent, brandId?: string) => {
+    const { getBrandMemory } = await import('../store/brandMemory');
+    return getBrandMemory(brandId);
+  });
+
+  // ============================================
+  // File Dialog Handlers
+  // ============================================
+
+  // Dialog: Open file picker
+  handle('dialog:open-file', async () => {
+    const { dialog } = await import('electron');
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [
+        { name: 'All Files', extensions: ['*'] },
+        { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
+      ],
+    });
+    return { canceled: result.canceled, filePaths: result.filePaths };
+  });
+
+  // Dialog: Open JSON file picker (for brand memory import)
+  handle('dialog:open-json', async () => {
+    const { dialog } = await import('electron');
+    const fs = await import('fs');
+    
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [
+        { name: 'JSON Files', extensions: ['json'] },
+      ],
+    });
+    
+    if (result.canceled || result.filePaths.length === 0) {
+      return { canceled: true, filePath: null };
+    }
+    
+    const filePath = result.filePaths[0];
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const data = JSON.parse(content);
+      return { canceled: false, filePath, data };
+    } catch (error) {
+      console.error('[Dialog] Failed to read JSON file:', error);
+      return { canceled: false, filePath, data: null, error: 'Failed to parse JSON file' };
+    }
+  });
+
+  // Shell: Open path with system default app
+  handle('shell:open-path', async (_event: IpcMainInvokeEvent, filePath: string) => {
+    return shell.openPath(filePath);
+  });
+
+  // Media: Load local file as data URL
+  handle('media:load-local-file', async (_event: IpcMainInvokeEvent, filePath: string) => {
+    const fs = await import('fs');
+    const path = await import('path');
+    
+    try {
+      const buffer = fs.readFileSync(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+      const fileName = path.basename(filePath);
+      
+      // Determine MIME type
+      const mimeTypes: Record<string, string> = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.svg': 'image/svg+xml',
+        '.mp4': 'video/mp4',
+        '.webm': 'video/webm',
+        '.mov': 'video/quicktime',
+        '.pdf': 'application/pdf',
+      };
+      
+      const mimeType = mimeTypes[ext] || 'application/octet-stream';
+      const base64 = buffer.toString('base64');
+      const dataUrl = `data:${mimeType};base64,${base64}`;
+      
+      return {
+        dataUrl,
+        mimeType,
+        size: buffer.length,
+        fileName,
+      };
+    } catch (error) {
+      console.error('[Media] Failed to load local file:', error);
+      throw new Error(`Failed to load file: ${filePath}`);
+    }
+  });
 }
 
 function createTaskId(): string {
