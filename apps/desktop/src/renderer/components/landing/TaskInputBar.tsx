@@ -58,7 +58,7 @@ export default function TaskInputBar({
   onConnectStore,
   shopifyRefreshKey = 0,
 }: TaskInputBarProps) {
-  const isDisabled = disabled && !showStop; // Allow clicking stop even when "disabled"
+  const isDisabled = disabled && !showStop;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const accomplish = getAccomplish();
   const [shopifyConnected, setShopifyConnected] = useState(false);
@@ -76,7 +76,6 @@ export default function TaskInputBar({
     try {
       const result = await accomplish.openFilePicker();
       if (!result.canceled && result.filePaths.length > 0) {
-        // Add new files to existing files (avoid duplicates)
         const newFiles = [...files];
         for (const path of result.filePaths) {
           if (!newFiles.includes(path)) {
@@ -175,84 +174,84 @@ export default function TaskInputBar({
         placeholder={placeholder}
         disabled={isDisabled}
         rows={1}
-        className="max-h-[200px] min-h-[24px] w-full resize-none bg-transparent px-2 text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 text-lg font-light tracking-tight"
+        className={`max-h-[200px] min-h-[24px] w-full resize-none bg-transparent px-2 text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${large ? 'text-lg font-light tracking-tight' : 'text-sm'}`}
       />
 
       {/* Bottom Actions Row */}
       <div className="flex items-center justify-between mt-2">
         <div className="flex items-center gap-2">
-            {/* Attachment Button */}
-            <button 
-                type="button"
-                onClick={handleAttachFiles}
-                disabled={isDisabled}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Attach files"
-            >
-                <Paperclip className="h-4 w-4" />
-            </button>
+          {/* Attachment Button */}
+          <button 
+            type="button"
+            onClick={handleAttachFiles}
+            disabled={isDisabled}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Attach files"
+          >
+            <Paperclip className="h-4 w-4" />
+          </button>
 
-            {/* Store Status Pill */}
-            <button 
-                type="button"
-                onClick={() => {
-                  if (!shopifyConnected && onConnectStore) {
-                    onConnectStore();
-                  }
-                }}
-                className={`flex items-center gap-1.5 h-8 px-3 rounded-full border text-sm font-medium transition-colors ${
-                  shopifyConnected 
-                    ? 'border-foreground/20 bg-foreground/5 text-foreground cursor-default' 
-                    : 'border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground cursor-pointer'
-                }`}
-                title={shopifyConnected ? `Connected to ${shopDomain}` : 'Click to connect a store'}
-            >
-                {shopifyConnected ? (
-                  <>
-                    <Check className="h-3.5 w-3.5" />
-                    <span>{shopDomain?.replace('.myshopify.com', '') || 'Store Connected'}</span>
-                  </>
-                ) : (
-                  <>
-                    <Store className="h-3.5 w-3.5" />
-                    <span>No Store</span>
-                  </>
-                )}
-            </button>
+          {/* Store Status Pill */}
+          <button 
+            type="button"
+            onClick={() => {
+              if (!shopifyConnected && onConnectStore) {
+                onConnectStore();
+              }
+            }}
+            className={`flex items-center gap-1.5 h-8 px-3 rounded-full border text-sm font-medium transition-colors ${
+              shopifyConnected 
+                ? 'border-foreground/20 bg-foreground/5 text-foreground cursor-default' 
+                : 'border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground cursor-pointer'
+            }`}
+            title={shopifyConnected ? `Connected to ${shopDomain}` : 'Click to connect a store'}
+          >
+            {shopifyConnected ? (
+              <>
+                <Check className="h-3.5 w-3.5" />
+                <span>{shopDomain?.replace('.myshopify.com', '') || 'Store Connected'}</span>
+              </>
+            ) : (
+              <>
+                <Store className="h-3.5 w-3.5" />
+                <span>No Store</span>
+              </>
+            )}
+          </button>
         </div>
 
         {/* Submit/Stop button */}
         <button
-            data-testid="task-input-submit"
-            type="button"
-            onClick={() => {
-              if (showStop) {
-                onSubmit(); // This will call interruptTask when showStop is true
-              } else {
-                analytics.trackSubmitTask();
-                accomplish.logEvent({
-                    level: 'info',
-                    message: 'Task input submit clicked',
-                    context: { prompt: value, files },
-                });
-                onSubmit();
-              }
-            }}
-            disabled={!showStop && (!value.trim() || isDisabled)}
-            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all duration-200 ease-accomplish disabled:cursor-not-allowed disabled:opacity-40 ${
-              showStop 
-                ? 'bg-foreground text-background hover:bg-foreground/80' 
-                : 'bg-muted text-muted-foreground hover:bg-foreground hover:text-background'
-            }`}
-            title={showStop ? "Stop" : "Submit"}
+          data-testid="task-input-submit"
+          type="button"
+          onClick={() => {
+            if (showStop) {
+              onSubmit();
+            } else {
+              analytics.trackSubmitTask();
+              accomplish.logEvent({
+                level: 'info',
+                message: 'Task input submit clicked',
+                context: { prompt: value, files },
+              });
+              onSubmit();
+            }
+          }}
+          disabled={!showStop && (!value.trim() || isDisabled)}
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all duration-200 ease-accomplish disabled:cursor-not-allowed disabled:opacity-40 ${
+            showStop 
+              ? 'bg-foreground text-background hover:bg-foreground/80' 
+              : 'bg-primary text-primary-foreground hover:bg-primary/80'
+          }`}
+          title={showStop ? "Stop" : "Submit"}
         >
-            {showStop ? (
-              <div className="w-3 h-3 rounded-sm bg-current" />
-            ) : isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <ArrowUp className="h-4 w-4" />
-            )}
+          {showStop ? (
+            <div className="w-3 h-3 rounded-sm bg-current" />
+          ) : isLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <ArrowUp className="h-4 w-4" />
+          )}
         </button>
       </div>
     </div>
