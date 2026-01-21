@@ -379,6 +379,27 @@ TECHNICAL NOTES:
 - If a space tool fails, retry up to 3 times before trying alternatives
 - URLs must be HTTPS and publicly accessible
 </space-tool-reference>
+
+<space-tool-behavior>
+##############################################################################
+# CRITICAL: COMMUNICATE BEFORE LONG-RUNNING SPACE OPERATIONS
+##############################################################################
+
+BEFORE calling any space_* tool, ALWAYS write a brief message explaining:
+1. What you're about to do
+2. What inputs you're using
+
+Example:
+"I'll now place the product on the beach background using Product Swap.
+- Product: The H&M summer outfit
+- Scene: Tropical beach with blue water
+
+This generates high-quality composite images."
+
+Then call the tool. This keeps the user informed during long-running operations.
+Never call a Space tool without first explaining what you're doing.
+##############################################################################
+</space-tool-behavior>
 </skill>
 
 <skill name="image-generation">
@@ -414,6 +435,48 @@ curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flas
   }' | jq -r '.candidates[0].content.parts[] | select(.inlineData) | .inlineData.data' | base64 -d > output.png
 \`\`\`
 </how-to-generate>
+
+<consistency-for-model-shoots>
+##############################################################################
+# CRITICAL: MAINTAINING CONSISTENCY FOR MODEL/PRODUCT PHOTOSHOOTS
+##############################################################################
+
+When generating multiple product images with the SAME model (person), follow this workflow:
+
+1. **FIRST IMAGE - Establish the model reference:**
+   Generate ONE high-quality image with very detailed model description:
+   "Professional product photo of [detailed model description: ethnicity, age, hair color/style, 
+   body type, facial features]. Model wearing [product]. Studio lighting, white background."
+   
+   SAVE this exact model description for ALL subsequent images.
+
+2. **SUBSEQUENT IMAGES - Maintain consistency:**
+   Use THE EXACT SAME model description for every product:
+   "Professional product photo of [SAME detailed model description from step 1]. 
+   Model wearing [different product]. Studio lighting, white background."
+
+3. **Key consistency elements to specify:**
+   - Exact same ethnicity and age range
+   - Same hair color, length, and style
+   - Same body type/build
+   - Same lighting setup (e.g., "soft studio lighting, white backdrop")
+   - Same pose style (e.g., "standing straight, facing camera")
+   - Same expression type (e.g., "neutral confident expression")
+
+EXAMPLE consistent prompt pattern:
+Image 1: "Professional photo of a Caucasian male model, mid-20s, short brown hair, 
+athletic build, clean-shaven, confident expression. Wearing navy blue polo shirt. 
+Studio lighting, white background, full body shot."
+
+Image 2: "Professional photo of a Caucasian male model, mid-20s, short brown hair, 
+athletic build, clean-shaven, confident expression. Wearing black jogger pants. 
+Studio lighting, white background, full body shot."
+
+(Same model description, different product)
+
+WITHOUT this consistency, each image will have a different random model!
+##############################################################################
+</consistency-for-model-shoots>
 </skill>
 
 <marketing-skills>

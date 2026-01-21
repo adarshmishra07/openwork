@@ -68,6 +68,8 @@ export interface TaskMessage {
   toolStatus?: 'running' | 'completed' | 'error';
   /** Human-readable label for display (e.g., "Product created" instead of raw JSON) */
   displayLabel?: string;
+  /** Whether this message is a final response that should persist as a chat bubble */
+  isFinal?: boolean;
 }
 
 export interface TaskResult {

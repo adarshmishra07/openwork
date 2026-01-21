@@ -162,20 +162,38 @@ function getActivityInfo(toolName: string, toolInput?: unknown): ActivityInfo {
 }
 
 /**
+ * Get timing hint for long-running Space tools
+ */
+function getSpaceToolTimingHint(toolName: string): string | null {
+  const spaceTimings: Record<string, string> = {
+    'space_product_swap': '60-90 seconds',
+    'space_background_remover': '30-60 seconds',
+    'space_steal_the_look': '60-90 seconds',
+    'space_sketch_to_product': '60-90 seconds',
+  };
+  
+  // Extract space name from full tool name (e.g., "space-runtime_space_product_swap" -> "space_product_swap")
+  const spaceName = toolName.replace('space-runtime_', '');
+  return spaceTimings[spaceName] || null;
+}
+
+/**
  * Check if a message is a "final response" (should be rendered as full bubble)
  * vs an intermediate activity (should be rendered as simple italic text)
  */
-function isFinalResponse(message: TaskMessage, isLastAssistant: boolean): boolean {
+function isFinalResponse(message: TaskMessage, isLastAssistant: boolean, nextMessage?: TaskMessage): boolean {
   // User messages are always full bubbles
   if (message.type === 'user') return true;
   
   // Tool messages are never final responses (rendered as badges)
   if (message.type === 'tool') return false;
   
-  // Assistant messages: ONLY the last one gets a full bubble
-  // All intermediate assistant messages become simple italic text
+  // Assistant messages:
   if (message.type === 'assistant') {
-    return isLastAssistant;
+    // If followed by a tool, it's a thinking/planning message (render as italic text)
+    if (nextMessage?.type === 'tool') return false;
+    // Otherwise it's a final response (render as full bubble)
+    return true;
   }
   
   return true;
@@ -234,6 +252,7 @@ export default function ExecutionPage() {
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [pendingFollowUp, setPendingFollowUp] = useState<string | null>(null);
+  const [isIntermediateExpanded, setIsIntermediateExpanded] = useState(false);
 
   const {
     currentTask,
@@ -283,6 +302,8 @@ export default function ExecutionPage() {
       loadTaskById(id);
       // Clear debug logs when switching tasks
       setDebugLogs([]);
+      // Reset collapsed state when switching tasks
+      setIsIntermediateExpanded(false);
     }
 
     // Handle individual task updates
@@ -690,43 +711,10 @@ export default function ExecutionPage() {
         </motion.div>
       )}
 
-      {/* Queued state - inline (follow-up, has previous messages) */}
-      {currentTask.status === 'queued' && currentTask.messages.length > 0 && (
-        <div className="flex-1 overflow-y-auto px-6 py-6">
-          <div className="max-w-4xl mx-auto space-y-4">
-            {currentTask.messages
-              .filter((m) => !(m.type === 'tool' && m.toolName?.toLowerCase() === 'bash'))
-              .map((message) => (
-              <MessageBubble key={message.id} message={message} />
-            ))}
 
-            {/* Inline waiting indicator */}
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={springs.gentle}
-              className="flex flex-col items-center gap-4 py-8"
-            >
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/10">
-                <Clock className="h-6 w-6 text-amber-600" />
-              </div>
-              <div className="text-center">
-                <p className="text-sm font-medium text-foreground">
-                  Waiting for another task
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Your follow-up will continue automatically
-                </p>
-              </div>
-            </motion.div>
 
-            <div ref={messagesEndRef} />
-          </div>
-        </div>
-      )}
-
-      {/* Messages - normal state (running, completed, failed, etc.) */}
-      {currentTask.status !== 'queued' && (
+      {/* Messages - show for any state as long as there are messages */}
+      {(currentTask.status !== 'queued' || currentTask.messages.length > 0) && (
         <div className="flex-1 overflow-y-auto px-6 py-6">
           <div className="max-w-4xl mx-auto space-y-2">
             {(() => {
@@ -741,32 +729,140 @@ export default function ExecutionPage() {
                   break;
                 }
               }
-              
-              return filteredMessages.map((message, index) => {
+
+              // Group messages into blocks (Expanded vs Collapsed)
+              type RenderBlock = 
+                | { type: 'expanded'; message: TaskMessage; isLast: boolean; isLastAssistant: boolean }
+                | { type: 'collapsed'; messages: TaskMessage[] };
+
+              const blocks: RenderBlock[] = [];
+              let currentCollapsed: TaskMessage[] = [];
+
+              filteredMessages.forEach((message, index) => {
+                const isLastAssistant = index === lastAssistantIndex;
                 const isLastMessage = index === filteredMessages.length - 1;
-                const isLastAssistantMessage = index === lastAssistantIndex;
                 
-                // Show continue button on last assistant message when:
-                // - Task was interrupted (user can always continue)
-                // - Task completed AND the message indicates agent is waiting for user action
-                const showContinue = isLastAssistantMessage && !!hasSession &&
-                  (currentTask.status === 'interrupted' ||
-                   (currentTask.status === 'completed' && isWaitingForUser(message.content)));
+                // Determine if this message should be expanded
+                // Expanded if:
+                // 1. It's a user message
+                // 2. It's an assistant message that is NOT followed by a tool (thinking pattern)
+                const nextMessage = filteredMessages[index + 1];
+                const isFollowedByTool = nextMessage?.type === 'tool';
                 
-                return (
-                  <MessageBubble
-                    key={message.id}
-                    message={message}
-                    shouldStream={isLastAssistantMessage && currentTask.status === 'running'}
-                    isLastMessage={isLastMessage}
-                    isLastAssistantMessage={isLastAssistantMessage}
-                    isRunning={currentTask.status === 'running'}
-                    showContinueButton={showContinue}
-                    continueLabel={currentTask.status === 'interrupted' ? 'Continue' : 'Done, Continue'}
-                    onContinue={handleContinue}
-                    isLoading={isLoading}
-                  />
+                const isExpanded = message.type === 'user' || (
+                  message.type === 'assistant' && !isFollowedByTool
                 );
+
+                if (isExpanded) {
+                  // If we have pending collapsed messages, push them as a block first
+                  if (currentCollapsed.length > 0) {
+                    blocks.push({ type: 'collapsed', messages: [...currentCollapsed] });
+                    currentCollapsed = [];
+                  }
+                  // Push this message as an expanded block
+                  blocks.push({ 
+                    type: 'expanded', 
+                    message, 
+                    isLast: isLastMessage, 
+                    isLastAssistant 
+                  });
+                } else {
+                  // Add to current collapsed group
+                  currentCollapsed.push(message);
+                }
+              });
+
+              // Push any remaining collapsed messages
+              if (currentCollapsed.length > 0) {
+                blocks.push({ type: 'collapsed', messages: [...currentCollapsed] });
+              }
+
+              return blocks.map((block, blockIdx) => {
+                if (block.type === 'expanded') {
+                  const { message, isLast, isLastAssistant } = block;
+                  const hasSession = currentTask?.sessionId || currentTask?.result?.sessionId;
+                  const nextMsg = getNextMessage(filteredMessages, message);
+                  
+                  // Show continue button logic
+                  const showContinue = isLastAssistant && !!hasSession &&
+                    (currentTask.status === 'interrupted' ||
+                     (currentTask.status === 'completed' && isWaitingForUser(message.content)));
+
+                  return (
+                    <MessageBubble
+                      key={message.id}
+                      message={message}
+                      nextMessage={nextMsg}
+                      shouldStream={isLastAssistant && currentTask.status === 'running'}
+                      isLastMessage={isLast}
+                      isLastAssistantMessage={isLastAssistant}
+                      isRunning={currentTask.status === 'running'}
+                      showContinueButton={showContinue}
+                      continueLabel={currentTask.status === 'interrupted' ? 'Continue' : 'Done, Continue'}
+                      onContinue={handleContinue}
+                      isLoading={isLoading}
+                    />
+                  );
+                } else {
+                  // Render collapsed group
+                  const messages = block.messages;
+                  
+                  // Collapse logic: if > 5 intermediate messages, show first 2 + collapsed + last 2
+                  const COLLAPSE_THRESHOLD = 5;
+                  const shouldCollapse = messages.length > COLLAPSE_THRESHOLD && !isIntermediateExpanded;
+                  const collapsedCount = messages.length - 4; // first 2 + last 2
+                  
+                  const visibleMessages = shouldCollapse
+                    ? [
+                        ...messages.slice(0, 2),
+                        { type: 'collapse-indicator', count: collapsedCount, id: `collapse-${blockIdx}` } as const,
+                        ...messages.slice(-2)
+                      ]
+                    : messages;
+
+                  return (
+                    <div key={`group-${blockIdx}`} className="space-y-0.5">
+                      {visibleMessages.map((item, idx) => {
+                         if ('count' in item && item.type === 'collapse-indicator') {
+                           return (
+                             <motion.button
+                               key={item.id}
+                               initial={{ opacity: 0 }}
+                               animate={{ opacity: 1 }}
+                               onClick={() => setIsIntermediateExpanded(!isIntermediateExpanded)}
+                               className="flex items-center gap-2 py-2 px-3 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+                             >
+                               <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 shrink-0" />
+                               {isIntermediateExpanded ? (
+                                 <ChevronUp className="h-3 w-3" />
+                               ) : (
+                                 <ChevronDown className="h-3 w-3" />
+                               )}
+                               <span>{isIntermediateExpanded ? 'Show fewer steps' : `Show ${item.count} more steps`}</span>
+                             </motion.button>
+                           );
+                         }
+
+                         const message = item as TaskMessage;
+                         const nextMsg = getNextMessage(filteredMessages, message);
+                         return (
+                           <MessageBubble
+                             key={message.id}
+                             message={message}
+                             nextMessage={nextMsg}
+                             shouldStream={false}
+                             isLastMessage={false} 
+                             isLastAssistantMessage={false}
+                             isRunning={currentTask.status === 'running'}
+                             showContinueButton={false}
+                             onContinue={handleContinue}
+                             isLoading={isLoading}
+                           />
+                         );
+                      })}
+                    </div>
+                  );
+                }
               });
             })()}
 
@@ -789,11 +885,18 @@ export default function ExecutionPage() {
                       ? (() => {
                           const activity = getActivityInfo(currentTool, currentToolInput);
                           const description = (currentToolInput as { description?: string })?.description;
-                          // Show skill/space name if available, otherwise description or label
-                          if (activity.detail) {
-                            return `${activity.label}: ${activity.detail}...`;
+                          const timingHint = getSpaceToolTimingHint(currentTool);
+                          
+                          // Build the label
+                          let label = activity.detail 
+                            ? `${activity.label}: ${activity.detail}` 
+                            : (description || activity.label);
+                          
+                          // Add timing hint for Space tools
+                          if (timingHint) {
+                            return `${label}... (may take ${timingHint})`;
                           }
-                          return description || `${activity.label}...`;
+                          return `${label}...`;
                         })()
                       : 'Thinking...'}
                   </span>
@@ -1077,56 +1180,45 @@ export default function ExecutionPage() {
         )}
       </AnimatePresence>
 
-{/* Running state input with Stop button */}
-      {currentTask.status === 'running' && !permissionRequest && (
+      {/* Persistent Input Bar */}
+      {!permissionRequest && (
         <div className="flex-shrink-0 border-t border-border bg-card/50 px-6 py-4">
           <div className="max-w-4xl mx-auto flex gap-3">
             <Input
-              placeholder="Agent is working..."
-              disabled
-              className="flex-1 opacity-50"
-            />
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={interruptTask}
-              title="Stop agent (Ctrl+C)"
-              className="shrink-0 hover:bg-destructive/10 hover:text-destructive hover:border-destructive"
-              data-testid="execution-stop-button"
-            >
-              <Square className="h-4 w-4 fill-current" />
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Follow-up input */}
-      {canFollowUp && (
-        <div className="flex-shrink-0 border-t border-border bg-card/50 px-6 py-4">
-          <div className="max-w-4xl mx-auto">
-            {/* Input field with Send button */}
-            <div className="flex gap-3">
-              <Input
-                ref={followUpInputRef}
-                value={followUp}
-                onChange={(e) => setFollowUp(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
+              ref={followUpInputRef}
+              value={followUp}
+              onChange={(e) => setFollowUp(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  if (currentTask.status !== 'running') {
                     handleFollowUp();
                   }
-                }}
-                placeholder={
-                  currentTask.status === 'failed'
-                    ? "Try again or give new instructions..."
-                    : currentTask.status === 'interrupted'
-                      ? "Continue or give new instructions..."
-                      : "Give new instructions..."
                 }
-                disabled={isLoading}
-                className="flex-1"
-                data-testid="execution-follow-up-input"
-              />
+              }}
+              placeholder={
+                currentTask.status === 'running'
+                  ? "Agent is working... (Stop to send new message)"
+                  : currentTask.status === 'failed'
+                    ? "Try again or give new instructions..."
+                    : "Send a follow-up..."
+              }
+              disabled={currentTask.status === 'running' || isLoading}
+              className="flex-1"
+            />
+            
+            {currentTask.status === 'running' ? (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={interruptTask}
+                title="Stop agent (Ctrl+C)"
+                className="shrink-0 hover:bg-destructive/10 hover:text-destructive hover:border-destructive"
+                data-testid="execution-stop-button"
+              >
+                <Square className="h-4 w-4 fill-current" />
+              </Button>
+            ) : (
               <Button
                 onClick={handleFollowUp}
                 disabled={!followUp.trim() || isLoading}
@@ -1135,10 +1227,12 @@ export default function ExecutionPage() {
                 <CornerDownLeft className="h-4 w-4 mr-1.5" />
                 Send
               </Button>
-            </div>
+            )}
           </div>
         </div>
       )}
+
+
 
 
 
@@ -1259,6 +1353,7 @@ export default function ExecutionPage() {
 
 interface MessageBubbleProps {
   message: TaskMessage;
+  nextMessage?: TaskMessage;
   shouldStream?: boolean;
   isLastMessage?: boolean;
   isLastAssistantMessage?: boolean;
@@ -1267,6 +1362,12 @@ interface MessageBubbleProps {
   continueLabel?: string;
   onContinue?: () => void;
   isLoading?: boolean;
+}
+
+// Get the next message from a flat list given current message
+function getNextMessage(messages: TaskMessage[], currentMessage: TaskMessage): TaskMessage | undefined {
+  const idx = messages.findIndex(m => m.id === currentMessage.id);
+  return idx >= 0 ? messages[idx + 1] : undefined;
 }
 
 // Activity Bullet component for non-final messages (thinking, tools, skills, spaces)
@@ -1315,7 +1416,7 @@ const ActivityBullet = memo(function ActivityBullet({
   );
 });
 
-// Intermediate assistant message - simple italic text
+// Intermediate assistant message - bullet point with italic text
 const IntermediateMessage = memo(function IntermediateMessage({ 
   content,
   isRunning = false,
@@ -1330,19 +1431,19 @@ const IntermediateMessage = memo(function IntermediateMessage({
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: 1, x: 0 }}
       transition={springs.gentle}
-      className="flex items-start gap-2 py-1.5"
+      className="flex items-center gap-2 py-1"
     >
       {/* Bullet point */}
-      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 shrink-0 mt-2" />
+      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 shrink-0" />
       
-      {/* Simple italic text */}
-      <p className="text-sm text-muted-foreground italic leading-relaxed">
+      {/* Italic text */}
+      <span className="text-sm text-muted-foreground italic">
         {content}
-      </p>
+      </span>
       
       {/* Loading spinner */}
       {isLastMessage && isRunning && (
-        <SpinningIcon className="h-3.5 w-3.5 shrink-0 mt-1" />
+        <SpinningIcon className="h-3.5 w-3.5 shrink-0" />
       )}
     </motion.div>
   );
@@ -1350,7 +1451,8 @@ const IntermediateMessage = memo(function IntermediateMessage({
 
 // Memoized MessageBubble to prevent unnecessary re-renders and markdown re-parsing
 const MessageBubble = memo(function MessageBubble({ 
-  message, 
+  message,
+  nextMessage,
   shouldStream = false, 
   isLastMessage = false, 
   isLastAssistantMessage = false,
@@ -1367,7 +1469,7 @@ const MessageBubble = memo(function MessageBubble({
   const isAssistant = message.type === 'assistant';
 
   // Check if this should be rendered as a bullet or full bubble
-  const shouldRenderAsBullet = !isFinalResponse(message, isLastAssistantMessage);
+  const shouldRenderAsBullet = !isFinalResponse(message, isLastAssistantMessage, nextMessage);
 
   // Mark stream as complete when shouldStream becomes false
   useEffect(() => {
@@ -1462,7 +1564,8 @@ const MessageBubble = memo(function MessageBubble({
         ) : (
           <RichContentRenderer content={message.content} className={proseClasses} />
         )}
-        {!isUser && (
+        {/* Only show timestamp on the final assistant message */}
+        {isLastAssistantMessage && (
           <p className="text-xs mt-1.5 text-muted-foreground">
             {new Date(message.timestamp).toLocaleTimeString()}
           </p>

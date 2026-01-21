@@ -63,9 +63,9 @@ export function RichContentRenderer({ content, className }: RichContentRendererP
   const hasMedia = mediaItems.length > 0;
 
   return (
-    <div data-testid="rich-content" className={cn('space-y-4', className)}>
+    <div data-testid="rich-content" className="space-y-4">
       {/* Text content with markdown */}
-      <div className="prose prose-sm max-w-none text-foreground [&_*]:text-foreground [&_strong]:text-foreground [&_b]:text-foreground [&_li]:text-foreground">
+      <div className={className}>
         <ReactMarkdown
           components={{
             // Override img to handle both remote and local images properly
