@@ -1,15 +1,15 @@
 {
-  "name": "@accomplish/desktop",
+  "name": "@brandwork/desktop",
   "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "Accomplish Desktop App",
+  "description": "BrandWork - AI work companion for e-commerce brands",
   "main": "dist-electron/main/index.js",
   "scripts": {
-    "postinstall": "electron-rebuild && npm --prefix skills/dev-browser install && npm --prefix skills/dev-browser-mcp install && npm --prefix skills/file-permission install && npm --prefix skills/ask-user-question install",
+    "postinstall": "electron-rebuild && npm --prefix skills/dev-browser install && npm --prefix skills/dev-browser-mcp install && npm --prefix skills/file-permission install && npm --prefix skills/ask-user-question install && npm --prefix skills/skill-loader install",
     "dev": "node scripts/patch-electron-name.cjs && node -e \"require('fs').rmSync('dist-electron',{recursive:true,force:true})\" && vite",
     "dev:clean": "CLEAN_START=1 vite",
-    "build": "tsc && vite build && npm --prefix skills/dev-browser install --omit=dev && npm --prefix skills/dev-browser-mcp install --omit=dev && npm --prefix skills/file-permission install --omit=dev && npm --prefix skills/ask-user-question install --omit=dev",
+    "build": "tsc && vite build && npm --prefix skills/dev-browser install --omit=dev && npm --prefix skills/dev-browser-mcp install --omit=dev && npm --prefix skills/file-permission install --omit=dev && npm --prefix skills/ask-user-question install --omit=dev && npm --prefix skills/skill-loader install --omit=dev",
     "build:electron": "tsc && vite build && node scripts/package.cjs",
     "build:unpack": "tsc && vite build && node scripts/package.cjs --dir",
     "package": "pnpm build && node scripts/package.cjs --mac --publish never",
@@ -39,9 +39,10 @@
     "test:e2e:native:integration": "playwright test --config=e2e/playwright.config.ts --project=electron-integration"
   },
   "dependencies": {
-    "@accomplish/shared": "workspace:*",
     "@aws-sdk/client-bedrock": "^3.971.0",
     "@aws-sdk/credential-providers": "^3.971.0",
+    "@brandwork/shared": "workspace:*",
+    "@fal-ai/client": "^1.8.3",
     "@radix-ui/react-avatar": "^1.1.2",
     "@radix-ui/react-dialog": "^1.1.4",
     "@radix-ui/react-dropdown-menu": "^2.1.4",
@@ -51,6 +52,7 @@
     "@radix-ui/react-separator": "^1.1.1",
     "@radix-ui/react-slot": "^1.1.1",
     "@radix-ui/react-tooltip": "^1.1.6",
+    "better-sqlite3": "^12.6.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dotenv": "^17.2.3",
@@ -74,6 +76,7 @@
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "6.6.3",
     "@testing-library/react": "^16.3.1",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
@@ -93,8 +96,8 @@
     "vitest": "^4.0.17"
   },
   "build": {
-    "appId": "ai.accomplish.desktop",
-    "productName": "Openwork",
+    "appId": "com.shopos.brandwork",
+    "productName": "BrandWork",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "directories": {
       "output": "release",
@@ -111,7 +114,7 @@
       "node_modules/json-schema-typed/**",
       "node_modules/atomically/**",
       "node_modules/debounce-fn/**",
-      "!node_modules/@accomplish/**",
+      "!node_modules/@brandwork/**",
       "!node_modules/opencode-darwin-*/**",
       "!node_modules/opencode-linux-*/**"
     ],
@@ -147,8 +150,8 @@
     ],
     "publish": {
       "provider": "github",
-      "owner": "accomplish-ai",
-      "repo": "openwork"
+      "owner": "shopos",
+      "repo": "brandwork"
     },
     "mac": {
       "category": "public.app-category.productivity",
@@ -187,7 +190,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Openwork"
+      "shortcutName": "BrandWork"
     }
   }
 }

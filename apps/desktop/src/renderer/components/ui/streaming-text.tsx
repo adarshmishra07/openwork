@@ -68,13 +68,19 @@ export function StreamingText({
       if (charsToAdd > 0) {
         setDisplayedLength((prev) => {
           const next = Math.min(prev + charsToAdd, textRef.current.length);
-          if (next >= textRef.current.length) {
-            setIsStreaming(false);
-            onComplete?.();
-          }
           return next;
         });
         lastTimeRef.current = timestamp;
+        
+        // Check if we've reached the end and stop streaming
+        // Use a microtask to avoid setState during render
+        const currentLength = displayedLength + charsToAdd;
+        if (currentLength >= textRef.current.length) {
+          queueMicrotask(() => {
+            setIsStreaming(false);
+            onComplete?.();
+          });
+        }
       }
 
       if (displayedLength < textRef.current.length) {

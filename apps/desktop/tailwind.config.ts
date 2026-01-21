@@ -97,16 +97,20 @@ const config: Config = {
       },
       fontFamily: {
         sans: [
-          'DM Sans',
+          'Segoe UI',
           'ui-sans-serif',
           'system-ui',
           '-apple-system',
           'BlinkMacSystemFont',
-          'Segoe UI',
           'Roboto',
           'Helvetica Neue',
           'Arial',
           'sans-serif',
+        ],
+        serif: [
+          'Georgia',
+          'ui-serif',
+          'serif',
         ],
       },
       transitionTimingFunction: {
@@ -135,6 +139,31 @@ const config: Config = {
         spinCcw: {
           '0%': { transform: 'rotate(360deg)' },
           '100%': { transform: 'rotate(0deg)' },
+        },
+      },
+      // Typography plugin customization - use theme colors
+      typography: {
+        DEFAULT: {
+          css: {
+            '--tw-prose-body': 'hsl(var(--foreground))',
+            '--tw-prose-headings': 'hsl(var(--foreground))',
+            '--tw-prose-lead': 'hsl(var(--foreground))',
+            '--tw-prose-links': 'hsl(var(--foreground))',
+            '--tw-prose-bold': 'hsl(var(--foreground))',
+            '--tw-prose-counters': 'hsl(var(--muted-foreground))',
+            '--tw-prose-bullets': 'hsl(var(--muted-foreground))',
+            '--tw-prose-hr': 'hsl(var(--border))',
+            '--tw-prose-quotes': 'hsl(var(--foreground))',
+            '--tw-prose-quote-borders': 'hsl(var(--border))',
+            '--tw-prose-captions': 'hsl(var(--muted-foreground))',
+            '--tw-prose-code': 'hsl(var(--foreground))',
+            '--tw-prose-pre-code': 'hsl(var(--foreground))',
+            '--tw-prose-pre-bg': 'hsl(var(--muted))',
+            '--tw-prose-th-borders': 'hsl(var(--border))',
+            '--tw-prose-td-borders': 'hsl(var(--border))',
+            color: 'hsl(var(--foreground))',
+            maxWidth: 'none',
+          },
         },
       },
     },

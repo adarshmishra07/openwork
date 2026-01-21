@@ -1,7 +1,7 @@
 'use client';
 
 import { useNavigate, useLocation } from 'react-router-dom';
-import type { Task } from '@accomplish/shared';
+import type { Task } from '@brandwork/shared';
 import { cn } from '@/lib/utils';
 import { Loader2, CheckCircle2, XCircle, Clock, Square, PauseCircle, X } from 'lucide-react';
 import { useTaskStore } from '@/stores/taskStore';
@@ -40,7 +40,7 @@ export default function ConversationListItem({ task }: ConversationListItemProps
       case 'running':
         return <Loader2 className="h-3 w-3 animate-spin-ccw text-primary shrink-0" />;
       case 'completed':
-        return <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />;
+        return <CheckCircle2 className="h-3 w-3 text-foreground shrink-0" />;
       case 'failed':
         return <XCircle className="h-3 w-3 text-red-500 shrink-0" />;
       case 'cancelled':
@@ -55,11 +55,19 @@ export default function ConversationListItem({ task }: ConversationListItemProps
   };
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={handleClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleClick();
+        }
+      }}
       title={task.summary || task.prompt}
       className={cn(
-        'w-full text-left px-3 py-2 rounded-md text-sm transition-colors duration-200',
+        'w-full text-left px-3 py-2 rounded-md text-sm transition-colors duration-200 cursor-pointer',
         'text-zinc-700 hover:bg-accent hover:text-accent-foreground',
         'flex items-center gap-2 group relative',
         isActive && 'bg-accent text-accent-foreground'
@@ -79,6 +87,6 @@ export default function ConversationListItem({ task }: ConversationListItemProps
       >
         <X className="h-3 w-3" />
       </button>
-    </button>
+    </div>
   );
 }

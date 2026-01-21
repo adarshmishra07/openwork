@@ -1,5 +1,5 @@
 {
-  "name": "@accomplish/shared",
+  "name": "@brandwork/shared",
   "version": "0.1.0",
   "private": true,
   "main": "./src/index.ts",

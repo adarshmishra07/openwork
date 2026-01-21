@@ -19,7 +19,9 @@ import type {
   ProviderSettings,
   ProviderId,
   ConnectedProvider,
-} from '@accomplish/shared';
+  BrandProfile,
+  BrandMemory,
+} from '@brandwork/shared';
 
 // Define the API interface
 interface AccomplishAPI {
@@ -29,6 +31,7 @@ interface AccomplishAPI {
 
   // Shell
   openExternal(url: string): Promise<void>;
+  openPath(filePath: string): Promise<string>;
 
   // Task operations
   startTask(config: TaskConfig): Promise<Task>;
@@ -115,6 +118,37 @@ interface AccomplishAPI {
 
   // E2E Testing
   isE2EMode(): Promise<boolean>;
+
+  // Shopify configuration
+  connectShopify(credentials: { shopDomain: string; accessToken: string }): Promise<{ success: boolean; shopDomain: string }>;
+  disconnectShopify(): Promise<{ success: boolean }>;
+  testShopifyConnection(credentials?: { shopDomain: string; accessToken: string }): Promise<{
+    success: boolean;
+    shop?: { name: string; domain: string; email: string };
+    error?: string;
+  }>;
+  getShopifyStatus(): Promise<{ connected: boolean; shopDomain?: string }>;
+
+  // File Picker
+  openFilePicker(): Promise<{ canceled: boolean; filePaths: string[] }>;
+  openJsonFilePicker(): Promise<{ canceled: boolean; filePath: string | null; data?: unknown }>;
+
+  // Media File Loading
+  loadLocalFile(filePath: string): Promise<{ dataUrl: string; mimeType: string; size: number; fileName: string }>;
+
+  // Brand Memory
+  saveBrandProfile(profile: BrandProfile): Promise<{ success: boolean }>;
+  getActiveBrandProfile(): Promise<BrandProfile | null>;
+  getBrandProfile(id: string): Promise<BrandProfile | null>;
+  listBrandProfiles(): Promise<BrandProfile[]>;
+  updateBrandProfile(id: string, updates: Partial<BrandProfile>): Promise<{ success: boolean }>;
+  deleteBrandProfile(id: string): Promise<{ success: boolean }>;
+  setActiveBrandProfile(id: string): Promise<{ success: boolean }>;
+  hasBrandProfile(): Promise<boolean>;
+  getBrandContext(brandId?: string): Promise<string>;
+  addBrandExample(brandId: string, exampleType: string, inputText: string | null, outputText: string, rating?: number): Promise<{ success: boolean }>;
+  importBrandMemory(brandId: string, memoryData: BrandMemory): Promise<{ success: boolean; error?: string }>;
+  getBrandMemory(brandId?: string): Promise<BrandMemory | null>;
 
   // Provider Settings API
   getProviderSettings(): Promise<ProviderSettings>;

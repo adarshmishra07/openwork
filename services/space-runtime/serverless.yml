@@ -1,0 +1,95 @@
+service: brandwork-spaces
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: python3.11
+  stage: ${opt:stage, 'dev'}
+  region: ap-south-1
+  timeout: 300  # 5 minutes for long-running image generation
+  memorySize: 1024
+  
+  environment:
+    STAGE: ${self:provider.stage}
+    GEMINI_API_KEY: ${env:GEMINI_API_KEY, ''}
+    OPENAI_API_KEY: ${env:OPENAI_API_KEY, ''}
+    PRODIA_API_KEY: ${env:PRODIA_API_KEY, ''}
+    AWS_S3_BUCKET: future-me-ai
+    AWS_REGION_NAME: ap-south-1
+  
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:GetObject
+            - s3:PutObjectAcl
+          Resource: 
+            - arn:aws:s3:::future-me-ai/*
+
+functions:
+  api:
+    handler: handler.handler
+    url: true  # Enable Lambda Function URL (no timeout limit, bypasses API Gateway 30s limit)
+    events:
+      - httpApi:
+          path: /{proxy+}
+          method: ANY
+      - httpApi:
+          path: /
+          method: ANY
+
+  # WebSocket for streaming (optional, for future)
+  # wsConnect:
+  #   handler: websocket.connect
+  #   events:
+  #     - websocket:
+  #         route: $connect
+  # wsDisconnect:
+  #   handler: websocket.disconnect
+  #   events:
+  #     - websocket:
+  #         route: $disconnect
+  # wsMessage:
+  #   handler: websocket.message
+  #   events:
+  #     - websocket:
+  #         route: $default
+
+plugins:
+  - serverless-python-requirements
+
+custom:
+  pythonRequirements:
+    dockerizePip: true
+    slim: true
+    strip: false
+    # Don't slim Pillow - it has native extensions that break
+    slimPatternsAppendDefaults: false
+    slimPatterns:
+      - '**/*.py[c|o]'
+      - '**/__pycache__/**'
+      - '**/*.dist-info/**'
+      - '**/*.egg-info/**'
+    # Keep Pillow's .so files intact
+    noDeploy:
+      - pytest
+      - black
+      - flake8
+      - boto3
+      - botocore
+      - pip
+      - setuptools
+      - wheel
+
+package:
+  individually: false
+  patterns:
+    - '!.venv/**'
+    - '!node_modules/**'
+    - '!.git/**'
+    - '!tests/**'
+    - '!*.md'
+    - '!.env*'

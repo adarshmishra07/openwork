@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { StreamParser } from '../../../src/main/opencode/stream-parser';
-import type { OpenCodeMessage } from '@accomplish/shared';
+import type { OpenCodeMessage } from '@brandwork/shared';
 
 describe('StreamParser', () => {
   let parser: StreamParser;

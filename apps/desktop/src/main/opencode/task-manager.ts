@@ -21,7 +21,7 @@ import {
   type TaskStatus,
   type OpenCodeMessage,
   type PermissionRequest,
-} from '@accomplish/shared';
+} from '@brandwork/shared';
 
 /**
  * Check if system Chrome is installed
@@ -138,7 +138,7 @@ async function installPlaywrightChromium(
   });
 }
 
-// DEV_BROWSER_PORT imported from @accomplish/shared
+// DEV_BROWSER_PORT imported from @brandwork/shared
 
 /**
  * Check if the dev-browser server is running and ready

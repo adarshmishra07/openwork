@@ -1,0 +1,16 @@
+{
+  "name": "brandwork-space-runtime",
+  "version": "1.0.0",
+  "description": "BrandWork Space Runtime - AWS Lambda service for executing Python spaces",
+  "scripts": {
+    "deploy": "serverless deploy --stage dev",
+    "deploy:prod": "serverless deploy --stage prod",
+    "remove": "serverless remove --stage dev",
+    "logs": "serverless logs -f api --stage dev -t",
+    "local": "python -m uvicorn handler:app --reload --port 8765"
+  },
+  "devDependencies": {
+    "serverless": "^3.38.0",
+    "serverless-python-requirements": "^6.0.1"
+  }
+}

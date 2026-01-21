@@ -17,7 +17,7 @@ let symlinkTarget = null;
 const sharedPath = path.join(accomplishPath, 'shared');
 
 try {
-  // Check if @accomplish/shared symlink exists
+  // Check if @brandwork/shared symlink exists
   if (fs.existsSync(sharedPath)) {
     const stats = fs.lstatSync(sharedPath);
     if (stats.isSymbolicLink()) {

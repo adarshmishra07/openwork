@@ -7,7 +7,7 @@ import type {
   PermissionRequest,
   PermissionResponse,
   TaskMessage,
-} from '@accomplish/shared';
+} from '@brandwork/shared';
 import { getAccomplish } from '../lib/accomplish';
 
 // Batch update event type for performance optimization

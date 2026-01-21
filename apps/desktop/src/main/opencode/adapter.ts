@@ -23,7 +23,7 @@ import type {
   TaskResult,
   OpenCodeMessage,
   PermissionRequest,
-} from '@accomplish/shared';
+} from '@brandwork/shared';
 
 /**
  * Error thrown when OpenCode CLI is not available
@@ -72,6 +72,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
   private hasCompleted: boolean = false;
   private isDisposed: boolean = false;
   private wasInterrupted: boolean = false;
+  private lastErrorOutput: string = ''; // Capture recent output for error messages
 
   /**
    * Create a new OpenCodeAdapter instance
@@ -155,6 +156,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     this.streamParser.reset();
     this.hasCompleted = false;
     this.wasInterrupted = false;
+    this.lastErrorOutput = '';
 
     // Start the log watcher to detect errors that aren't output as JSON
     if (this.logWatcher) {
@@ -255,6 +257,9 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
           console.log('[OpenCode CLI stdout]:', truncated);
           // Send full data to debug panel
           this.emit('debug', { type: 'stdout', message: cleanData });
+          
+          // Keep last 2000 chars of output for error messages
+          this.lastErrorOutput = (this.lastErrorOutput + cleanData).slice(-2000);
 
           this.streamParser.feed(cleanData);
         }
@@ -515,11 +520,19 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
       console.log('[OpenCode CLI] Using LiteLLM base URL:', activeModel.baseUrl);
     }
 
-    // Log config environment variable
+    // Log config environment variables
     console.log('[OpenCode CLI] OPENCODE_CONFIG in env:', process.env.OPENCODE_CONFIG);
+    console.log('[OpenCode CLI] OPENCODE_CONFIG_DIR in env:', process.env.OPENCODE_CONFIG_DIR);
+    
     if (process.env.OPENCODE_CONFIG) {
       env.OPENCODE_CONFIG = process.env.OPENCODE_CONFIG;
       console.log('[OpenCode CLI] Passing OPENCODE_CONFIG to subprocess:', env.OPENCODE_CONFIG);
+    }
+    
+    // Pass OPENCODE_CONFIG_DIR so OpenCode can find skills in our app directory
+    if (process.env.OPENCODE_CONFIG_DIR) {
+      env.OPENCODE_CONFIG_DIR = process.env.OPENCODE_CONFIG_DIR;
+      console.log('[OpenCode CLI] Passing OPENCODE_CONFIG_DIR to subprocess:', env.OPENCODE_CONFIG_DIR);
     }
 
     // Pass task ID to environment for task-scoped page naming in parallel execution
@@ -573,6 +586,13 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     // Resume session if specified
     if (config.sessionId) {
       args.push('--session', config.sessionId);
+    }
+
+    // Attach files if specified
+    if (config.files && config.files.length > 0) {
+      for (const filePath of config.files) {
+        args.push('--file', filePath);
+      }
     }
 
     // Use the Accomplish agent for browser automation guidance
@@ -644,7 +664,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
 
       // Tool use event - combined tool call and result from OpenCode CLI
       case 'tool_use':
-        const toolUseMessage = message as import('@accomplish/shared').OpenCodeToolUseMessage;
+        const toolUseMessage = message as import('@brandwork/shared').OpenCodeToolUseMessage;
         const toolUseName = toolUseMessage.part.tool || 'unknown';
         const toolUseInput = toolUseMessage.part.state?.input;
         const toolUseOutput = toolUseMessage.part.state?.output || '';
@@ -665,7 +685,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
               type: 'text',
               text: toolDescription,
             },
-          } as import('@accomplish/shared').OpenCodeTextMessage;
+          } as import('@brandwork/shared').OpenCodeTextMessage;
           this.emit('message', syntheticTextMessage);
         }
 
@@ -775,8 +795,18 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
           sessionId: this.currentSessionId || undefined,
         });
       } else if (code !== null) {
-        // Error exit
-        this.emit('error', new Error(`OpenCode CLI exited with code ${code}`));
+        // Error exit - include recent output for context
+        const errorContext = this.lastErrorOutput.trim();
+        // Try to extract a meaningful error message from the output
+        const errorMatch = errorContext.match(/error[:\s]+(.+?)(?:\n|$)/i) 
+          || errorContext.match(/failed[:\s]+(.+?)(?:\n|$)/i)
+          || errorContext.match(/exception[:\s]+(.+?)(?:\n|$)/i);
+        const errorDetail = errorMatch ? errorMatch[1].trim() : '';
+        const errorMessage = errorDetail 
+          ? `Task failed: ${errorDetail}`
+          : `OpenCode CLI exited with code ${code}. Output: ${errorContext}`;
+        console.error('[OpenCode CLI Error]', errorMessage);
+        this.emit('error', new Error(errorMessage));
       }
     }
 

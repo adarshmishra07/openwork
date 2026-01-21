@@ -27,7 +27,7 @@ import type {
   OpenCodeToolUseMessage,
   OpenCodeStepFinishMessage,
   OpenCodeErrorMessage,
-} from '@accomplish/shared';
+} from '@brandwork/shared';
 
 // Mock electron module
 const mockApp = {

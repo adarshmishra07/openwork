@@ -16,6 +16,10 @@ const accomplishAPI = {
   // Shell
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke('shell:open-external', url),
+  
+  // Open local file with system default application (for PDFs, etc.)
+  openPath: (filePath: string): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('shell:open-path', filePath),
 
   // Task operations
   startTask: (config: { description: string }): Promise<unknown> =>
@@ -168,6 +172,19 @@ const accomplishAPI = {
   getProviderDebugMode: (): Promise<boolean> =>
     ipcRenderer.invoke('provider-settings:get-debug'),
 
+  // Shopify
+  connectShopify: (credentials: { shopDomain: string; accessToken: string }): Promise<{ success: boolean; shopDomain: string }> =>
+    ipcRenderer.invoke('shopify:connect', credentials),
+  disconnectShopify: (): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('shopify:disconnect'),
+  testShopifyConnection: (credentials?: { shopDomain: string; accessToken: string }): Promise<{
+    success: boolean;
+    shop?: { name: string; domain: string; email: string };
+    error?: string;
+  }> => ipcRenderer.invoke('shopify:test-connection', credentials),
+  getShopifyStatus: (): Promise<{ connected: boolean; shopDomain?: string }> =>
+    ipcRenderer.invoke('shopify:status'),
+
   // Event subscriptions
   onTaskUpdate: (callback: (event: unknown) => void) => {
     const listener = (_: unknown, event: unknown) => callback(event);
@@ -216,6 +233,128 @@ const accomplishAPI = {
 
   logEvent: (payload: { level?: string; message: string; context?: Record<string, unknown> }) =>
     ipcRenderer.invoke('log:event', payload),
+
+  // ============================================
+  // Brand Memory API
+  // ============================================
+  
+  // Save brand profile
+  saveBrandProfile: (profile: unknown): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('brand:save', profile),
+  
+  // Get active brand profile
+  getActiveBrandProfile: (): Promise<unknown | null> =>
+    ipcRenderer.invoke('brand:get-active'),
+  
+  // Get brand profile by ID
+  getBrandProfile: (id: string): Promise<unknown | null> =>
+    ipcRenderer.invoke('brand:get', id),
+  
+  // Get all brand profiles
+  listBrandProfiles: (): Promise<unknown[]> =>
+    ipcRenderer.invoke('brand:list'),
+  
+  // Update brand profile
+  updateBrandProfile: (id: string, updates: unknown): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('brand:update', id, updates),
+  
+  // Delete brand profile
+  deleteBrandProfile: (id: string): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('brand:delete', id),
+  
+  // Set active brand profile
+  setActiveBrandProfile: (id: string): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('brand:set-active', id),
+  
+  // Check if any brand profile exists
+  hasBrandProfile: (): Promise<boolean> =>
+    ipcRenderer.invoke('brand:has-profile'),
+  
+  // Get brand context for prompts
+  getBrandContext: (brandId?: string): Promise<string> =>
+    ipcRenderer.invoke('brand:get-context', brandId),
+  
+  // Add example for learning
+  addBrandExample: (brandId: string, exampleType: string, inputText: string | null, outputText: string, rating?: number): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('brand:add-example', brandId, exampleType, inputText, outputText, rating),
+  
+  // Import brand memory from JSON
+  importBrandMemory: (brandId: string, memoryData: unknown): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('brand:import-memory', brandId, memoryData),
+  
+  // Get brand memory
+  getBrandMemory: (brandId?: string): Promise<unknown | null> =>
+    ipcRenderer.invoke('brand:get-memory', brandId),
+
+  // ============================================
+  // Space Runtime API (Python Lambda Spaces)
+  // ============================================
+
+  // Match a prompt to the best space
+  matchPromptToSpace: (prompt: string): Promise<{
+    matched: boolean;
+    space: unknown | null;
+    confidence: number;
+    matchedKeywords: string[];
+    matchedPatterns: string[];
+  }> => ipcRenderer.invoke('space-runtime:match', prompt),
+
+  // Get suggested spaces for a prompt
+  getSuggestedSpaces: (prompt: string): Promise<Array<{
+    space: unknown;
+    confidence: number;
+    matchedKeywords: string[];
+  }>> => ipcRenderer.invoke('space-runtime:suggestions', prompt),
+
+  // Check if space runtime is available
+  isSpaceRuntimeAvailable: (): Promise<boolean> =>
+    ipcRenderer.invoke('space-runtime:is-available'),
+
+  // List spaces from remote runtime
+  listRemoteSpaces: (): Promise<unknown[]> =>
+    ipcRenderer.invoke('space-runtime:list-remote'),
+
+  // Execute a space
+  executeSpace: (spaceId: string, inputs: Record<string, unknown>): Promise<{
+    success: boolean;
+    outputAssets: Array<{ type: string; url?: string; content?: string }>;
+    error?: string;
+    metadata?: Record<string, unknown>;
+  }> => ipcRenderer.invoke('space-runtime:execute', spaceId, inputs),
+
+  // Get local space registry
+  getSpaceRegistry: (): Promise<unknown> =>
+    ipcRenderer.invoke('space-runtime:registry'),
+
+  // ============================================
+  // File Picker API (User File Attachment)
+  // ============================================
+
+  // Open native file picker dialog for attaching files to messages
+  openFilePicker: (): Promise<{
+    canceled: boolean;
+    filePaths: string[];
+  }> => ipcRenderer.invoke('dialog:open-file'),
+
+  // Open native file picker dialog for JSON files (brand memory import)
+  openJsonFilePicker: (): Promise<{
+    canceled: boolean;
+    filePath: string | null;
+    data?: unknown;
+  }> => ipcRenderer.invoke('dialog:open-json'),
+
+  // ============================================
+  // Media File API (Local File Loading)
+  // ============================================
+
+  // Load a local file as base64 data URL
+  // Used to display local images/videos that Claude creates
+  loadLocalFile: (filePath: string): Promise<{
+    dataUrl: string;
+    mimeType: string;
+    size: number;
+    fileName: string;
+  }> => ipcRenderer.invoke('media:load-local-file', filePath),
 };
 
 // Expose the API to the renderer

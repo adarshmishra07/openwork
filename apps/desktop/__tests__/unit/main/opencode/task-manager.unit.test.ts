@@ -19,7 +19,7 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
-import type { TaskConfig, TaskResult, OpenCodeMessage, PermissionRequest } from '@accomplish/shared';
+import type { TaskConfig, TaskResult, OpenCodeMessage, PermissionRequest } from '@brandwork/shared';
 
 // Mock electron module
 const mockApp = {

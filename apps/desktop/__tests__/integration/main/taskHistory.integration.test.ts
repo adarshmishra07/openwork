@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import type { Task, TaskMessage } from '@accomplish/shared';
+import type { Task, TaskMessage } from '@brandwork/shared';
 
 // Create a unique temp directory for each test run
 let tempDir: string;

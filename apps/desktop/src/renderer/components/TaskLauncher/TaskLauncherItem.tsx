@@ -1,6 +1,6 @@
 'use client';
 
-import type { Task } from '@accomplish/shared';
+import type { Task } from '@brandwork/shared';
 import { cn } from '@/lib/utils';
 import { Loader2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 
@@ -28,7 +28,7 @@ function getStatusIcon(status: Task['status']) {
     case 'running':
       return <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" />;
     case 'completed':
-      return <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />;
+      return <CheckCircle2 className="h-3 w-3 text-foreground shrink-0" />;
     case 'failed':
       return <XCircle className="h-3 w-3 text-destructive shrink-0" />;
     case 'cancelled':

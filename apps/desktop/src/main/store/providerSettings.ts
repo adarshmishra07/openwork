@@ -1,7 +1,7 @@
 // apps/desktop/src/main/store/providerSettings.ts
 
 import Store from 'electron-store';
-import type { ProviderSettings, ProviderId, ConnectedProvider } from '@accomplish/shared';
+import type { ProviderSettings, ProviderId, ConnectedProvider } from '@brandwork/shared';
 
 const DEFAULT_SETTINGS: ProviderSettings = {
   activeProviderId: null,

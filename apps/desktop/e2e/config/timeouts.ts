@@ -26,6 +26,12 @@ export const TEST_TIMEOUTS = {
 
   /** Wait for task to reach completed/failed/stopped state */
   TASK_COMPLETE_WAIT: 20000,
+
+  /** Space execution (image generation can take 30-90s) */
+  SPACE_EXECUTION: 120000,
+
+  /** Space matching (quick API call) */
+  SPACE_MATCHING: 5000,
 } as const;
 
 /**
@@ -57,6 +63,54 @@ export const TEST_SCENARIOS = {
     keyword: '__e2e_question__',
     description: 'Task requires user question/choice',
   },
+  // Space-related scenarios (from PRD)
+  SPACE_BACKGROUND_REMOVE: {
+    keyword: '__e2e_space_bg__',
+    description: 'Space: Remove background from product image',
+    spaceId: 'background-remover',
+  },
+  SPACE_PRODUCT_SWAP: {
+    keyword: '__e2e_space_swap__',
+    description: 'Space: Swap product into a new scene',
+    spaceId: 'product-swap',
+  },
+  SPACE_STEAL_LOOK: {
+    keyword: '__e2e_space_style__',
+    description: 'Space: Apply editorial style from reference image',
+    spaceId: 'steal-the-look',
+  },
+  SPACE_SKETCH_TO_PRODUCT: {
+    keyword: '__e2e_space_sketch__',
+    description: 'Space: Convert sketch to photorealistic render',
+    spaceId: 'sketch-to-product',
+  },
+} as const;
+
+/**
+ * Example prompts for spaces (from PRD)
+ * These are real prompts users would enter
+ */
+export const SPACE_PROMPTS = {
+  BACKGROUND_REMOVE: [
+    'Remove the background from this image',
+    'Make the background transparent',
+    'Create a cutout of this product',
+  ],
+  PRODUCT_SWAP: [
+    'Swap my product into this lifestyle scene',
+    'Place this product on that background',
+    'Put my watch in this bedroom setting',
+  ],
+  STEAL_LOOK: [
+    'Steal the look from this campaign photo',
+    'Match the style of this editorial',
+    'Make my product look like this vibe',
+  ],
+  SKETCH_TO_PRODUCT: [
+    'Turn this sketch into a product render',
+    'Convert my drawing to a photorealistic image',
+    'Visualize this concept sketch',
+  ],
 } as const;
 
 export type TestScenario = keyof typeof TEST_SCENARIOS;

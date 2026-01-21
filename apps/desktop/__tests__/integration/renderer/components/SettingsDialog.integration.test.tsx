@@ -16,7 +16,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import type { ApiKeyConfig } from '@accomplish/shared';
+import type { ApiKeyConfig } from '@brandwork/shared';
 
 // Mock analytics to prevent tracking calls
 vi.mock('@/lib/analytics', () => ({

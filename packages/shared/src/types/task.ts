@@ -27,6 +27,8 @@ export interface TaskConfig {
   outputSchema?: object;
   /** Session ID for resuming */
   sessionId?: string;
+  /** File paths to attach to the message */
+  files?: string[];
 }
 
 export interface Task {
@@ -41,6 +43,8 @@ export interface Task {
   startedAt?: string;
   completedAt?: string;
   result?: TaskResult;
+  /** Error message when task fails */
+  error?: string;
 }
 
 export interface TaskAttachment {
@@ -58,6 +62,12 @@ export interface TaskMessage {
   timestamp: string;
   /** Attachments like screenshots captured during browser automation */
   attachments?: TaskAttachment[];
+  /** Subtype for assistant messages: 'thinking' (internal updates) vs 'response' (final output to user) */
+  subtype?: 'thinking' | 'response';
+  /** Status for tool messages */
+  toolStatus?: 'running' | 'completed' | 'error';
+  /** Human-readable label for display (e.g., "Product created" instead of raw JSON) */
+  displayLabel?: string;
 }
 
 export interface TaskResult {

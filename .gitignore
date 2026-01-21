@@ -59,3 +59,36 @@ prisma/*.db-journal
 
 # Bundled Node.js binaries (downloaded via `pnpm -F @accomplish/desktop download:nodejs`)
 apps/desktop/resources/nodejs/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+ENV/
+env/
+.eggs/
+*.egg-info/
+*.egg
+
+# Serverless
+.serverless/
+
+# Backup files
+*.backup
+
+# Skills local dependencies and builds (installed via postinstall)
+apps/desktop/skills/*/node_modules/
+apps/desktop/skills/*/dist/
+apps/desktop/skills/dev-browser/tmp/
+
+# Package lock files in skills (npm install creates these)
+apps/desktop/skills/*/package-lock.json
+
+# Space runtime service
+services/space-runtime/.env
+services/space-runtime/.requirements.zip
+services/space-runtime/package-lock.json

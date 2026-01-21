@@ -42,6 +42,12 @@ export default defineConfig({
       testMatch: /.*integration\.spec\.ts/,
       timeout: 120000,
       retries: 0,
+    },
+    {
+      name: 'electron-spaces',
+      testMatch: /.*spaces.*\.spec\.ts/,
+      timeout: 180000, // Spaces can take longer due to LLM calls
+      retries: 1,
     }
   ],
 });

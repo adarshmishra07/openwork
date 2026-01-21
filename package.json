@@ -1,18 +1,18 @@
 {
-  "name": "accomplish",
+  "name": "brandwork",
   "version": "0.1.0",
   "private": true,
-  "description": "The open source AI coworker that lives on your desktop",
-  "author": "Accomplish Inc",
+  "description": "AI work companion for e-commerce brands - learns your brand voice and does real commerce work",
+  "author": "ShopOS",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/accomplish-ai/openwork.git"
+    "url": "https://github.com/shopos/brandwork.git"
   },
   "scripts": {
-    "dev": "pnpm -F @accomplish/desktop dev",
+    "dev": "pnpm -F @brandwork/desktop dev",
     "build": "pnpm -r build",
-    "build:desktop": "pnpm -F @accomplish/desktop build",
+    "build:desktop": "pnpm -F @brandwork/desktop build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "clean": "pnpm -r clean && rm -rf node_modules"

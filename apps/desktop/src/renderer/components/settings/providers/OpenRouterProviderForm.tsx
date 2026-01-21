@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { getAccomplish } from '@/lib/accomplish';
-import type { ConnectedProvider, OpenRouterCredentials } from '@accomplish/shared';
-import { PROVIDER_META } from '@accomplish/shared';
+import type { ConnectedProvider, OpenRouterCredentials } from '@brandwork/shared';
+import { PROVIDER_META } from '@brandwork/shared';
 import {
   ModelSelector,
   ConnectButton,

@@ -101,13 +101,23 @@ export function getOpenCodeCliPath(): { command: string; args: string[] } {
       }
     }
 
-    // Try bundled CLI in node_modules
+    // Check bundled CLI in node_modules
     // Use app.getAppPath() instead of process.cwd() as cwd is unpredictable in Electron IPC handlers
     const binName = process.platform === 'win32' ? 'opencode.cmd' : 'opencode';
-    const devCliPath = path.join(app.getAppPath(), 'node_modules', '.bin', binName);
-    if (fs.existsSync(devCliPath)) {
-      console.log('[CLI Path] Using bundled CLI:', devCliPath);
-      return { command: devCliPath, args: [] };
+    
+    // Check multiple possible locations for dev mode
+    const possiblePaths = [
+      path.join(app.getAppPath(), 'node_modules', '.bin', binName),
+      path.join(process.cwd(), 'node_modules', '.bin', binName),
+      path.join(process.cwd(), 'apps', 'desktop', 'node_modules', '.bin', binName),
+      path.join(path.resolve(app.getAppPath(), '..'), 'node_modules', '.bin', binName), // Look up one level
+    ];
+
+    for (const devCliPath of possiblePaths) {
+      if (fs.existsSync(devCliPath)) {
+        console.log('[CLI Path] Using bundled CLI:', devCliPath);
+        return { command: devCliPath, args: [] };
+      }
     }
 
     // Final fallback: try 'opencode' on PATH
@@ -177,13 +187,24 @@ export function isOpenCodeBundled(): boolean {
         }
       }
 
-      // Check bundled CLI in node_modules
-      // Use app.getAppPath() instead of process.cwd() as cwd is unpredictable in Electron IPC handlers
-      const binName = process.platform === 'win32' ? 'opencode.cmd' : 'opencode';
-      const devCliPath = path.join(app.getAppPath(), 'node_modules', '.bin', binName);
+    // Check bundled CLI in node_modules
+    // Use app.getAppPath() instead of process.cwd() as cwd is unpredictable in Electron IPC handlers
+    const binName = process.platform === 'win32' ? 'opencode.cmd' : 'opencode';
+    
+    // Check multiple possible locations for dev mode
+    const possiblePaths = [
+      path.join(app.getAppPath(), 'node_modules', '.bin', binName),
+      path.join(process.cwd(), 'node_modules', '.bin', binName),
+      path.join(process.cwd(), 'apps', 'desktop', 'node_modules', '.bin', binName),
+      path.join(path.resolve(app.getAppPath(), '..'), 'node_modules', '.bin', binName), // Look up one level
+    ];
+
+    for (const devCliPath of possiblePaths) {
       if (fs.existsSync(devCliPath)) {
+        console.log('[CLI Path] Using bundled CLI:', devCliPath);
         return true;
       }
+    }
 
       // Final fallback: check if opencode is available on PATH
       // This handles installations in non-standard locations

@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { isRunningInElectron, getAccomplish } from './lib/accomplish';
 import { springs, variants } from './lib/animations';
 import { analytics } from './lib/analytics';
+import type { BrandProfile } from '@brandwork/shared';
 
 // Pages
 import HomePage from './pages/Home';
@@ -14,14 +15,16 @@ import ExecutionPage from './pages/Execution';
 // Components
 import Sidebar from './components/layout/Sidebar';
 import { TaskLauncher } from './components/TaskLauncher';
+import { BrandOnboarding } from './components/onboarding/BrandOnboarding';
 import { useTaskStore } from './stores/taskStore';
 import { Loader2, AlertTriangle } from 'lucide-react';
 
-type AppStatus = 'loading' | 'ready' | 'error';
+type AppStatus = 'loading' | 'onboarding' | 'ready' | 'error';
 
 export default function App() {
   const [status, setStatus] = useState<AppStatus>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [brandProfile, setBrandProfile] = useState<BrandProfile | null>(null);
   const location = useLocation();
 
   // Get launcher actions
@@ -49,25 +52,53 @@ export default function App() {
     const checkStatus = async () => {
       // Check if running in Electron
       if (!isRunningInElectron()) {
-        setErrorMessage('This application must be run inside the Openwork desktop app.');
+        setErrorMessage('This application must be run inside the BrandWork desktop app.');
         setStatus('error');
         return;
       }
 
       try {
         const accomplish = getAccomplish();
-        // Mark onboarding as complete (no welcome screen needed)
-        await accomplish.setOnboardingComplete(true);
-        setStatus('ready');
+        const onboardingComplete = await accomplish.getOnboardingComplete();
+        
+        if (onboardingComplete) {
+          // Load saved brand profile from storage
+          const savedProfile = await accomplish.getActiveBrandProfile() as BrandProfile | null;
+          if (savedProfile) {
+            setBrandProfile(savedProfile);
+          }
+          setStatus('ready');
+        } else {
+          // Show brand onboarding
+          setStatus('onboarding');
+        }
       } catch (error) {
         console.error('Failed to initialize app:', error);
-        // Still allow app to run even if setting fails
-        setStatus('ready');
+        // Show onboarding if we can't determine status
+        setStatus('onboarding');
       }
     };
 
     checkStatus();
   }, []);
+
+  const handleOnboardingComplete = async (profile: BrandProfile) => {
+    try {
+      const accomplish = getAccomplish();
+      // Save brand profile to SQLite
+      await accomplish.saveBrandProfile(profile);
+      await accomplish.setActiveBrandProfile(profile.id);
+      setBrandProfile(profile);
+      await accomplish.setOnboardingComplete(true);
+      setStatus('ready');
+      console.log('Brand onboarding complete:', profile);
+    } catch (error) {
+      console.error('Failed to complete onboarding:', error);
+      // Still proceed to app
+      setBrandProfile(profile);
+      setStatus('ready');
+    }
+  };
 
   // Loading state
   if (status === 'loading') {
@@ -93,6 +124,11 @@ export default function App() {
         </div>
       </div>
     );
+  }
+
+  // Onboarding state
+  if (status === 'onboarding') {
+    return <BrandOnboarding onComplete={handleOnboardingComplete} />;
   }
 
   // Ready - render the app with sidebar

@@ -1,5 +1,15 @@
 import Store from 'electron-store';
-import type { Task, TaskMessage, TaskStatus } from '@accomplish/shared';
+import type { Task, TaskMessage, TaskStatus } from '@brandwork/shared';
+
+/**
+ * Key asset tracked during task execution for context preservation on resume
+ */
+export interface KeyAsset {
+  type: 'image' | 'file' | 'url';
+  url: string;
+  description: string;
+  timestamp: string;
+}
 
 /**
  * Task entry stored in history
@@ -12,6 +22,8 @@ export interface StoredTask {
   status: TaskStatus;
   messages: TaskMessage[];
   sessionId?: string;
+  /** Key assets (images, files, URLs) from the conversation for context on resume */
+  keyAssets?: KeyAsset[];
   createdAt: string;
   startedAt?: string;
   completedAt?: string;
@@ -175,6 +187,46 @@ export function updateTaskSummary(taskId: string, summary: string): void {
     tasks[taskIndex].summary = summary;
     schedulePersist([...tasks]);
   }
+}
+
+/**
+ * Add a key asset to a task for context preservation on resume
+ * Deduplicates by URL to avoid storing the same asset multiple times
+ */
+export function addKeyAsset(taskId: string, asset: KeyAsset): void {
+  const tasks = getCurrentTasks();
+  const taskIndex = tasks.findIndex((t) => t.id === taskId);
+
+  if (taskIndex >= 0) {
+    if (!tasks[taskIndex].keyAssets) {
+      tasks[taskIndex].keyAssets = [];
+    }
+    
+    // Deduplicate by URL
+    const existingIndex = tasks[taskIndex].keyAssets!.findIndex(a => a.url === asset.url);
+    if (existingIndex >= 0) {
+      // Update existing asset with new description if provided
+      if (asset.description) {
+        tasks[taskIndex].keyAssets![existingIndex].description = asset.description;
+      }
+    } else {
+      // Add new asset (limit to 20 most recent to avoid bloat)
+      tasks[taskIndex].keyAssets!.push(asset);
+      if (tasks[taskIndex].keyAssets!.length > 20) {
+        tasks[taskIndex].keyAssets = tasks[taskIndex].keyAssets!.slice(-20);
+      }
+    }
+    
+    schedulePersist([...tasks]);
+  }
+}
+
+/**
+ * Get key assets for a task
+ */
+export function getKeyAssets(taskId: string): KeyAsset[] {
+  const task = getTask(taskId);
+  return task?.keyAssets || [];
 }
 
 /**

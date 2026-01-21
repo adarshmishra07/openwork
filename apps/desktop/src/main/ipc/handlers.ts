@@ -54,7 +54,7 @@ import {
   getProviderDebugMode,
   hasReadyProvider,
 } from '../store/providerSettings';
-import type { ProviderId, ConnectedProvider, BedrockCredentials } from '@accomplish/shared';
+import type { ProviderId, ConnectedProvider, BedrockCredentials } from '@brandwork/shared';
 import { getDesktopConfig } from '../config';
 import {
   startPermissionApiServer,
@@ -75,8 +75,8 @@ import type {
   SelectedModel,
   OllamaConfig,
   LiteLLMConfig,
-} from '@accomplish/shared';
-import { DEFAULT_PROVIDERS } from '@accomplish/shared';
+} from '@brandwork/shared';
+import { DEFAULT_PROVIDERS } from '@brandwork/shared';
 import {
   normalizeIpcError,
   permissionResponseSchema,
@@ -1725,7 +1725,7 @@ function toTaskMessage(message: OpenCodeMessage): TaskMessage | null {
 
   // Handle tool_use messages (combined tool call + result)
   if (message.type === 'tool_use') {
-    const toolUseMsg = message as import('@accomplish/shared').OpenCodeToolUseMessage;
+    const toolUseMsg = message as import('@brandwork/shared').OpenCodeToolUseMessage;
     const toolName = toolUseMsg.part.tool || 'unknown';
     const toolInput = toolUseMsg.part.state?.input;
     const toolOutput = toolUseMsg.part.state?.output || '';

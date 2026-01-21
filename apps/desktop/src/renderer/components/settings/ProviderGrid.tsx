@@ -2,8 +2,8 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import type { ProviderId, ProviderSettings } from '@accomplish/shared';
-import { PROVIDER_META } from '@accomplish/shared';
+import type { ProviderId, ProviderSettings } from '@brandwork/shared';
+import { PROVIDER_META } from '@brandwork/shared';
 import { ProviderCard } from './ProviderCard';
 import { settingsVariants, settingsTransitions } from '@/lib/animations';
 

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { getAccomplish } from '@/lib/accomplish';
 import { settingsVariants, settingsTransitions } from '@/lib/animations';
-import type { ConnectedProvider, OllamaCredentials } from '@accomplish/shared';
+import type { ConnectedProvider, OllamaCredentials } from '@brandwork/shared';
 import {
   ModelSelector,
   ConnectButton,
