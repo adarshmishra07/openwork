@@ -1758,6 +1758,17 @@ export function registerIPCHandlers(): void {
       throw new Error(`Failed to load file: ${filePath}`);
     }
   });
+
+  // ============================================
+  // Shopify Handlers
+  // ============================================
+
+  // Shopify: Get connection status
+  handle('shopify:status', async () => {
+    // TODO: Implement actual Shopify connection check
+    // For now, return disconnected status
+    return { connected: false };
+  });
 }
 
 function createTaskId(): string {
