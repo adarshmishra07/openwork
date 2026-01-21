@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Trash2, Store, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
-import type { ApiKeyConfig, SelectedModel, ProviderId } from '@brandwork/shared';
+import type { ApiKeyConfig, SelectedModel, ProviderId as SharedProviderId } from '@brandwork/shared';
 import { DEFAULT_PROVIDERS, DEFAULT_MODELS } from '@brandwork/shared';
 import logoImage from '/assets/logo.png';
 
@@ -358,12 +358,14 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
       const savedKey = await accomplish.addApiKey(provider, trimmedKey);
       
       // Auto-connect the provider with a default model
-      const providerId = provider as ProviderId;
+      const providerId = provider as SharedProviderId;
       const defaultModel = DEFAULT_MODELS[providerId] || null;
       await accomplish.setConnectedProvider(providerId, {
+        providerId,
         connectionStatus: 'connected',
         selectedModelId: defaultModel,
-        connectedAt: new Date().toISOString(),
+        credentials: { type: 'api_key', keyPrefix: trimmedKey.substring(0, 8) },
+        lastConnectedAt: new Date().toISOString(),
       });
       
       // Set as active provider if none is active

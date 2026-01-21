@@ -92,7 +92,29 @@ export function RichContentRenderer({ content, className }: RichContentRendererP
             p: ({ children }) => <p className="text-foreground">{children}</p>,
             li: ({ children }) => <li className="text-foreground">{children}</li>,
             strong: ({ children }) => <strong className="text-foreground font-semibold">{children}</strong>,
-            a: ({ href, children }) => <a href={href} className="text-foreground underline">{children}</a>,
+            a: ({ href, children }) => {
+              if (!href) return <span>{children}</span>;
+              
+              // Check if link points to an image
+              const isImageLink = /\.(png|jpg|jpeg|gif|webp|svg|bmp|avif)(\?|$)/i.test(href);
+              if (isImageLink) {
+                // Normalize local paths
+                const normalizedHref = isLocalPath(href) ? normalizeLocalPath(href) : href;
+                return <ImageRenderer url={normalizedHref} alt={String(children) || 'Image'} maxWidth={600} />;
+              }
+              
+              // Regular link - open in external browser
+              return (
+                <a 
+                  href={href} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="text-foreground underline hover:text-foreground/80"
+                >
+                  {children}
+                </a>
+              );
+            },
           }}
         >
           {textContent}

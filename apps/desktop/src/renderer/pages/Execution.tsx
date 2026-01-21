@@ -11,10 +11,12 @@ import { hasAnyReadyProvider } from '@brandwork/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { XCircle, CornerDownLeft, ArrowLeft, CheckCircle2, AlertCircle, AlertTriangle, Terminal, Wrench, FileText, Search, Code, Brain, Clock, Square, Play, Download, File, Bug, ChevronUp, ChevronDown, Trash2, Check } from 'lucide-react';
+import { XCircle, CornerDownLeft, ArrowLeft, CheckCircle2, AlertCircle, AlertTriangle, Terminal, Wrench, FileText, Search, Code, Brain, Clock, Square, Play, Download, File, Bug, ChevronUp, ChevronDown, Trash2, Check, Sparkles, BookOpen, Palette } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import { StreamingText } from '../components/ui/streaming-text';
+import { RichContentRenderer } from '../components/media/RichContentRenderer';
 import { isWaitingForUser } from '../lib/waiting-detection';
 import loadingSymbol from '/assets/loading-symbol.svg';
 import SettingsDialog from '../components/layout/SettingsDialog';
@@ -53,6 +55,132 @@ const TOOL_PROGRESS_MAP: Record<string, { label: string; icon: typeof FileText }
   dev_browser_execute: { label: 'Executing browser action', icon: Terminal },
 };
 
+// Message type detection and formatting helpers
+type ActivityType = 'thinking' | 'tool' | 'skill' | 'space' | 'browser';
+
+interface ActivityInfo {
+  type: ActivityType;
+  label: string;
+  detail?: string;
+  icon: typeof Brain;
+}
+
+/**
+ * Format a raw tool/skill name into a clean, readable label
+ * Examples:
+ *   "skill-loader_load_skill" -> "Loading Skill"
+ *   "space_product_swap" -> "Product Swap"
+ *   "dev-browser-mcp_browser_navigate" -> "Browser Navigate"
+ *   "shopify_get_products" -> "Get Products"
+ */
+function formatToolName(rawName: string): string {
+  // Remove common prefixes (MCP server names, etc.)
+  let name = rawName
+    .replace(/^skill-loader_/, '')
+    .replace(/^dev-browser-mcp_/, '')
+    .replace(/^dev_browser_/, '')
+    .replace(/^space-runtime_/, '')
+    .replace(/^space_/, '')
+    .replace(/^browser_/, '')
+    .replace(/^shopify_/, '')
+    .replace(/^mcp_/, '');
+  
+  // Convert snake_case and kebab-case to Title Case
+  name = name
+    .replace(/[-_]/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+  
+  // Clean up common patterns for better readability
+  name = name
+    .replace(/^Load Skill$/, 'Loading Skill')
+    .replace(/^List Skills$/, 'Listing Skills')
+    .replace(/^Browser Execute$/, 'Browser Action')
+    .replace(/^Browser Snapshot$/, 'Page Snapshot')
+    .replace(/^Browser Screenshot$/, 'Screenshot')
+    .replace(/^Browser Navigate$/, 'Navigating')
+    .replace(/^Browser Click$/, 'Clicking')
+    .replace(/^Browser Type$/, 'Typing')
+    .replace(/^Browser Scroll$/, 'Scrolling')
+    .replace(/^Execute$/, 'Browser Action')
+    .replace(/^Snapshot$/, 'Page Snapshot')
+    .replace(/^Navigate$/, 'Navigating')
+    .replace(/^Click$/, 'Clicking')
+    .replace(/^Type$/, 'Typing');
+  
+  return name;
+}
+
+/**
+ * Detect the type of activity from a tool name
+ */
+function detectActivityType(toolName: string): ActivityType {
+  if (toolName.startsWith('skill-loader') || toolName.includes('load_skill')) {
+    return 'skill';
+  }
+  if (toolName.startsWith('space_') || toolName.startsWith('space-runtime')) {
+    return 'space';
+  }
+  if (toolName.startsWith('browser_') || toolName.startsWith('dev_browser') || toolName.startsWith('dev-browser')) {
+    return 'browser';
+  }
+  return 'tool';
+}
+
+/**
+ * Get activity info for rendering badges
+ */
+function getActivityInfo(toolName: string, toolInput?: unknown): ActivityInfo {
+  const type = detectActivityType(toolName);
+  const label = formatToolName(toolName);
+  
+  // Extract detail (e.g., skill name, space name)
+  let detail: string | undefined;
+  if (type === 'skill' && toolInput && typeof toolInput === 'object') {
+    const input = toolInput as { skill_name?: string };
+    if (input.skill_name) {
+      detail = formatToolName(input.skill_name);
+    }
+  }
+  
+  // Select icon based on type
+  let icon: typeof Brain;
+  switch (type) {
+    case 'skill':
+      icon = BookOpen;
+      break;
+    case 'space':
+      icon = Sparkles;
+      break;
+    case 'browser':
+      icon = Search;
+      break;
+    default:
+      icon = Wrench;
+  }
+  
+  return { type, label, detail, icon };
+}
+
+/**
+ * Check if a message is a "final response" (should be rendered as full bubble)
+ * vs an intermediate activity (should be rendered as simple italic text)
+ */
+function isFinalResponse(message: TaskMessage, isLastAssistant: boolean): boolean {
+  // User messages are always full bubbles
+  if (message.type === 'user') return true;
+  
+  // Tool messages are never final responses (rendered as badges)
+  if (message.type === 'tool') return false;
+  
+  // Assistant messages: ONLY the last one gets a full bubble
+  // All intermediate assistant messages become simple italic text
+  if (message.type === 'assistant') {
+    return isLastAssistant;
+  }
+  
+  return true;
+}
+
 // Debounce utility
 function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T {
   let timeoutId: ReturnType<typeof setTimeout>;
@@ -62,16 +190,11 @@ function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T 
   }) as T;
 }
 
-// Helper for file operation badge colors
+// Helper for file operation badge colors - only delete uses red (semantic: danger)
 function getOperationBadgeClasses(operation?: string): string {
   switch (operation) {
     case 'delete': return 'bg-red-500/10 text-red-600';
-    case 'overwrite': return 'bg-orange-500/10 text-orange-600';
-    case 'modify': return 'bg-yellow-500/10 text-yellow-600';
-    case 'create': return 'bg-green-500/10 text-green-600';
-    case 'rename':
-    case 'move': return 'bg-blue-500/10 text-blue-600';
-    default: return 'bg-gray-500/10 text-gray-600';
+    default: return 'bg-muted text-muted-foreground';
   }
 }
 
@@ -247,7 +370,8 @@ export default function ExecutionPage() {
   // Auto-focus follow-up input when task completes
   const isComplete = ['completed', 'failed', 'cancelled', 'interrupted'].includes(currentTask?.status ?? '');
   const hasSession = currentTask?.sessionId || currentTask?.result?.sessionId;
-  const canFollowUp = isComplete && (hasSession || currentTask?.status === 'interrupted');
+  // Always allow follow-up on completed tasks - will continue session if available, or start fresh
+  const canFollowUp = isComplete;
 
   useEffect(() => {
     if (canFollowUp) {
@@ -382,7 +506,7 @@ export default function ExecutionPage() {
     switch (currentTask.status) {
       case 'queued':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-600 shrink-0">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground shrink-0">
             <Clock className="h-3 w-3" />
             Queued
           </span>
@@ -420,7 +544,7 @@ export default function ExecutionPage() {
         );
       case 'interrupted':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-600 shrink-0">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground shrink-0">
             <Square className="h-3 w-3" />
             Stopped
           </span>
@@ -604,14 +728,12 @@ export default function ExecutionPage() {
       {/* Messages - normal state (running, completed, failed, etc.) */}
       {currentTask.status !== 'queued' && (
         <div className="flex-1 overflow-y-auto px-6 py-6">
-          <div className="max-w-4xl mx-auto space-y-4">
-            {currentTask.messages
-              .filter((m) => !(m.type === 'tool' && m.toolName?.toLowerCase() === 'bash'))
-              .map((message, index, filteredMessages) => {
-              const isLastMessage = index === filteredMessages.length - 1;
-              const isLastAssistantMessage =
-                message.type === 'assistant' && isLastMessage;
-              // Find the last assistant message index for the continue button
+          <div className="max-w-4xl mx-auto space-y-2">
+            {(() => {
+              const filteredMessages = currentTask.messages
+                .filter((m) => !(m.type === 'tool' && m.toolName?.toLowerCase() === 'bash'));
+              
+              // Find the last assistant message index
               let lastAssistantIndex = -1;
               for (let i = filteredMessages.length - 1; i >= 0; i--) {
                 if (filteredMessages[i].type === 'assistant') {
@@ -619,49 +741,64 @@ export default function ExecutionPage() {
                   break;
                 }
               }
-              const isLastAssistantForContinue = index === lastAssistantIndex;
-              // Show continue button on last assistant message when:
-              // - Task was interrupted (user can always continue)
-              // - Task completed AND the message indicates agent is waiting for user action
-              const showContinue = isLastAssistantForContinue && !!hasSession &&
-                (currentTask.status === 'interrupted' ||
-                 (currentTask.status === 'completed' && isWaitingForUser(message.content)));
-              return (
-                <MessageBubble
-                  key={message.id}
-                  message={message}
-                  shouldStream={isLastAssistantMessage && currentTask.status === 'running'}
-                  isLastMessage={isLastMessage}
-                  isRunning={currentTask.status === 'running'}
-                  showContinueButton={showContinue}
-                  continueLabel={currentTask.status === 'interrupted' ? 'Continue' : 'Done, Continue'}
-                  onContinue={handleContinue}
-                  isLoading={isLoading}
-                />
-              );
-            })}
+              
+              return filteredMessages.map((message, index) => {
+                const isLastMessage = index === filteredMessages.length - 1;
+                const isLastAssistantMessage = index === lastAssistantIndex;
+                
+                // Show continue button on last assistant message when:
+                // - Task was interrupted (user can always continue)
+                // - Task completed AND the message indicates agent is waiting for user action
+                const showContinue = isLastAssistantMessage && !!hasSession &&
+                  (currentTask.status === 'interrupted' ||
+                   (currentTask.status === 'completed' && isWaitingForUser(message.content)));
+                
+                return (
+                  <MessageBubble
+                    key={message.id}
+                    message={message}
+                    shouldStream={isLastAssistantMessage && currentTask.status === 'running'}
+                    isLastMessage={isLastMessage}
+                    isLastAssistantMessage={isLastAssistantMessage}
+                    isRunning={currentTask.status === 'running'}
+                    showContinueButton={showContinue}
+                    continueLabel={currentTask.status === 'interrupted' ? 'Continue' : 'Done, Continue'}
+                    onContinue={handleContinue}
+                    isLoading={isLoading}
+                  />
+                );
+              });
+            })()}
 
             <AnimatePresence>
               {currentTask.status === 'running' && !permissionRequest && (
                 <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -8 }}
                   transition={springs.gentle}
-                  className="flex items-center gap-2 text-muted-foreground py-2"
+                  className="flex items-center gap-2 py-1"
                   data-testid="execution-thinking-indicator"
                 >
-                  <SpinningIcon className="h-4 w-4" />
-                  <span className="text-sm">
-                    {currentTool
-                      ? ((currentToolInput as { description?: string })?.description || TOOL_PROGRESS_MAP[currentTool]?.label || currentTool)
+                  {/* Bullet point */}
+                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 shrink-0" />
+                  
+                  {/* Simple italic text for thinking/working - matches inactive style */}
+                  <span className="text-sm text-muted-foreground italic">
+                    {currentTool 
+                      ? (() => {
+                          const activity = getActivityInfo(currentTool, currentToolInput);
+                          const description = (currentToolInput as { description?: string })?.description;
+                          // Show skill/space name if available, otherwise description or label
+                          if (activity.detail) {
+                            return `${activity.label}: ${activity.detail}...`;
+                          }
+                          return description || `${activity.label}...`;
+                        })()
                       : 'Thinking...'}
                   </span>
-                  {currentTool && !(currentToolInput as { description?: string })?.description && (
-                    <span className="text-xs text-muted-foreground/60">
-                      ({currentTool})
-                    </span>
-                  )}
+                  
+                  <SpinningIcon className="h-3.5 w-3.5" />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -980,11 +1117,11 @@ export default function ExecutionPage() {
                   }
                 }}
                 placeholder={
-                  currentTask.status === 'interrupted'
-                    ? (hasSession ? "Give new instructions..." : "Send a new instruction to retry...")
-                    : currentTask.status === 'completed'
-                      ? "Give new instructions..."
-                      : "Ask for something..."
+                  currentTask.status === 'failed'
+                    ? "Try again or give new instructions..."
+                    : currentTask.status === 'interrupted'
+                      ? "Continue or give new instructions..."
+                      : "Give new instructions..."
                 }
                 disabled={isLoading}
                 className="flex-1"
@@ -1003,17 +1140,7 @@ export default function ExecutionPage() {
         </div>
       )}
 
-      {/* Completed/Failed state (no session to continue) */}
-      {isComplete && !canFollowUp && (
-        <div className="flex-shrink-0 border-t border-border bg-card/50 px-6 py-4 text-center">
-          <p className="text-sm text-muted-foreground mb-3">
-            Task {currentTask.status === 'interrupted' ? 'stopped' : currentTask.status}
-          </p>
-          <Button onClick={() => navigate('/')}>
-            Start New Task
-          </Button>
-        </div>
-      )}
+
 
       {/* Debug Panel - Only visible when debug mode is enabled */}
       {debugModeEnabled && (
@@ -1134,6 +1261,7 @@ interface MessageBubbleProps {
   message: TaskMessage;
   shouldStream?: boolean;
   isLastMessage?: boolean;
+  isLastAssistantMessage?: boolean;
   isRunning?: boolean;
   showContinueButton?: boolean;
   continueLabel?: string;
@@ -1141,17 +1269,105 @@ interface MessageBubbleProps {
   isLoading?: boolean;
 }
 
+// Activity Bullet component for non-final messages (thinking, tools, skills, spaces)
+const ActivityBullet = memo(function ActivityBullet({ 
+  message, 
+  isRunning = false,
+  isLastMessage = false 
+}: { 
+  message: TaskMessage; 
+  isRunning?: boolean;
+  isLastMessage?: boolean;
+}) {
+  const toolName = message.toolName || '';
+  const activity = getActivityInfo(toolName, message.toolInput);
+  const ActivityIcon = activity.icon;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -8 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={springs.gentle}
+      className="flex items-center gap-2 py-1"
+    >
+      {/* Bullet point */}
+      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 shrink-0" />
+      
+      {/* Badge for tool/skill/space - unified gray style */}
+      <Badge 
+        variant="outline" 
+        className="rounded-sm text-xs font-medium gap-1.5 py-0.5 px-2 bg-muted text-foreground border-border"
+      >
+        <ActivityIcon className="h-3 w-3" />
+        {activity.label}
+        {activity.detail && (
+          <span className="text-muted-foreground font-normal">
+            · {activity.detail}
+          </span>
+        )}
+      </Badge>
+      
+      {/* Loading spinner for active operations */}
+      {isLastMessage && isRunning && (
+        <SpinningIcon className="h-3.5 w-3.5" />
+      )}
+    </motion.div>
+  );
+});
+
+// Intermediate assistant message - simple italic text
+const IntermediateMessage = memo(function IntermediateMessage({ 
+  content,
+  isRunning = false,
+  isLastMessage = false 
+}: { 
+  content: string;
+  isRunning?: boolean;
+  isLastMessage?: boolean;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -8 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={springs.gentle}
+      className="flex items-start gap-2 py-1.5"
+    >
+      {/* Bullet point */}
+      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 shrink-0 mt-2" />
+      
+      {/* Simple italic text */}
+      <p className="text-sm text-muted-foreground italic leading-relaxed">
+        {content}
+      </p>
+      
+      {/* Loading spinner */}
+      {isLastMessage && isRunning && (
+        <SpinningIcon className="h-3.5 w-3.5 shrink-0 mt-1" />
+      )}
+    </motion.div>
+  );
+});
+
 // Memoized MessageBubble to prevent unnecessary re-renders and markdown re-parsing
-const MessageBubble = memo(function MessageBubble({ message, shouldStream = false, isLastMessage = false, isRunning = false, showContinueButton = false, continueLabel, onContinue, isLoading = false }: MessageBubbleProps) {
+const MessageBubble = memo(function MessageBubble({ 
+  message, 
+  shouldStream = false, 
+  isLastMessage = false, 
+  isLastAssistantMessage = false,
+  isRunning = false, 
+  showContinueButton = false, 
+  continueLabel, 
+  onContinue, 
+  isLoading = false 
+}: MessageBubbleProps) {
   const [streamComplete, setStreamComplete] = useState(!shouldStream);
   const isUser = message.type === 'user';
   const isTool = message.type === 'tool';
   const isSystem = message.type === 'system';
   const isAssistant = message.type === 'assistant';
 
-  // Get tool icon from mapping
-  const toolName = message.toolName || message.content?.match(/Using tool: (\w+)/)?.[1];
-  const ToolIcon = toolName && TOOL_PROGRESS_MAP[toolName]?.icon;
+  // Check if this should be rendered as a bullet or full bubble
+  const shouldRenderAsBullet = !isFinalResponse(message, isLastAssistantMessage);
 
   // Mark stream as complete when shouldStream becomes false
   useEffect(() => {
@@ -1175,6 +1391,29 @@ const MessageBubble = memo(function MessageBubble({ message, shouldStream = fals
     'prose-hr:border-border'
   );
 
+  // Render as bullet point for tool messages
+  if (isTool) {
+    return (
+      <ActivityBullet 
+        message={message} 
+        isRunning={isRunning} 
+        isLastMessage={isLastMessage} 
+      />
+    );
+  }
+
+  // Render intermediate assistant messages as simple italic text
+  if (isAssistant && shouldRenderAsBullet) {
+    return (
+      <IntermediateMessage 
+        content={message.content || ''} 
+        isRunning={isRunning}
+        isLastMessage={isLastMessage}
+      />
+    );
+  }
+
+  // Render full message bubble for user messages and final assistant responses
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -1187,82 +1426,68 @@ const MessageBubble = memo(function MessageBubble({ message, shouldStream = fals
           'max-w-[85%] rounded-2xl px-4 py-3 transition-all duration-150',
           isUser
             ? 'bg-primary text-primary-foreground'
-            : isTool
-              ? 'bg-muted border border-border'
-              : isSystem
-                ? 'bg-muted/50 border border-border'
-                : 'bg-card border border-border'
+            : isSystem
+              ? 'bg-muted/50 border border-border'
+              : 'bg-card border border-border'
         )}
       >
-        {/* Tool messages: show only label and loading animation */}
-        {isTool ? (
-          <>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
-              {ToolIcon ? <ToolIcon className="h-4 w-4" /> : <Wrench className="h-4 w-4" />}
-              <span>{TOOL_PROGRESS_MAP[toolName || '']?.label || toolName || 'Processing'}</span>
-              {isLastMessage && isRunning && (
-                <SpinningIcon className="h-3.5 w-3.5 ml-1" />
-              )}
-            </div>
-          </>
-        ) : (
-          <>
-            {isSystem && (
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5 font-medium">
-                <Terminal className="h-3.5 w-3.5" />
-                System
-              </div>
+        {isSystem && (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5 font-medium">
+            <Terminal className="h-3.5 w-3.5" />
+            System
+          </div>
+        )}
+        {isUser ? (
+          <p
+            className={cn(
+              'text-sm whitespace-pre-wrap break-words',
+              'text-primary-foreground'
             )}
-            {isUser ? (
-              <p
-                className={cn(
-                  'text-sm whitespace-pre-wrap break-words',
-                  'text-primary-foreground'
-                )}
-              >
-                {message.content}
-              </p>
-            ) : isAssistant && shouldStream && !streamComplete ? (
-              <StreamingText
-                text={message.content}
-                speed={120}
-                isComplete={streamComplete}
-                onComplete={() => setStreamComplete(true)}
-              >
-                {(streamedText) => (
-                  <div className={proseClasses}>
-                    <ReactMarkdown>{streamedText}</ReactMarkdown>
-                  </div>
-                )}
-              </StreamingText>
-            ) : (
+          >
+            {message.content}
+          </p>
+        ) : isAssistant && shouldStream && !streamComplete ? (
+          <StreamingText
+            text={message.content}
+            speed={120}
+            isComplete={streamComplete}
+            onComplete={() => setStreamComplete(true)}
+          >
+            {(streamedText) => (
               <div className={proseClasses}>
-                <ReactMarkdown>{message.content}</ReactMarkdown>
+                <ReactMarkdown>{streamedText}</ReactMarkdown>
               </div>
             )}
-            <p
-              className={cn(
-                'text-xs mt-1.5',
-                isUser ? 'text-primary-foreground/70' : 'text-muted-foreground'
-              )}
-            >
-              {new Date(message.timestamp).toLocaleTimeString()}
-            </p>
-            {/* Continue button inside assistant bubble */}
-            {isAssistant && showContinueButton && onContinue && (
-              <Button
-                size="sm"
-                onClick={onContinue}
-                disabled={isLoading}
-                className="mt-3 gap-1.5"
-              >
-                <Play className="h-3 w-3" />
-                {continueLabel || 'Continue'}
-              </Button>
-            )}
-          </>
+          </StreamingText>
+        ) : (
+          <RichContentRenderer content={message.content} className={proseClasses} />
+        )}
+        {!isUser && (
+          <p className="text-xs mt-1.5 text-muted-foreground">
+            {new Date(message.timestamp).toLocaleTimeString()}
+          </p>
+        )}
+        {/* Continue button inside assistant bubble */}
+        {isAssistant && showContinueButton && onContinue && (
+          <Button
+            size="sm"
+            onClick={onContinue}
+            disabled={isLoading}
+            className="mt-3 gap-1.5"
+          >
+            <Play className="h-3 w-3" />
+            {continueLabel || 'Continue'}
+          </Button>
         )}
       </div>
     </motion.div>
   );
-}, (prev, next) => prev.message.id === next.message.id && prev.shouldStream === next.shouldStream && prev.isLastMessage === next.isLastMessage && prev.isRunning === next.isRunning && prev.showContinueButton === next.showContinueButton && prev.isLoading === next.isLoading);
+}, (prev, next) => 
+  prev.message.id === next.message.id && 
+  prev.shouldStream === next.shouldStream && 
+  prev.isLastMessage === next.isLastMessage && 
+  prev.isLastAssistantMessage === next.isLastAssistantMessage &&
+  prev.isRunning === next.isRunning && 
+  prev.showContinueButton === next.showContinueButton && 
+  prev.isLoading === next.isLoading
+);

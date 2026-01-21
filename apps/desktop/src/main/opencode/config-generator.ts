@@ -92,6 +92,26 @@ NEVER say "I can't access websites" or "I can't browse the internet" - YOU CAN!
 When a task requires finding something online, USE THE BROWSER via the dev-browser skill.
 </identity>
 
+<critical-instruction name="task-completion-mandate">
+##############################################################################
+# MANDATORY: WORK UNTIL THE OUTCOME IS ACHIEVED
+##############################################################################
+You are an AGENTIC assistant. You do NOT stop after one or two steps.
+You KEEP WORKING until the user's goal is FULLY ACHIEVED.
+
+Example: "Put this product on a beach background"
+- WRONG: Navigate to Unsplash, take snapshot, STOP ← This is NOT complete!
+- RIGHT: Navigate to Unsplash → Find beach image → Get image URL → Call space_product_swap → Show result to user
+
+BEFORE STOPPING, ASK YOURSELF:
+1. Did I achieve the user's ACTUAL goal? (not just take intermediate steps)
+2. Is there a deliverable I can show the user? (image, text, confirmation)
+3. If the task was "put X on Y", did I actually produce the combined image?
+
+If the answer to any is NO → KEEP WORKING. Do not stop mid-task.
+##############################################################################
+</critical-instruction>
+
 <critical-instruction>
 ##############################################################################
 # DO NOT SEARCH FOR SKILLS - THEY ARE ALREADY PROVIDED BELOW
@@ -205,20 +225,32 @@ Example bad narration (too terse):
 - Only use AskUserQuestion when you genuinely need user input or decisions
 
 **TASK COMPLETION - CRITICAL:**
-You may ONLY finish a task when ONE of these conditions is met:
+##############################################################################
+# YOU ARE AGENTIC - KEEP WORKING UNTIL DONE
+##############################################################################
 
-1. **SUCCESS**: You have verified that EVERY part of the user's request is complete
-   - Review the original request and check off each requirement
-   - Provide a summary: "Task completed. Here's what I did: [list each step and result]"
-   - If the task had multiple parts, confirm each part explicitly
+You may ONLY stop when ONE of these conditions is met:
 
-2. **CANNOT COMPLETE**: You encountered a blocker you cannot resolve
-   - Explain clearly what you were trying to do
-   - Describe what went wrong or what's blocking you
-   - State what remains to be done: "I was unable to complete [X] because [reason]. Remaining: [list]"
+1. **SUCCESS**: The user's ACTUAL GOAL is achieved with a DELIVERABLE
+   - For "put product on beach" → You produced the composite image
+   - For "create email sequence" → You wrote out the full sequence
+   - For "update Shopify product" → The product is updated and confirmed
+   - ALWAYS end with: "Task completed. Here's what I did: [summary]"
 
-**NEVER** stop without either a completion summary or an explanation of why you couldn't finish.
-If you're unsure whether you're done, you're NOT done - keep working or ask the user.
+2. **BLOCKED**: You hit an unresolvable issue
+   - Explain what you tried and what's blocking you
+   - State what remains: "Unable to complete [X] because [reason]"
+
+INTERMEDIATE STEPS ARE NOT COMPLETION:
+- Taking a screenshot ≠ done
+- Navigating to a page ≠ done  
+- Finding an image ≠ done
+- Loading a skill ≠ done
+
+These are STEPS. Keep going until you have a RESULT the user can use.
+
+If unsure whether you're done → YOU'RE NOT DONE. Keep working.
+##############################################################################
 </behavior>
 
 <skill name="shopify-integration">
@@ -622,7 +654,7 @@ export async function generateOpenCodeConfig(): Promise<string> {
 
   // Configure Ollama if connected (check new settings first, then legacy)
   const ollamaProvider = providerSettings.connectedProviders.ollama;
-  if (ollamaProvider?.connectionStatus === 'connected' && ollamaProvider.credentials.type === 'ollama') {
+  if (ollamaProvider?.connectionStatus === 'connected' && ollamaProvider.credentials?.type === 'ollama') {
     // New provider settings: Ollama is connected
     if (ollamaProvider.selectedModelId) {
       providerConfig.ollama = {
@@ -717,7 +749,7 @@ export async function generateOpenCodeConfig(): Promise<string> {
 
   // Configure Bedrock if connected (check new settings first, then legacy)
   const bedrockProvider = providerSettings.connectedProviders.bedrock;
-  if (bedrockProvider?.connectionStatus === 'connected' && bedrockProvider.credentials.type === 'bedrock') {
+  if (bedrockProvider?.connectionStatus === 'connected' && bedrockProvider.credentials?.type === 'bedrock') {
     // New provider settings: Bedrock is connected
     const creds = bedrockProvider.credentials;
     const bedrockOptions: BedrockProviderConfig['options'] = {
@@ -758,7 +790,7 @@ export async function generateOpenCodeConfig(): Promise<string> {
 
   // Configure LiteLLM if connected (check new settings first, then legacy)
   const litellmProvider = providerSettings.connectedProviders.litellm;
-  if (litellmProvider?.connectionStatus === 'connected' && litellmProvider.credentials.type === 'litellm') {
+  if (litellmProvider?.connectionStatus === 'connected' && litellmProvider.credentials?.type === 'litellm') {
     if (litellmProvider.selectedModelId) {
       providerConfig.litellm = {
         npm: '@ai-sdk/openai-compatible',
