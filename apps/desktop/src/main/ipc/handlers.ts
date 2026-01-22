@@ -1897,6 +1897,29 @@ export function registerIPCHandlers(): void {
     return SPACE_REGISTRY;
   });
 
+  // ============================================
+  // Brand Asset Upload Handlers
+  // ============================================
+
+  // Brand: Upload asset (logo, character, scene, site-image) to S3
+  handle('brand:upload-asset', async (
+    _event: IpcMainInvokeEvent,
+    brandId: string,
+    assetType: 'logos' | 'characters' | 'scenes' | 'site-images',
+    filename: string,
+    contentType: string,
+    imageBase64: string
+  ) => {
+    const { uploadBrandAsset } = await import('../spaces/space-runtime-client');
+    return uploadBrandAsset({
+      brandId,
+      assetType,
+      filename,
+      contentType,
+      imageBase64,
+    });
+  });
+
 }
 
 function createTaskId(): string {

@@ -55,6 +55,22 @@ class SpaceInput(BaseModel):
     options: Optional[Dict[str, Any]] = None
 
 
+class BrandAssetUpload(BaseModel):
+    """Input for brand asset upload."""
+    brand_id: str
+    asset_type: str  # "logos", "characters", "scenes", "site-images"
+    filename: str
+    content_type: str
+    image_base64: str
+
+
+class BrandAssetResponse(BaseModel):
+    """Response from brand asset upload."""
+    success: bool
+    url: Optional[str] = None
+    error: Optional[str] = None
+
+
 class SpaceOutput(BaseModel):
     """Output from space execution."""
     success: bool
@@ -588,6 +604,54 @@ Respond in JSON:
             confidence=0.0,
             steps=[],
             reasoning=f"Planning failed: {str(e)}"
+        )
+
+
+# === Brand Asset Upload ===
+
+import base64
+from shared_libs.libs.storage_client import upload_to_s3
+
+
+@app.post("/upload-brand-asset", response_model=BrandAssetResponse)
+async def upload_brand_asset(body: BrandAssetUpload):
+    """
+    Upload a brand asset (logo, character, scene, site image) to S3.
+    
+    Args:
+        body: BrandAssetUpload with brand_id, asset_type, filename, content_type, image_base64
+    
+    Returns:
+        BrandAssetResponse with the public S3 URL
+    """
+    # Validate asset_type
+    valid_asset_types = ["logos", "characters", "scenes", "site-images"]
+    if body.asset_type not in valid_asset_types:
+        return BrandAssetResponse(
+            success=False,
+            error=f"Invalid asset_type. Must be one of: {', '.join(valid_asset_types)}"
+        )
+    
+    try:
+        # Decode base64 image
+        image_bytes = base64.b64decode(body.image_base64)
+        
+        # Upload to S3 with brand-specific path
+        # Path: brand-memory/{brand_id}/{asset_type}/{filename}
+        folder = f"brand-memory/{body.brand_id}/{body.asset_type}"
+        url = await upload_to_s3(
+            filename=body.filename,
+            file_bytes=image_bytes,
+            content_type=body.content_type,
+            folder=folder
+        )
+        
+        return BrandAssetResponse(success=True, url=url)
+        
+    except Exception as e:
+        return BrandAssetResponse(
+            success=False,
+            error=f"Failed to upload asset: {str(e)}"
         )
 
 

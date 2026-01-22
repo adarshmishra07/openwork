@@ -36,8 +36,9 @@ export interface SpaceRuntimeConfig {
 }
 
 // Default configuration - can be overridden
+// Use Lambda Function URL for direct invocation (faster, no API Gateway overhead)
 const DEFAULT_CONFIG: SpaceRuntimeConfig = {
-  baseUrl: process.env.SPACE_RUNTIME_URL || 'https://8yivyeg6kd.execute-api.ap-south-1.amazonaws.com',
+  baseUrl: process.env.SPACE_RUNTIME_URL || 'https://mp3a5rmdpmpqphordszcahy5bm0okvjt.lambda-url.ap-south-1.on.aws',
   timeout: 300000, // 5 minutes for long-running image generation
 };
 
@@ -206,4 +207,69 @@ interface ProgressEvent {
   url?: string;
   label?: string;
   message?: string;
+}
+
+/**
+ * Brand asset upload input
+ */
+export interface BrandAssetUploadInput {
+  brandId: string;
+  assetType: 'logos' | 'characters' | 'scenes' | 'site-images';
+  filename: string;
+  contentType: string;
+  imageBase64: string;
+}
+
+/**
+ * Brand asset upload result
+ */
+export interface BrandAssetUploadResult {
+  success: boolean;
+  url?: string;
+  error?: string;
+}
+
+/**
+ * Upload a brand asset (logo, character, scene, site image) to S3
+ * @param input - Asset upload details
+ * @returns The public S3 URL of the uploaded asset
+ */
+export async function uploadBrandAsset(
+  input: BrandAssetUploadInput
+): Promise<BrandAssetUploadResult> {
+  console.log(`[SpaceRuntime] Uploading brand asset: ${input.assetType}/${input.filename}`);
+  
+  try {
+    const response = await fetch(`${config.baseUrl}/upload-brand-asset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        brand_id: input.brandId,
+        asset_type: input.assetType,
+        filename: input.filename,
+        content_type: input.contentType,
+        image_base64: input.imageBase64,
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Upload failed: ${response.status} - ${errorText}`);
+    }
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      console.log(`[SpaceRuntime] Asset uploaded successfully: ${result.url}`);
+      return { success: true, url: result.url };
+    } else {
+      throw new Error(result.error || 'Upload failed');
+    }
+  } catch (error) {
+    console.error(`[SpaceRuntime] Asset upload failed:`, error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
 }

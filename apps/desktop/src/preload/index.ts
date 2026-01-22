@@ -361,6 +361,23 @@ const accomplishAPI = {
     size: number;
     fileName: string;
   }> => ipcRenderer.invoke('media:load-local-file', filePath),
+
+  // ============================================
+  // Brand Asset Upload API
+  // ============================================
+
+  // Upload a brand asset (logo, character, scene, site-image) to S3
+  uploadBrandAsset: (
+    brandId: string,
+    assetType: 'logos' | 'characters' | 'scenes' | 'site-images',
+    filename: string,
+    contentType: string,
+    imageBase64: string
+  ): Promise<{
+    success: boolean;
+    url?: string;
+    error?: string;
+  }> => ipcRenderer.invoke('brand:upload-asset', brandId, assetType, filename, contentType, imageBase64),
 };
 
 // Expose the API to the renderer

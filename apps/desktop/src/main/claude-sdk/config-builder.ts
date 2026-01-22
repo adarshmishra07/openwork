@@ -87,15 +87,15 @@ export function buildMcpServers(): Record<string, McpServerConfig> {
 
 /**
  * Build allowed tools list for the SDK
+ * Note: 'Skill' is intentionally omitted to allow global Claude plugins
+ * from ~/.claude/plugins/ (like brainstorming) to work.
+ * MCP-based skill loading via skill-loader MCP still works.
  */
 export function buildAllowedTools(): string[] {
   return [
     // Built-in SDK tools
     'Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep',
     'WebSearch', 'WebFetch', 'TodoWrite',
-    
-    // Skills support
-    'Skill',
     
     // Task/subagent support
     'Task',

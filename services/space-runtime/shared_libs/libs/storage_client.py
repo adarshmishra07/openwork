@@ -68,6 +68,7 @@ async def upload_to_s3(
             region_name=config.AWS_REGION,
         )
         
+        # Upload object (bucket policy handles public access for brand-memory/ prefix)
         s3_client.put_object(
             Bucket=config.AWS_S3_BUCKET,
             Key=key,
@@ -75,7 +76,7 @@ async def upload_to_s3(
             ContentType=content_type,
         )
         
-        # Return public URL (assuming bucket has public read or CloudFront)
+        # Return public URL
         url = f"https://{config.AWS_S3_BUCKET}.s3.{config.AWS_REGION}.amazonaws.com/{key}"
         log.info(f"Uploaded to S3: {url}")
         return url

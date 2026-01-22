@@ -2,20 +2,22 @@
  * Brand Onboarding Wizard
  * 
  * Multi-step wizard to capture brand information:
- * 1. Welcome - Introduction to BrandWork
- * 2. Brand Basics - Name, industry, target audience
- * 3. Brand Voice - Tone, personality, vocabulary
- * 4. Brand Style - Colors, visual preferences
- * 5. Shopify Connect - OAuth connection (optional)
- * 6. Complete - Summary and finish
+ * 1. Welcome - Introduction to Shop OS
+ * 2. Brand Basics - Name, industry, target audience, tagline
+ * 3. Brand Logo - Logo upload with color extraction
+ * 4. Brand Palette - Color palette configuration
+ * 5. Brand Typography - Font settings (optional)
+ * 6. Brand Voice - Tone, personality, vocabulary
+ * 7. Brand Assets - Characters, scenes, site images (optional)
+ * 8. Shopify Connect - OAuth connection (optional)
+ * 9. Complete - Summary and finish
  */
 
-import { useState } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowRight, 
   ArrowLeft, 
-  Sparkles, 
   Building2, 
   MessageSquare, 
   Palette,
@@ -24,20 +26,25 @@ import {
   XCircle,
   Loader2,
   Upload,
-  FileJson,
-  Image,
+  Image as ImageIcon,
   Type,
-  Users
+  Users,
+  Home,
+  X,
+  Plus,
+  Trash2
 } from 'lucide-react';
+import logoImage from '/assets/shopos-logo.png';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { getAccomplish } from '@/lib/accomplish';
 import type { 
-  OnboardingStep, 
   BrandProfile, 
   BrandVoiceTemplate,
-  BrandMemory
+  BrandMemory,
+  BrandColor,
+  BrandTagline
 } from '@brandwork/shared';
 
 interface BrandOnboardingProps {
@@ -77,27 +84,85 @@ const VOICE_TEMPLATES: { id: BrandVoiceTemplate; name: string; description: stri
   },
 ];
 
-type ExtendedOnboardingStep = OnboardingStep | 'brand-memory';
+const TAGLINE_TONES = ['minimal', 'bold', 'professional', 'playful', 'luxury', 'modern', 'elegant', 'casual'];
+const PERSONALITY_TRAITS = ['innovative', 'trustworthy', 'friendly', 'bold', 'sophisticated', 'playful', 'authentic', 'expert', 'caring', 'adventurous'];
+const FONT_FAMILIES = ['Manrope', 'Inter', 'Poppins', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Playfair Display', 'Raleway', 'Work Sans'];
+const FONT_WEIGHTS = ['300', '400', '500', '600', '700', '800'];
 
-const STEPS: { id: ExtendedOnboardingStep; title: string; icon: React.ElementType }[] = [
-  { id: 'welcome', title: 'Welcome', icon: Sparkles },
-  { id: 'brand-basics', title: 'Brand Basics', icon: Building2 },
+type OnboardingStepId = 
+  | 'welcome'
+  | 'brand-basics'
+  | 'brand-logo'
+  | 'brand-palette'
+  | 'brand-typography'
+  | 'brand-voice'
+  | 'brand-assets'
+  | 'shopify-connect'
+  | 'complete';
+
+const STEPS: { id: OnboardingStepId; title: string; icon: React.ElementType; optional?: boolean }[] = [
+  { id: 'welcome', title: 'Welcome', icon: Home },
+  { id: 'brand-basics', title: 'Basics', icon: Building2 },
+  { id: 'brand-logo', title: 'Logo', icon: ImageIcon },
+  { id: 'brand-palette', title: 'Colors', icon: Palette },
+  { id: 'brand-typography', title: 'Fonts', icon: Type, optional: true },
   { id: 'brand-voice', title: 'Voice', icon: MessageSquare },
-  { id: 'brand-style', title: 'Style', icon: Palette },
-  { id: 'brand-memory', title: 'Memory', icon: FileJson },
-  { id: 'shopify-connect', title: 'Shopify', icon: ShoppingBag },
+  { id: 'brand-assets', title: 'Assets', icon: Users, optional: true },
+  { id: 'shopify-connect', title: 'Shopify', icon: ShoppingBag, optional: true },
   { id: 'complete', title: 'Complete', icon: CheckCircle2 },
 ];
+
+// Extended brand data to hold all onboarding fields
+interface OnboardingBrandData {
+  id: string;
+  name: string;
+  description: string;
+  industry: string;
+  targetAudience: string;
+  tagline: BrandTagline;
+  logos: { url: string; colors: string[] }[];
+  palette: {
+    primary: BrandColor[];
+    secondary: BrandColor[];
+    other: BrandColor[];
+  };
+  typography: {
+    family: string;
+    weight: string;
+    color: string;
+  } | null;
+  voice: {
+    template: BrandVoiceTemplate;
+    tone: string;
+    personality: string[];
+    vocabulary: { preferred: string[]; avoided: string[] };
+    examples: string[];
+  };
+  characters: { url: string; name: string; description: string }[];
+  scenes: { url: string; name: string; description: string; type: string }[];
+  siteImages: string[];
+  shopifyConnected: boolean;
+  shopifyStoreUrl?: string;
+}
 
 export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [setupMode, setSetupMode] = useState<'choose' | 'manual' | 'import'>('choose');
   const [brandMemory, setBrandMemory] = useState<BrandMemory | null>(null);
-  const [brandData, setBrandData] = useState<Partial<BrandProfile>>({
+  const [brandData, setBrandData] = useState<OnboardingBrandData>({
+    id: crypto.randomUUID(),
     name: '',
     description: '',
     industry: '',
     targetAudience: '',
+    tagline: { text: '', tones: [] },
+    logos: [],
+    palette: {
+      primary: [{ hex: '#6366F1', label: 'Primary' }],
+      secondary: [],
+      other: [],
+    },
+    typography: null,
     voice: {
       template: 'friendly',
       tone: '',
@@ -105,16 +170,9 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
       vocabulary: { preferred: [], avoided: [] },
       examples: [],
     },
-    style: {
-      primaryColor: '#6366F1',
-      secondaryColor: '#8B5CF6',
-      fontStyle: 'modern',
-      imageStyle: 'lifestyle',
-    },
-    rules: {
-      doStatements: [],
-      dontStatements: [],
-    },
+    characters: [],
+    scenes: [],
+    siteImages: [],
     shopifyConnected: false,
   });
 
@@ -124,27 +182,63 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
 
   const goNext = () => {
     if (!isLastStep) {
-      // If in import mode and we're at welcome, skip to shopify-connect (index 5)
+      // If in import mode and we're at welcome, skip to shopify-connect
       if (setupMode === 'import' && currentStepIndex === 0 && brandMemory) {
-        // Skip manual steps, go directly to Shopify connect
         const shopifyIndex = STEPS.findIndex(s => s.id === 'shopify-connect');
         setCurrentStepIndex(shopifyIndex);
       } else {
         setCurrentStepIndex(currentStepIndex + 1);
       }
     } else {
-      // Complete onboarding
+      // Complete onboarding - convert to BrandProfile
+      const memory: BrandMemory = {
+        name: brandData.name,
+        overview: brandData.description,
+        tagline: brandData.tagline.text ? brandData.tagline : undefined,
+        logo: brandData.logos.length > 0 ? {
+          urls: brandData.logos.map(l => l.url),
+          colors: brandData.logos.flatMap(l => l.colors),
+        } : undefined,
+        palette: {
+          primary: brandData.palette.primary,
+          secondary: brandData.palette.secondary,
+          other: brandData.palette.other,
+        },
+        fonts: brandData.typography ? [{
+          family: brandData.typography.family,
+          weight: brandData.typography.weight,
+          color: brandData.typography.color,
+        }] : undefined,
+        characters: brandData.characters.map(c => ({
+          url: c.url,
+          metadata: { name: c.name, description: c.description },
+        })),
+        scenes: brandData.scenes.map(s => ({
+          url: s.url,
+          metadata: { name: s.name, description: s.description, type: s.type as 'studio' | 'lifestyle' | 'outdoor' | 'abstract' | 'home' | 'other' },
+        })),
+        site_images: brandData.siteImages.length > 0 ? brandData.siteImages : undefined,
+      };
+
       const completedProfile: BrandProfile = {
-        id: `brand_${Date.now()}`,
+        id: brandData.id,
         name: brandMemory?.name || brandData.name || 'My Brand',
         description: brandMemory?.overview || brandData.description || '',
         industry: brandData.industry || '',
         targetAudience: brandData.targetAudience || '',
-        voice: brandData.voice!,
-        style: brandData.style!,
-        rules: brandData.rules!,
-        memory: brandMemory || undefined,
-        shopifyConnected: brandData.shopifyConnected || false,
+        voice: brandData.voice,
+        style: {
+          primaryColor: brandData.palette.primary[0]?.hex || '#6366F1',
+          secondaryColor: brandData.palette.secondary[0]?.hex || '#8B5CF6',
+          fontStyle: 'modern',
+          imageStyle: 'lifestyle',
+        },
+        rules: {
+          doStatements: [],
+          dontStatements: [],
+        },
+        memory: brandMemory || memory,
+        shopifyConnected: brandData.shopifyConnected,
         shopifyStoreUrl: brandData.shopifyStoreUrl,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -159,15 +253,37 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
     }
   };
 
-  const updateBrandData = (updates: Partial<BrandProfile>) => {
+  const skipStep = () => {
+    if (!isLastStep) {
+      setCurrentStepIndex(currentStepIndex + 1);
+    }
+  };
+
+  const updateBrandData = useCallback((updates: Partial<OnboardingBrandData>) => {
     setBrandData(prev => ({ ...prev, ...updates }));
+  }, []);
+
+  // Determine if current step can proceed
+  const canProceed = () => {
+    switch (currentStep.id) {
+      case 'welcome':
+        return setupMode !== 'choose';
+      case 'brand-basics':
+        return !!brandData.name.trim();
+      case 'brand-logo':
+        return brandData.logos.length > 0;
+      case 'brand-palette':
+        return brandData.palette.primary.length > 0;
+      default:
+        return true;
+    }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex flex-col">
       {/* Progress bar */}
       <div className="p-4">
-        <div className="max-w-2xl mx-auto">
+        <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between mb-2">
             {STEPS.map((step, index) => (
               <div 
@@ -191,7 +307,7 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
                 {index < STEPS.length - 1 && (
                   <div 
                     className={`
-                      w-12 h-0.5 mx-1 transition-colors
+                      w-8 h-0.5 mx-0.5 transition-colors
                       ${index < currentStepIndex ? 'bg-primary' : 'bg-muted'}
                     `}
                   />
@@ -203,7 +319,7 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 flex items-center justify-center p-8">
+      <div className="flex-1 flex items-center justify-center p-8 overflow-y-auto">
         <div className="w-full max-w-xl">
           <AnimatePresence mode="wait">
             <motion.div
@@ -227,22 +343,34 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
                   onChange={updateBrandData} 
                 />
               )}
+              {currentStep.id === 'brand-logo' && (
+                <BrandLogoStep 
+                  data={brandData} 
+                  onChange={updateBrandData} 
+                />
+              )}
+              {currentStep.id === 'brand-palette' && (
+                <BrandPaletteStep 
+                  data={brandData} 
+                  onChange={updateBrandData} 
+                />
+              )}
+              {currentStep.id === 'brand-typography' && (
+                <BrandTypographyStep 
+                  data={brandData} 
+                  onChange={updateBrandData} 
+                />
+              )}
               {currentStep.id === 'brand-voice' && (
                 <BrandVoiceStep 
                   data={brandData} 
                   onChange={updateBrandData} 
                 />
               )}
-              {currentStep.id === 'brand-style' && (
-                <BrandStyleStep 
+              {currentStep.id === 'brand-assets' && (
+                <BrandAssetsStep 
                   data={brandData} 
                   onChange={updateBrandData} 
-                />
-              )}
-              {currentStep.id === 'brand-memory' && (
-                <BrandMemoryStep 
-                  memory={brandMemory}
-                  onChange={setBrandMemory}
                 />
               )}
               {currentStep.id === 'shopify-connect' && (
@@ -252,7 +380,7 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
                 />
               )}
               {currentStep.id === 'complete' && (
-                <CompleteStep data={brandData} />
+                <CompleteStep data={brandData} brandMemory={brandMemory} />
               )}
             </motion.div>
           </AnimatePresence>
@@ -265,27 +393,39 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
           <Button
             variant="ghost"
             onClick={goBack}
-            disabled={isFirstStep || (currentStepIndex === 0 && setupMode === 'choose')}
+            disabled={isFirstStep}
             className="gap-2"
           >
             <ArrowLeft className="w-4 h-4" />
             Back
           </Button>
-          <Button 
-            onClick={goNext} 
-            className="gap-2"
-            disabled={currentStepIndex === 0 && setupMode === 'choose'}
-          >
-            {isLastStep ? 'Get Started' : 'Continue'}
-            <ArrowRight className="w-4 h-4" />
-          </Button>
+          <div className="flex gap-2">
+            {currentStep.optional && !isLastStep && (
+              <Button 
+                variant="ghost"
+                onClick={skipStep}
+              >
+                Skip
+              </Button>
+            )}
+            <Button 
+              onClick={goNext} 
+              className="gap-2"
+              disabled={!canProceed()}
+            >
+              {isLastStep ? 'Get Started' : 'Continue'}
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
+// ============================================
 // Step Components
+// ============================================
 
 interface WelcomeStepProps {
   setupMode: 'choose' | 'manual' | 'import';
@@ -312,7 +452,6 @@ function WelcomeStep({ setupMode, onSetupModeChange, brandMemory, onBrandMemoryC
 
       const memoryData = result.data as BrandMemory;
       
-      // Validate required fields
       if (!memoryData.name) {
         throw new Error('Brand memory must have a name');
       }
@@ -336,7 +475,6 @@ function WelcomeStep({ setupMode, onSetupModeChange, brandMemory, onBrandMemoryC
     onSetupModeChange('choose');
   };
 
-  // Show imported summary if we have brand memory
   if (setupMode === 'import' && brandMemory) {
     const memorySummary = {
       hasLogo: !!brandMemory.logo?.urls?.length,
@@ -409,8 +547,8 @@ function WelcomeStep({ setupMode, onSetupModeChange, brandMemory, onBrandMemoryC
 
   return (
     <div className="text-center space-y-6">
-      <div className="w-20 h-20 mx-auto rounded-2xl bg-primary/10 flex items-center justify-center">
-        <Sparkles className="w-10 h-10 text-primary" />
+      <div className="w-20 h-20 mx-auto rounded-2xl flex items-center justify-center">
+        <img src={logoImage} alt="Shop OS" className="w-16 h-16 object-contain" />
       </div>
       <div>
         <h1 className="text-3xl font-bold mb-3">Welcome to Shop OS</h1>
@@ -422,7 +560,25 @@ function WelcomeStep({ setupMode, onSetupModeChange, brandMemory, onBrandMemoryC
       <div className="space-y-3 pt-4">
         <p className="text-sm text-muted-foreground mb-4">How would you like to set up your brand?</p>
         
-        {/* Import JSON Option */}
+        <button
+          onClick={handleManualSetup}
+          disabled={isLoading}
+          className={`w-full p-4 rounded-lg border-2 transition-all text-left flex items-center gap-4 ${
+            setupMode === 'manual'
+              ? 'border-primary bg-primary/10'
+              : 'border-border hover:border-primary/50 hover:bg-muted/30'
+          }`}
+        >
+          <Building2 className="w-8 h-8 text-primary" />
+          <div className="flex-1">
+            <h3 className="font-medium">Enter Details Manually</h3>
+            <p className="text-sm text-muted-foreground">Set up your brand step by step</p>
+          </div>
+          {setupMode === 'manual' && (
+            <CheckCircle2 className="w-6 h-6 text-primary shrink-0" />
+          )}
+        </button>
+
         <button
           onClick={handleImportJson}
           disabled={isLoading}
@@ -439,19 +595,6 @@ function WelcomeStep({ setupMode, onSetupModeChange, brandMemory, onBrandMemoryC
           </div>
         </button>
 
-        {/* Manual Setup Option */}
-        <button
-          onClick={handleManualSetup}
-          disabled={isLoading}
-          className="w-full p-4 rounded-lg border-2 border-border hover:border-primary/50 hover:bg-muted/30 transition-all text-left flex items-center gap-4"
-        >
-          <Building2 className="w-8 h-8 text-primary" />
-          <div>
-            <h3 className="font-medium">Enter Details Manually</h3>
-            <p className="text-sm text-muted-foreground">Set up your brand step by step</p>
-          </div>
-        </button>
-
         {error && (
           <div className="flex items-center gap-2 text-sm text-destructive justify-center pt-2">
             <XCircle className="w-4 h-4" />
@@ -464,11 +607,19 @@ function WelcomeStep({ setupMode, onSetupModeChange, brandMemory, onBrandMemoryC
 }
 
 interface StepProps {
-  data: Partial<BrandProfile>;
-  onChange: (updates: Partial<BrandProfile>) => void;
+  data: OnboardingBrandData;
+  onChange: (updates: Partial<OnboardingBrandData>) => void;
 }
 
 function BrandBasicsStep({ data, onChange }: StepProps) {
+  const toggleTaglineTone = (tone: string) => {
+    const current = data.tagline.tones || [];
+    const newTones = current.includes(tone)
+      ? current.filter(t => t !== tone)
+      : [...current, tone];
+    onChange({ tagline: { ...data.tagline, tones: newTones } });
+  };
+
   return (
     <div className="space-y-6">
       <div className="text-center mb-8">
@@ -478,21 +629,51 @@ function BrandBasicsStep({ data, onChange }: StepProps) {
       
       <div className="space-y-4">
         <div>
-          <Label htmlFor="brandName">Brand Name</Label>
+          <Label htmlFor="brandName">Brand Name *</Label>
           <Input
             id="brandName"
-            value={data.name || ''}
+            value={data.name}
             onChange={(e) => onChange({ name: e.target.value })}
             placeholder="e.g., Acme Fashion Co."
             className="mt-1.5"
           />
+        </div>
+
+        <div>
+          <Label htmlFor="tagline">Tagline</Label>
+          <Input
+            id="tagline"
+            value={data.tagline.text}
+            onChange={(e) => onChange({ tagline: { ...data.tagline, text: e.target.value } })}
+            placeholder="e.g., Style that speaks"
+            className="mt-1.5"
+          />
+        </div>
+
+        <div>
+          <Label>Tagline Tones</Label>
+          <div className="flex flex-wrap gap-2 mt-2">
+            {TAGLINE_TONES.map((tone) => (
+              <button
+                key={tone}
+                onClick={() => toggleTaglineTone(tone)}
+                className={`px-3 py-1.5 rounded-full text-sm capitalize transition-all ${
+                  data.tagline.tones?.includes(tone)
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted hover:bg-muted/80'
+                }`}
+              >
+                {tone}
+              </button>
+            ))}
+          </div>
         </div>
         
         <div>
           <Label htmlFor="industry">Industry</Label>
           <Input
             id="industry"
-            value={data.industry || ''}
+            value={data.industry}
             onChange={(e) => onChange({ industry: e.target.value })}
             placeholder="e.g., Fashion, Electronics, Home Goods"
             className="mt-1.5"
@@ -503,7 +684,7 @@ function BrandBasicsStep({ data, onChange }: StepProps) {
           <Label htmlFor="targetAudience">Target Audience</Label>
           <Input
             id="targetAudience"
-            value={data.targetAudience || ''}
+            value={data.targetAudience}
             onChange={(e) => onChange({ targetAudience: e.target.value })}
             placeholder="e.g., Young professionals aged 25-35"
             className="mt-1.5"
@@ -514,7 +695,7 @@ function BrandBasicsStep({ data, onChange }: StepProps) {
           <Label htmlFor="description">Brief Description</Label>
           <textarea
             id="description"
-            value={data.description || ''}
+            value={data.description}
             onChange={(e) => onChange({ description: e.target.value })}
             placeholder="What makes your brand unique?"
             rows={3}
@@ -526,14 +707,467 @@ function BrandBasicsStep({ data, onChange }: StepProps) {
   );
 }
 
+// Max file size: 4MB (Lambda has 6MB limit, base64 adds ~33% overhead)
+const MAX_FILE_SIZE_MB = 4;
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
+/**
+ * Convert technical error messages to human-readable ones
+ */
+function humanizeUploadError(error: string): string {
+  if (error.includes('413') || error.includes('6291456') || error.includes('Request must be smaller')) {
+    return `File is too large. Please use an image smaller than ${MAX_FILE_SIZE_MB}MB.`;
+  }
+  if (error.includes('Failed to fetch') || error.includes('NetworkError')) {
+    return 'Network error. Please check your internet connection and try again.';
+  }
+  if (error.includes('timeout') || error.includes('Timeout')) {
+    return 'Upload timed out. Please try again with a smaller file.';
+  }
+  if (error.includes('403') || error.includes('Forbidden')) {
+    return 'Permission denied. Please try again later.';
+  }
+  if (error.includes('500') || error.includes('Internal Server Error')) {
+    return 'Server error. Please try again later.';
+  }
+  // Return original if no match, but clean up technical details
+  return error.replace(/\d{3}\s*-\s*/, '').replace(/[{}"]/g, '').trim() || 'Upload failed. Please try again.';
+}
+
+function BrandLogoStep({ data, onChange }: StepProps) {
+  const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const accomplish = getAccomplish();
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    setError(null);
+
+    try {
+      for (const file of Array.from(files)) {
+        // Check file size before uploading
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+          const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+          setError(`File "${file.name}" is too large (${sizeMB}MB). Please use an image smaller than ${MAX_FILE_SIZE_MB}MB.`);
+          continue;
+        }
+
+        // Read file as base64
+        const reader = new FileReader();
+        const base64Promise = new Promise<string>((resolve, reject) => {
+          reader.onload = () => {
+            const result = reader.result as string;
+            const base64 = result.split(',')[1];
+            resolve(base64);
+          };
+          reader.onerror = reject;
+        });
+        reader.readAsDataURL(file);
+        const base64 = await base64Promise;
+
+        // Upload to S3
+        const result = await accomplish.uploadBrandAsset(
+          data.id,
+          'logos',
+          file.name,
+          file.type,
+          base64
+        );
+
+        if (result.success && result.url) {
+          onChange({
+            logos: [...data.logos, { url: result.url, colors: [] }],
+          });
+        } else {
+          setError(humanizeUploadError(result.error || 'Failed to upload logo'));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to upload logo:', err);
+      const errorMsg = err instanceof Error ? err.message : 'Failed to upload logo';
+      setError(humanizeUploadError(errorMsg));
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const removeLogo = (index: number) => {
+    onChange({
+      logos: data.logos.filter((_, i) => i !== index),
+    });
+  };
+
+  const updateLogoColor = (logoIndex: number, colorIndex: number, color: string) => {
+    const newLogos = [...data.logos];
+    newLogos[logoIndex].colors[colorIndex] = color;
+    onChange({ logos: newLogos });
+  };
+
+  const addLogoColor = (logoIndex: number) => {
+    const newLogos = [...data.logos];
+    newLogos[logoIndex].colors.push('#000000');
+    onChange({ logos: newLogos });
+  };
+
+  const removeLogoColor = (logoIndex: number, colorIndex: number) => {
+    const newLogos = [...data.logos];
+    newLogos[logoIndex].colors = newLogos[logoIndex].colors.filter((_, i) => i !== colorIndex);
+    onChange({ logos: newLogos });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold mb-2">Upload your logo</h2>
+        <p className="text-muted-foreground">Add your brand logo and identify its colors</p>
+      </div>
+
+      <div className="space-y-4">
+        {/* Upload Zone */}
+        <div
+          onClick={() => fileInputRef.current?.click()}
+          className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-all"
+        >
+          {isUploading ? (
+            <Loader2 className="w-10 h-10 mx-auto text-muted-foreground animate-spin mb-3" />
+          ) : (
+            <Upload className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
+          )}
+          <h3 className="font-medium mb-1">
+            {isUploading ? 'Uploading...' : 'Click to upload logo'}
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            PNG, JPG, SVG up to {MAX_FILE_SIZE_MB}MB
+          </p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+        </div>
+
+        {error && (
+          <div className="flex items-center gap-2 text-sm text-destructive">
+            <XCircle className="w-4 h-4" />
+            {error}
+          </div>
+        )}
+
+        {/* Uploaded Logos */}
+        {data.logos.length > 0 && (
+          <div className="space-y-4">
+            {data.logos.map((logo, logoIndex) => (
+              <div key={logoIndex} className="p-4 rounded-lg border-2 border-border bg-muted/30">
+                <div className="flex items-start gap-4">
+                  <div className="w-20 h-20 rounded-lg bg-white flex items-center justify-center overflow-hidden">
+                    <img src={logo.url} alt="Logo" className="max-w-full max-h-full object-contain" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-2">
+                      <Label>Logo Colors</Label>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeLogo(logoIndex)}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {logo.colors.map((color, colorIndex) => (
+                        <div key={colorIndex} className="flex items-center gap-1">
+                          <input
+                            type="color"
+                            value={color}
+                            onChange={(e) => updateLogoColor(logoIndex, colorIndex, e.target.value)}
+                            className="w-8 h-8 rounded cursor-pointer border border-border"
+                          />
+                          <button
+                            onClick={() => removeLogoColor(logoIndex, colorIndex)}
+                            className="text-muted-foreground hover:text-destructive"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => addLogoColor(logoIndex)}
+                        className="w-8 h-8 rounded border-2 border-dashed border-border flex items-center justify-center hover:border-primary/50"
+                      >
+                        <Plus className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <p className="text-xs text-muted-foreground text-center">
+          At least one logo is required
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function BrandPaletteStep({ data, onChange }: StepProps) {
+  const addColor = (type: 'primary' | 'secondary' | 'other') => {
+    const newColor: BrandColor = { hex: '#000000', label: '' };
+    onChange({
+      palette: {
+        ...data.palette,
+        [type]: [...data.palette[type], newColor],
+      },
+    });
+  };
+
+  const updateColor = (type: 'primary' | 'secondary' | 'other', index: number, updates: Partial<BrandColor>) => {
+    const newColors = [...data.palette[type]];
+    newColors[index] = { ...newColors[index], ...updates };
+    onChange({
+      palette: {
+        ...data.palette,
+        [type]: newColors,
+      },
+    });
+  };
+
+  const removeColor = (type: 'primary' | 'secondary' | 'other', index: number) => {
+    onChange({
+      palette: {
+        ...data.palette,
+        [type]: data.palette[type].filter((_, i) => i !== index),
+      },
+    });
+  };
+
+  const renderColorSection = (title: string, type: 'primary' | 'secondary' | 'other', required?: boolean) => (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <Label>{title} {required && '*'}</Label>
+        <Button variant="ghost" size="sm" onClick={() => addColor(type)}>
+          <Plus className="w-4 h-4 mr-1" />
+          Add
+        </Button>
+      </div>
+      <div className="space-y-2">
+        {data.palette[type].map((color, index) => (
+          <div key={index} className="flex items-center gap-2">
+            <input
+              type="color"
+              value={color.hex}
+              onChange={(e) => updateColor(type, index, { hex: e.target.value })}
+              className="w-10 h-10 rounded cursor-pointer border-2 border-border"
+            />
+            <Input
+              value={color.hex}
+              onChange={(e) => updateColor(type, index, { hex: e.target.value })}
+              placeholder="#000000"
+              className="w-28"
+            />
+            <Input
+              value={color.label}
+              onChange={(e) => updateColor(type, index, { label: e.target.value })}
+              placeholder="Label (e.g., Brand Blue)"
+              className="flex-1"
+            />
+            {!(type === 'primary' && data.palette.primary.length === 1) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => removeColor(type, index)}
+                className="text-destructive hover:text-destructive"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
+        ))}
+        {data.palette[type].length === 0 && (
+          <p className="text-sm text-muted-foreground italic">No colors added</p>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold mb-2">Color palette</h2>
+        <p className="text-muted-foreground">Define your brand's color scheme</p>
+      </div>
+
+      <div className="space-y-6">
+        {renderColorSection('Primary Colors', 'primary', true)}
+        {renderColorSection('Secondary Colors', 'secondary')}
+        {renderColorSection('Accent Colors', 'other')}
+      </div>
+
+      <p className="text-xs text-muted-foreground text-center">
+        At least one primary color is required
+      </p>
+    </div>
+  );
+}
+
+function BrandTypographyStep({ data, onChange }: StepProps) {
+  const typography = data.typography || { family: 'Inter', weight: '400', color: '#000000' };
+
+  const updateTypography = (updates: Partial<typeof typography>) => {
+    onChange({ typography: { ...typography, ...updates } });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold mb-2">Typography (Optional)</h2>
+        <p className="text-muted-foreground">Set your brand's font preferences</p>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <Label>Font Family</Label>
+          <select
+            value={typography.family}
+            onChange={(e) => updateTypography({ family: e.target.value })}
+            className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            {FONT_FAMILIES.map((font) => (
+              <option key={font} value={font}>{font}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <Label>Font Weight</Label>
+          <select
+            value={typography.weight}
+            onChange={(e) => updateTypography({ weight: e.target.value })}
+            className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            {FONT_WEIGHTS.map((weight) => (
+              <option key={weight} value={weight}>{weight}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <Label>Font Color</Label>
+          <div className="flex items-center gap-3 mt-2">
+            <input
+              type="color"
+              value={typography.color}
+              onChange={(e) => updateTypography({ color: e.target.value })}
+              className="w-12 h-12 rounded-lg cursor-pointer border-2 border-border"
+            />
+            <Input
+              value={typography.color}
+              onChange={(e) => updateTypography({ color: e.target.value })}
+              placeholder="#000000"
+              className="flex-1"
+            />
+          </div>
+        </div>
+
+        {/* Preview */}
+        <div className="p-4 rounded-lg bg-muted/50">
+          <Label className="text-xs text-muted-foreground mb-2 block">Preview</Label>
+          <p 
+            style={{ 
+              fontFamily: typography.family, 
+              fontWeight: typography.weight,
+              color: typography.color 
+            }}
+            className="text-2xl"
+          >
+            The quick brown fox jumps over the lazy dog
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BrandVoiceStep({ data, onChange }: StepProps) {
-  const selectedTemplate = data.voice?.template || 'friendly';
+  const selectedTemplate = data.voice.template;
+  const [preferredInput, setPreferredInput] = useState('');
+  const [avoidedInput, setAvoidedInput] = useState('');
 
   const handleTemplateSelect = (template: BrandVoiceTemplate) => {
     onChange({
+      voice: { ...data.voice, template },
+    });
+  };
+
+  const togglePersonality = (trait: string) => {
+    const current = data.voice.personality || [];
+    const newPersonality = current.includes(trait)
+      ? current.filter(t => t !== trait)
+      : [...current, trait];
+    onChange({ voice: { ...data.voice, personality: newPersonality } });
+  };
+
+  const addPreferredWord = () => {
+    if (!preferredInput.trim()) return;
+    onChange({
       voice: {
-        ...data.voice!,
-        template,
+        ...data.voice,
+        vocabulary: {
+          ...data.voice.vocabulary,
+          preferred: [...data.voice.vocabulary.preferred, preferredInput.trim()],
+        },
+      },
+    });
+    setPreferredInput('');
+  };
+
+  const addAvoidedWord = () => {
+    if (!avoidedInput.trim()) return;
+    onChange({
+      voice: {
+        ...data.voice,
+        vocabulary: {
+          ...data.voice.vocabulary,
+          avoided: [...data.voice.vocabulary.avoided, avoidedInput.trim()],
+        },
+      },
+    });
+    setAvoidedInput('');
+  };
+
+  const removePreferredWord = (word: string) => {
+    onChange({
+      voice: {
+        ...data.voice,
+        vocabulary: {
+          ...data.voice.vocabulary,
+          preferred: data.voice.vocabulary.preferred.filter(w => w !== word),
+        },
+      },
+    });
+  };
+
+  const removeAvoidedWord = (word: string) => {
+    onChange({
+      voice: {
+        ...data.voice,
+        vocabulary: {
+          ...data.voice.vocabulary,
+          avoided: data.voice.vocabulary.avoided.filter(w => w !== word),
+        },
       },
     });
   };
@@ -541,90 +1175,121 @@ function BrandVoiceStep({ data, onChange }: StepProps) {
   return (
     <div className="space-y-6">
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold mb-2">Choose your brand voice</h2>
-        <p className="text-muted-foreground">This helps us write content that sounds like you</p>
+        <h2 className="text-2xl font-bold mb-2">Brand voice</h2>
+        <p className="text-muted-foreground">Define how your brand communicates</p>
       </div>
-      
-      <div className="space-y-3">
-        {VOICE_TEMPLATES.map((template) => (
-          <button
-            key={template.id}
-            onClick={() => handleTemplateSelect(template.id)}
-            className={`
-              w-full p-4 rounded-lg border-2 text-left transition-all
-              ${selectedTemplate === template.id 
-                ? 'border-primary bg-primary/5' 
-                : 'border-border hover:border-primary/50'}
-            `}
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="font-medium">{template.name}</h3>
-                <p className="text-sm text-muted-foreground">{template.description}</p>
-                <p className="text-sm text-muted-foreground/70 mt-2 italic">
-                  "{template.example}"
-                </p>
-              </div>
-              {selectedTemplate === template.id && (
-                <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
-              )}
-            </div>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
-function BrandStyleStep({ data, onChange }: StepProps) {
-  return (
-    <div className="space-y-6">
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold mb-2">Visual preferences</h2>
-        <p className="text-muted-foreground">Help us match your brand's aesthetic</p>
+      {/* Voice Template */}
+      <div>
+        <Label className="mb-2 block">Voice Template *</Label>
+        <div className="space-y-2">
+          {VOICE_TEMPLATES.map((template) => (
+            <button
+              key={template.id}
+              onClick={() => handleTemplateSelect(template.id)}
+              className={`
+                w-full p-3 rounded-lg border-2 text-left transition-all
+                ${selectedTemplate === template.id 
+                  ? 'border-primary bg-primary/5' 
+                  : 'border-border hover:border-primary/50'}
+              `}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="font-medium">{template.name}</h3>
+                  <p className="text-sm text-muted-foreground">{template.description}</p>
+                </div>
+                {selectedTemplate === template.id && (
+                  <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
       </div>
-      
-      <div className="space-y-6">
+
+      {/* Tone */}
+      <div>
+        <Label htmlFor="tone">Tone Description</Label>
+        <Input
+          id="tone"
+          value={data.voice.tone}
+          onChange={(e) => onChange({ voice: { ...data.voice, tone: e.target.value } })}
+          placeholder="e.g., Warm and approachable, yet authoritative"
+          className="mt-1.5"
+        />
+      </div>
+
+      {/* Personality Traits */}
+      <div>
+        <Label>Personality Traits</Label>
+        <div className="flex flex-wrap gap-2 mt-2">
+          {PERSONALITY_TRAITS.map((trait) => (
+            <button
+              key={trait}
+              onClick={() => togglePersonality(trait)}
+              className={`px-3 py-1.5 rounded-full text-sm capitalize transition-all ${
+                data.voice.personality?.includes(trait)
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted hover:bg-muted/80'
+              }`}
+            >
+              {trait}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Vocabulary */}
+      <div className="grid grid-cols-2 gap-4">
         <div>
-          <Label>Primary Color</Label>
-          <div className="flex items-center gap-3 mt-2">
-            <input
-              type="color"
-              value={data.style?.primaryColor || '#6366F1'}
-              onChange={(e) => onChange({
-                style: { ...data.style!, primaryColor: e.target.value }
-              })}
-              className="w-12 h-12 rounded-lg cursor-pointer border-2 border-border"
-            />
+          <Label>Preferred Words</Label>
+          <div className="flex gap-2 mt-1.5">
             <Input
-              value={data.style?.primaryColor || '#6366F1'}
-              onChange={(e) => onChange({
-                style: { ...data.style!, primaryColor: e.target.value }
-              })}
-              placeholder="#6366F1"
+              value={preferredInput}
+              onChange={(e) => setPreferredInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addPreferredWord()}
+              placeholder="Add word"
               className="flex-1"
             />
+            <Button size="sm" onClick={addPreferredWord}>
+              <Plus className="w-4 h-4" />
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-1 mt-2">
+            {data.voice.vocabulary.preferred.map((word) => (
+              <span key={word} className="px-2 py-1 rounded bg-green-500/20 text-green-700 dark:text-green-300 text-xs flex items-center gap-1">
+                {word}
+                <button onClick={() => removePreferredWord(word)}>
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
           </div>
         </div>
 
         <div>
-          <Label>Image Style Preference</Label>
-          <div className="grid grid-cols-2 gap-3 mt-2">
-            {(['lifestyle', 'studio', 'minimal', 'vibrant'] as const).map((style) => (
-              <button
-                key={style}
-                onClick={() => onChange({
-                  style: { ...data.style!, imageStyle: style }
-                })}
-                className={`
-                  p-4 rounded-lg border-2 text-left capitalize transition-all
-                  ${data.style?.imageStyle === style 
-                    ? 'border-primary bg-primary/5' 
-                    : 'border-border hover:border-primary/50'}
-                `}
-              >
-                {style}
-              </button>
+          <Label>Avoided Words</Label>
+          <div className="flex gap-2 mt-1.5">
+            <Input
+              value={avoidedInput}
+              onChange={(e) => setAvoidedInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addAvoidedWord()}
+              placeholder="Add word"
+              className="flex-1"
+            />
+            <Button size="sm" onClick={addAvoidedWord}>
+              <Plus className="w-4 h-4" />
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-1 mt-2">
+            {data.voice.vocabulary.avoided.map((word) => (
+              <span key={word} className="px-2 py-1 rounded bg-red-500/20 text-red-700 dark:text-red-300 text-xs flex items-center gap-1">
+                {word}
+                <button onClick={() => removeAvoidedWord(word)}>
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
             ))}
           </div>
         </div>
@@ -633,197 +1298,231 @@ function BrandStyleStep({ data, onChange }: StepProps) {
   );
 }
 
-interface BrandMemoryStepProps {
-  memory: BrandMemory | null;
-  onChange: (memory: BrandMemory | null) => void;
-}
-
-function BrandMemoryStep({ memory, onChange }: BrandMemoryStepProps) {
-  const [isLoading, setIsLoading] = useState(false);
+function BrandAssetsStep({ data, onChange }: StepProps) {
+  const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploadType, setUploadType] = useState<'characters' | 'scenes' | 'siteImages'>('characters');
+  const [newAssetName, setNewAssetName] = useState('');
+  const [newAssetDesc, setNewAssetDesc] = useState('');
+  const [newAssetType, setNewAssetType] = useState('studio');
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const accomplish = getAccomplish();
 
-  const handleFileUpload = async () => {
-    setIsLoading(true);
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
     setError(null);
 
     try {
-      const result = await accomplish.openFilePicker();
-      if (result.canceled || result.filePaths.length === 0) {
-        setIsLoading(false);
-        return;
-      }
+      for (const file of Array.from(files)) {
+        // Check file size before uploading
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+          const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+          setError(`File "${file.name}" is too large (${sizeMB}MB). Please use an image smaller than ${MAX_FILE_SIZE_MB}MB.`);
+          continue;
+        }
 
-      const filePath = result.filePaths[0];
-      
-      // Read the file via loadLocalFile
-      const fileData = await accomplish.loadLocalFile(filePath);
-      
-      // Parse JSON from dataUrl
-      // dataUrl format: data:application/json;base64,<base64data>
-      const base64Data = fileData.dataUrl.split(',')[1];
-      const jsonString = atob(base64Data);
-      const memoryData = JSON.parse(jsonString) as BrandMemory;
-      
-      // Validate required fields
-      if (!memoryData.name) {
-        throw new Error('Brand memory must have a name');
-      }
+        const reader = new FileReader();
+        const base64Promise = new Promise<string>((resolve, reject) => {
+          reader.onload = () => {
+            const result = reader.result as string;
+            const base64 = result.split(',')[1];
+            resolve(base64);
+          };
+          reader.onerror = reject;
+        });
+        reader.readAsDataURL(file);
+        const base64 = await base64Promise;
 
-      onChange(memoryData);
+        const assetTypeMap = {
+          characters: 'characters',
+          scenes: 'scenes',
+          siteImages: 'site-images',
+        } as const;
+
+        const result = await accomplish.uploadBrandAsset(
+          data.id,
+          assetTypeMap[uploadType],
+          file.name,
+          file.type,
+          base64
+        );
+
+        if (result.success && result.url) {
+          if (uploadType === 'siteImages') {
+            onChange({ siteImages: [...data.siteImages, result.url] });
+          } else if (uploadType === 'characters') {
+            onChange({
+              characters: [...data.characters, { url: result.url, name: newAssetName, description: newAssetDesc }],
+            });
+          } else {
+            onChange({
+              scenes: [...data.scenes, { url: result.url, name: newAssetName, description: newAssetDesc, type: newAssetType }],
+            });
+          }
+          setNewAssetName('');
+          setNewAssetDesc('');
+        } else {
+          setError(humanizeUploadError(result.error || 'Failed to upload asset'));
+        }
+      }
     } catch (err) {
-      console.error('Failed to import brand memory:', err);
-      setError(err instanceof Error ? err.message : 'Failed to parse JSON file');
+      console.error('Failed to upload asset:', err);
+      const errorMsg = err instanceof Error ? err.message : 'Failed to upload asset';
+      setError(humanizeUploadError(errorMsg));
     } finally {
-      setIsLoading(false);
+      setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
-  const handleRemove = () => {
-    onChange(null);
-    setError(null);
+  const removeCharacter = (index: number) => {
+    onChange({ characters: data.characters.filter((_, i) => i !== index) });
   };
 
-  // Count what's included in the memory
-  const memorySummary = memory ? {
-    hasLogo: !!memory.logo?.urls?.length,
-    hasTagline: !!memory.tagline?.text,
-    hasColors: !!memory.palette?.primary?.length,
-    hasFonts: !!memory.fonts?.length,
-    hasCharacters: !!memory.characters?.length,
-    hasScenes: !!memory.scenes?.length,
-    hasSiteImages: !!memory.site_images?.length,
-  } : null;
+  const removeScene = (index: number) => {
+    onChange({ scenes: data.scenes.filter((_, i) => i !== index) });
+  };
+
+  const removeSiteImage = (index: number) => {
+    onChange({ siteImages: data.siteImages.filter((_, i) => i !== index) });
+  };
 
   return (
     <div className="space-y-6">
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold mb-2">Brand Memory (Optional)</h2>
-        <p className="text-muted-foreground">
-          Import your brand's visual DNA for AI-powered image generation
-        </p>
+        <h2 className="text-2xl font-bold mb-2">Visual Assets (Optional)</h2>
+        <p className="text-muted-foreground">Add characters, scenes, and reference images</p>
       </div>
 
-      {!memory ? (
-        <div className="space-y-4">
-          <div 
-            onClick={handleFileUpload}
-            className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-all"
+      {/* Asset Type Tabs */}
+      <div className="flex gap-2 border-b border-border">
+        {(['characters', 'scenes', 'siteImages'] as const).map((type) => (
+          <button
+            key={type}
+            onClick={() => setUploadType(type)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              uploadType === type
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
           >
-            {isLoading ? (
-              <Loader2 className="w-10 h-10 mx-auto text-muted-foreground animate-spin mb-3" />
-            ) : (
-              <Upload className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
-            )}
-            <h3 className="font-medium mb-1">Upload Brand Memory JSON</h3>
-            <p className="text-sm text-muted-foreground">
-              Click to select a brand memory file
-            </p>
-          </div>
+            {type === 'characters' && `Characters (${data.characters.length})`}
+            {type === 'scenes' && `Scenes (${data.scenes.length})`}
+            {type === 'siteImages' && `Site Images (${data.siteImages.length})`}
+          </button>
+        ))}
+      </div>
 
-          {error && (
-            <div className="flex items-center gap-2 text-sm text-destructive">
-              <XCircle className="w-4 h-4" />
-              {error}
-            </div>
+      {/* Metadata inputs for characters/scenes */}
+      {uploadType !== 'siteImages' && (
+        <div className="space-y-2">
+          <Input
+            value={newAssetName}
+            onChange={(e) => setNewAssetName(e.target.value)}
+            placeholder={uploadType === 'characters' ? 'Character name' : 'Scene name'}
+          />
+          <Input
+            value={newAssetDesc}
+            onChange={(e) => setNewAssetDesc(e.target.value)}
+            placeholder="Description"
+          />
+          {uploadType === 'scenes' && (
+            <select
+              value={newAssetType}
+              onChange={(e) => setNewAssetType(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              <option value="studio">Studio</option>
+              <option value="lifestyle">Lifestyle</option>
+              <option value="outdoor">Outdoor</option>
+              <option value="home">Home</option>
+              <option value="abstract">Abstract</option>
+              <option value="other">Other</option>
+            </select>
           )}
-
-          <div className="p-4 rounded-lg bg-muted/50">
-            <h4 className="font-medium mb-2 text-sm">What's included in Brand Memory?</h4>
-            <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <Image className="w-4 h-4" />
-                <span>Logo & site images</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Palette className="w-4 h-4" />
-                <span>Color palette</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Type className="w-4 h-4" />
-                <span>Fonts & typography</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Users className="w-4 h-4" />
-                <span>Characters & scenes</span>
-              </div>
-            </div>
-          </div>
-
-          <p className="text-xs text-muted-foreground text-center">
-            You can skip this step and import later in Settings
-          </p>
         </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="p-6 rounded-lg border-2 border-foreground/20 bg-foreground/5">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-foreground/10 flex items-center justify-center">
-                  <FileJson className="w-5 h-5 text-foreground" />
-                </div>
-                <div>
-                  <h3 className="font-medium">{memory.name}</h3>
-                  <p className="text-sm text-muted-foreground">Brand memory imported</p>
-                </div>
+      )}
+
+      {/* Upload Zone */}
+      <div
+        onClick={() => fileInputRef.current?.click()}
+        className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-all"
+      >
+        {isUploading ? (
+          <Loader2 className="w-8 h-8 mx-auto text-muted-foreground animate-spin mb-2" />
+        ) : (
+          <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+        )}
+        <p className="text-sm text-muted-foreground">
+          {isUploading ? 'Uploading...' : 'Click to upload'}
+        </p>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 text-sm text-destructive">
+          <XCircle className="w-4 h-4" />
+          {error}
+        </div>
+      )}
+
+      {/* Asset Lists */}
+      {uploadType === 'characters' && data.characters.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          {data.characters.map((char, index) => (
+            <div key={index} className="relative group">
+              <img src={char.url} alt={char.name} className="w-full h-24 object-cover rounded-lg" />
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                <button onClick={() => removeCharacter(index)} className="text-white">
+                  <Trash2 className="w-5 h-5" />
+                </button>
               </div>
-              <Button variant="ghost" size="sm" onClick={handleRemove}>
-                Remove
-              </Button>
+              <p className="text-xs mt-1 truncate">{char.name}</p>
             </div>
+          ))}
+        </div>
+      )}
 
-            <div className="grid grid-cols-2 gap-2">
-              {memorySummary?.hasLogo && (
-                <div className="flex items-center gap-2 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-foreground" />
-                  <span>Logo</span>
-                </div>
-              )}
-              {memorySummary?.hasTagline && (
-                <div className="flex items-center gap-2 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-foreground" />
-                  <span>Tagline</span>
-                </div>
-              )}
-              {memorySummary?.hasColors && (
-                <div className="flex items-center gap-2 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-foreground" />
-                  <span>{memory.palette?.primary?.length || 0} colors</span>
-                </div>
-              )}
-              {memorySummary?.hasFonts && (
-                <div className="flex items-center gap-2 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-foreground" />
-                  <span>{memory.fonts?.length || 0} fonts</span>
-                </div>
-              )}
-              {memorySummary?.hasCharacters && (
-                <div className="flex items-center gap-2 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-foreground" />
-                  <span>{memory.characters?.length || 0} characters</span>
-                </div>
-              )}
-              {memorySummary?.hasScenes && (
-                <div className="flex items-center gap-2 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-foreground" />
-                  <span>{memory.scenes?.length || 0} scenes</span>
-                </div>
-              )}
-              {memorySummary?.hasSiteImages && (
-                <div className="flex items-center gap-2 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-foreground" />
-                  <span>{memory.site_images?.length || 0} site images</span>
-                </div>
-              )}
+      {uploadType === 'scenes' && data.scenes.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          {data.scenes.map((scene, index) => (
+            <div key={index} className="relative group">
+              <img src={scene.url} alt={scene.name} className="w-full h-24 object-cover rounded-lg" />
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                <button onClick={() => removeScene(index)} className="text-white">
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-xs mt-1 truncate">{scene.name}</p>
             </div>
-          </div>
+          ))}
+        </div>
+      )}
 
-          {memory.overview && (
-            <div className="p-4 rounded-lg bg-muted/50">
-              <h4 className="font-medium mb-1 text-sm">Overview</h4>
-              <p className="text-sm text-muted-foreground line-clamp-3">{memory.overview}</p>
+      {uploadType === 'siteImages' && data.siteImages.length > 0 && (
+        <div className="grid grid-cols-4 gap-2">
+          {data.siteImages.map((url, index) => (
+            <div key={index} className="relative group">
+              <img src={url} alt={`Site ${index + 1}`} className="w-full h-20 object-cover rounded-lg" />
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                <button onClick={() => removeSiteImage(index)} className="text-white">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-          )}
+          ))}
         </div>
       )}
     </div>
@@ -873,7 +1572,6 @@ function ShopifyConnectStep({ data, onChange }: StepProps) {
     try {
       const accomplish = getAccomplish();
       
-      // Test first
       const testResult = await accomplish.testShopifyConnection({
         shopDomain: shopDomain.trim(),
         accessToken: accessToken.trim(),
@@ -885,7 +1583,6 @@ function ShopifyConnectStep({ data, onChange }: StepProps) {
         return;
       }
 
-      // Connect
       await accomplish.connectShopify({
         shopDomain: shopDomain.trim(),
         accessToken: accessToken.trim(),
@@ -909,7 +1606,7 @@ function ShopifyConnectStep({ data, onChange }: StepProps) {
         <div className="text-center mb-8">
           <h2 className="text-2xl font-bold mb-2">Shopify Connected!</h2>
           <p className="text-muted-foreground">
-            Your store is ready to be managed by BrandWork
+            Your store is ready to be managed by Shop OS
           </p>
         </div>
         
@@ -933,9 +1630,9 @@ function ShopifyConnectStep({ data, onChange }: StepProps) {
   return (
     <div className="space-y-6">
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold mb-2">Connect your Shopify store</h2>
+        <h2 className="text-2xl font-bold mb-2">Connect Shopify (Optional)</h2>
         <p className="text-muted-foreground">
-          This allows BrandWork to read and update your products
+          This allows Shop OS to read and update your products
         </p>
       </div>
       
@@ -1029,16 +1726,14 @@ function ShopifyConnectStep({ data, onChange }: StepProps) {
             )}
           </Button>
         </div>
-
-        <p className="text-xs text-muted-foreground text-center pt-2">
-          You can skip this step and connect later in Settings
-        </p>
       </div>
     </div>
   );
 }
 
-function CompleteStep({ data }: { data: Partial<BrandProfile> }) {
+function CompleteStep({ data, brandMemory }: { data: OnboardingBrandData; brandMemory: BrandMemory | null }) {
+  const displayName = brandMemory?.name || data.name || 'Your Brand';
+  
   return (
     <div className="text-center space-y-6">
       <div className="w-20 h-20 mx-auto rounded-full bg-foreground/10 flex items-center justify-center">
@@ -1047,9 +1742,53 @@ function CompleteStep({ data }: { data: Partial<BrandProfile> }) {
       <div>
         <h2 className="text-2xl font-bold mb-2">You're all set!</h2>
         <p className="text-muted-foreground">
-          Shop OS is ready to help <strong>{data.name || 'your brand'}</strong> with:
+          Shop OS is ready to help <strong>{displayName}</strong>
         </p>
       </div>
+
+      {/* Summary */}
+      <div className="p-4 rounded-lg bg-muted/50 text-left space-y-3">
+        {data.logos.length > 0 && (
+          <div className="flex items-center gap-3">
+            <div className="flex -space-x-2">
+              {data.logos.slice(0, 3).map((logo, i) => (
+                <div key={i} className="w-8 h-8 rounded-full bg-white border-2 border-background overflow-hidden">
+                  <img src={logo.url} alt="" className="w-full h-full object-contain" />
+                </div>
+              ))}
+            </div>
+            <span className="text-sm">{data.logos.length} logo(s)</span>
+          </div>
+        )}
+        
+        {data.palette.primary.length > 0 && (
+          <div className="flex items-center gap-3">
+            <div className="flex -space-x-1">
+              {data.palette.primary.slice(0, 5).map((color, i) => (
+                <div 
+                  key={i} 
+                  className="w-6 h-6 rounded-full border-2 border-background" 
+                  style={{ backgroundColor: color.hex }}
+                />
+              ))}
+            </div>
+            <span className="text-sm">{data.palette.primary.length + data.palette.secondary.length} color(s)</span>
+          </div>
+        )}
+
+        <div className="flex items-center gap-3">
+          <MessageSquare className="w-5 h-5 text-muted-foreground" />
+          <span className="text-sm capitalize">{data.voice.template} voice</span>
+        </div>
+
+        {data.shopifyConnected && (
+          <div className="flex items-center gap-3">
+            <ShoppingBag className="w-5 h-5 text-muted-foreground" />
+            <span className="text-sm">Shopify connected</span>
+          </div>
+        )}
+      </div>
+
       <div className="grid gap-3 text-left">
         <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
           <CheckCircle2 className="w-5 h-5 text-foreground" />

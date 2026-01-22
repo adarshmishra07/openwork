@@ -9,10 +9,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Trash2, Store, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { Trash2, Store, CheckCircle2, XCircle, Loader2, Building2 } from 'lucide-react';
 import type { ApiKeyConfig, SelectedModel, ProviderId as SharedProviderId } from '@brandwork/shared';
 import { DEFAULT_PROVIDERS, DEFAULT_MODELS } from '@brandwork/shared';
 import logoImage from '/assets/logo.png';
+import { BrandSettingsSection } from '@/components/settings/BrandSettingsSection';
 
 interface SettingsDialogProps {
   open: boolean;
@@ -80,6 +81,7 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
   const [loadingModel, setLoadingModel] = useState(true);
   const [modelStatusMessage, setModelStatusMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'cloud' | 'local' | 'proxy'>('cloud');
+  const [mainTab, setMainTab] = useState<'model' | 'brand' | 'integrations' | 'developer'>('model');
   const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
   const [ollamaModels, setOllamaModels] = useState<Array<{ id: string; displayName: string; size: number }>>([]);
   const [ollamaConnected, setOllamaConnected] = useState(false);
@@ -293,16 +295,19 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
     fetchShopifyStatus();
   }, [open]);
 
-  // Scroll to integrations section when initialTab is set
+  // Handle initialTab to switch to correct main tab
   useEffect(() => {
-    if (open && initialTab === 'integrations') {
-      // Wait for dialog to render, then scroll to integrations section
-      setTimeout(() => {
-        const integrationsSection = document.getElementById('settings-integrations-section');
-        if (integrationsSection) {
-          integrationsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      }, 100);
+    if (open && initialTab) {
+      // Map initialTab values to mainTab values
+      if (initialTab === 'integrations') {
+        setMainTab('integrations');
+      } else if (initialTab === 'brand') {
+        setMainTab('brand');
+      } else if (initialTab === 'developer') {
+        setMainTab('developer');
+      } else if (initialTab === 'model') {
+        setMainTab('model');
+      }
     }
   }, [open, initialTab]);
 
@@ -816,37 +821,83 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-8 mt-4">
-          {/* Model Selection Section */}
-          <section>
-            <h2 className="mb-4 text-base font-medium text-foreground">Model</h2>
-            <div className="rounded-lg border border-border bg-card p-5">
-              {/* Tabs */}
-              <div className="flex gap-2 mb-5">
-                <button
-                  onClick={() => setActiveTab('cloud')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'cloud'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:text-foreground'
-                    }`}
-                >
-                  Cloud Providers
-                </button>
-                <button
-                  onClick={() => setActiveTab('local')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'local'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:text-foreground'
-                    }`}
-                >
-                  Local Models
-                </button>
-                <button
+        {/* Main Tab Navigation */}
+        <div className="flex gap-1 border-b border-border pb-0 mt-2">
+          <button
+            onClick={() => setMainTab('model')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              mainTab === 'model'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Model
+          </button>
+          <button
+            onClick={() => setMainTab('brand')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              mainTab === 'brand'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Brand
+          </button>
+          <button
+            onClick={() => setMainTab('integrations')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              mainTab === 'integrations'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Integrations
+          </button>
+          <button
+            onClick={() => setMainTab('developer')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              mainTab === 'developer'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Developer
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto mt-4">
+        {/* Model Tab Content */}
+        {mainTab === 'model' && (
+          <div className="space-y-6">
+            {/* Model Selection Section */}
+            <section>
+              <div className="rounded-lg border border-border bg-card p-5">
+                {/* Tabs */}
+                <div className="flex gap-2 mb-5">
+                  <button
+                    onClick={() => setActiveTab('cloud')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'cloud'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground hover:text-foreground'
+                      }`}
+                  >
+                    Cloud Providers
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('local')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'local'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground hover:text-foreground'
+                      }`}
+                  >
+                    Local Models
+                  </button>
+                  <button
                   onClick={() => setActiveTab('proxy')}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'proxy'
                       ? 'bg-primary text-primary-foreground'
@@ -1625,10 +1676,21 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
               </div>
             </section>
           )}
+          </div>
+        )}
 
+        {/* Brand Tab Content */}
+        {mainTab === 'brand' && (
+          <div className="space-y-6">
+            <BrandSettingsSection />
+          </div>
+        )}
+
+        {/* Integrations Tab Content */}
+        {mainTab === 'integrations' && (
+          <div className="space-y-6">
           {/* Integrations Section */}
           <section id="settings-integrations-section">
-            <h2 className="mb-4 text-base font-medium text-foreground">Integrations</h2>
             <div className="rounded-lg border border-border bg-card p-5">
               {/* Shopify Connection */}
               <div className="flex items-start gap-4">
@@ -1758,10 +1820,14 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
               </div>
             </div>
           </section>
+          </div>
+        )}
 
+        {/* Developer Tab Content */}
+        {mainTab === 'developer' && (
+          <div className="space-y-6">
           {/* Developer Section */}
           <section>
-            <h2 className="mb-4 text-base font-medium text-foreground">Developer</h2>
             <div className="rounded-lg border border-border bg-card p-5">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
@@ -1866,6 +1932,8 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
               </p>
             </div>
           </section>
+          </div>
+        )}
         </div>
       </DialogContent>
     </Dialog>

@@ -341,47 +341,173 @@ export function generateBrandContext(brandId?: string): string {
   }
 
   const examples = getBrandExamples(profile.id, undefined, 5);
+  const memory = profile.memory;
   
-  const context = `
-## Brand Context: ${profile.name}
+  // Build the context string with all available brand information
+  let context = `## Brand Context: ${profile.name}\n\n`;
 
-### Brand Overview
-- **Industry**: ${profile.industry || 'Not specified'}
-- **Target Audience**: ${profile.targetAudience || 'Not specified'}
-- **Description**: ${profile.description || 'Not specified'}
+  // Brand Overview
+  context += `### Brand Overview\n`;
+  context += `- **Industry**: ${profile.industry || 'Not specified'}\n`;
+  context += `- **Target Audience**: ${profile.targetAudience || 'Not specified'}\n`;
+  context += `- **Description**: ${profile.description || memory?.overview || 'Not specified'}\n`;
+  
+  // Tagline (from memory)
+  if (memory?.tagline?.text) {
+    context += `- **Tagline**: "${memory.tagline.text}"`;
+    if (memory.tagline.tones?.length) {
+      context += ` (${memory.tagline.tones.join(', ')})`;
+    }
+    context += '\n';
+  }
+  context += '\n';
 
-### Brand Voice
-- **Template**: ${profile.voice.template}
-- **Tone**: ${profile.voice.tone || 'Match the template style'}
-- **Personality**: ${profile.voice.personality?.join(', ') || 'Authentic, helpful'}
+  // Brand Voice
+  context += `### Brand Voice\n`;
+  context += `- **Template**: ${profile.voice.template}\n`;
+  context += `- **Tone**: ${profile.voice.tone || 'Match the template style'}\n`;
+  context += `- **Personality**: ${profile.voice.personality?.join(', ') || 'Authentic, helpful'}\n\n`;
 
-### Writing Guidelines
-${profile.voice.vocabulary?.preferred?.length ? `- **Preferred Words**: ${profile.voice.vocabulary.preferred.join(', ')}` : ''}
-${profile.voice.vocabulary?.avoided?.length ? `- **Avoid Using**: ${profile.voice.vocabulary.avoided.join(', ')}` : ''}
+  // Writing Guidelines
+  context += `### Writing Guidelines\n`;
+  if (profile.voice.vocabulary?.preferred?.length) {
+    context += `- **Preferred Words**: ${profile.voice.vocabulary.preferred.join(', ')}\n`;
+  }
+  if (profile.voice.vocabulary?.avoided?.length) {
+    context += `- **Avoid Using**: ${profile.voice.vocabulary.avoided.join(', ')}\n`;
+  }
+  context += '\n';
 
-### Brand Rules
-${profile.rules.doStatements?.length ? profile.rules.doStatements.map(s => `- DO: ${s}`).join('\n') : ''}
-${profile.rules.dontStatements?.length ? profile.rules.dontStatements.map(s => `- DON'T: ${s}`).join('\n') : ''}
-${profile.rules.legalDisclaimer ? `- **Legal Note**: ${profile.rules.legalDisclaimer}` : ''}
+  // Brand Rules
+  if (profile.rules.doStatements?.length || profile.rules.dontStatements?.length || profile.rules.legalDisclaimer) {
+    context += `### Brand Rules\n`;
+    if (profile.rules.doStatements?.length) {
+      context += profile.rules.doStatements.map(s => `- DO: ${s}`).join('\n') + '\n';
+    }
+    if (profile.rules.dontStatements?.length) {
+      context += profile.rules.dontStatements.map(s => `- DON'T: ${s}`).join('\n') + '\n';
+    }
+    if (profile.rules.legalDisclaimer) {
+      context += `- **Legal Note**: ${profile.rules.legalDisclaimer}\n`;
+    }
+    context += '\n';
+  }
 
-### Visual Style Preferences
-- **Primary Color**: ${profile.style.primaryColor}
-- **Image Style**: ${profile.style.imageStyle}
-- **Font Style**: ${profile.style.fontStyle}
+  // Visual Style Section
+  context += `### Visual Style\n`;
+  context += `- **Primary Color**: ${profile.style.primaryColor}\n`;
+  context += `- **Image Style**: ${profile.style.imageStyle}\n`;
+  context += `- **Font Style**: ${profile.style.fontStyle}\n`;
 
-${examples.length > 0 ? `
-### Example Outputs (Learn from these)
-${examples.map(ex => `
-**${ex.example_type}**:
-${ex.input_text ? `Input: ${ex.input_text}` : ''}
-Output: ${ex.output_text}
-`).join('\n')}
-` : ''}
+  // Extended visual assets from memory
+  if (memory) {
+    // Logos
+    if (memory.logo?.urls?.length) {
+      context += `\n#### Brand Logos\n`;
+      memory.logo.urls.forEach((url, i) => {
+        context += `- Logo ${i + 1}: ${url}\n`;
+      });
+      if (memory.logo.colors?.length) {
+        context += `- **Logo Colors**: ${memory.logo.colors.join(', ')}\n`;
+      }
+    }
 
-**IMPORTANT**: All content you generate must align with this brand voice and style. When writing product descriptions, marketing copy, or any customer-facing content, embody the ${profile.voice.template} voice template.
-`.trim();
+    // Color Palette
+    if (memory.palette) {
+      context += `\n#### Color Palette\n`;
+      if (memory.palette.primary?.length) {
+        context += `**Primary Colors:**\n`;
+        memory.palette.primary.forEach(c => {
+          context += `- ${c.hex}${c.label ? ` (${c.label})` : ''}\n`;
+        });
+      }
+      if (memory.palette.secondary?.length) {
+        context += `**Secondary Colors:**\n`;
+        memory.palette.secondary.forEach(c => {
+          context += `- ${c.hex}${c.label ? ` (${c.label})` : ''}\n`;
+        });
+      }
+      if (memory.palette.other?.length) {
+        context += `**Accent Colors:**\n`;
+        memory.palette.other.forEach(c => {
+          context += `- ${c.hex}${c.label ? ` (${c.label})` : ''}\n`;
+        });
+      }
+    }
 
-  return context;
+    // Typography
+    if (memory.fonts?.length) {
+      context += `\n#### Typography\n`;
+      memory.fonts.forEach(font => {
+        context += `- **Font**: ${font.family}, Weight: ${font.weight}, Color: ${font.color}\n`;
+        if (font.fileUrl) {
+          context += `  Font file: ${font.fileUrl}\n`;
+        }
+      });
+    }
+
+    // Characters/Models
+    if (memory.characters?.length) {
+      context += `\n#### Brand Characters/Models\n`;
+      context += `Use these characters when creating visual content:\n`;
+      memory.characters.forEach(char => {
+        context += `- **${char.metadata.name}**: ${char.metadata.description}\n`;
+        context += `  Image: ${char.url}\n`;
+        if (char.metadata.appearance) {
+          context += `  Appearance: ${char.metadata.appearance}\n`;
+        }
+        if (char.metadata.outfit) {
+          context += `  Outfit: ${char.metadata.outfit}\n`;
+        }
+      });
+    }
+
+    // Scenes/Backgrounds
+    if (memory.scenes?.length) {
+      context += `\n#### Brand Scenes/Backgrounds\n`;
+      context += `Use these scenes for product photography:\n`;
+      memory.scenes.forEach(scene => {
+        context += `- **${scene.metadata.name}** (${scene.metadata.type}): ${scene.metadata.description}\n`;
+        context += `  Image: ${scene.url}\n`;
+      });
+    }
+
+    // Site Reference Images
+    if (memory.site_images?.length) {
+      context += `\n#### Site Reference Images\n`;
+      context += `These images represent the brand's visual aesthetic:\n`;
+      memory.site_images.forEach((url, i) => {
+        context += `- Reference ${i + 1}: ${url}\n`;
+      });
+    }
+  }
+
+  // Examples
+  if (examples.length > 0) {
+    context += `\n### Example Outputs (Learn from these)\n`;
+    examples.forEach(ex => {
+      context += `\n**${ex.example_type}**:\n`;
+      if (ex.input_text) {
+        context += `Input: ${ex.input_text}\n`;
+      }
+      context += `Output: ${ex.output_text}\n`;
+    });
+  }
+
+  // Visual instruction
+  if (memory?.logo?.urls?.length || memory?.characters?.length || memory?.scenes?.length || memory?.site_images?.length) {
+    context += `\n### Visual Content Instructions\n`;
+    context += `When creating visual content, analyze the images and visual assets above alongside the text descriptions to ensure consistency with the brand's established aesthetic. Pay attention to:\n`;
+    context += `- Color palette and how colors are used\n`;
+    context += `- Overall style and mood of imagery\n`;
+    context += `- Typography and text treatments\n`;
+    context += `- Character/model styling if applicable\n`;
+    context += `- Background and scene compositions\n`;
+  }
+
+  context += `\n**IMPORTANT**: All content you generate must align with this brand voice and style. When writing product descriptions, marketing copy, or any customer-facing content, embody the ${profile.voice.template} voice template.`;
+
+  return context.trim();
 }
 
 /**

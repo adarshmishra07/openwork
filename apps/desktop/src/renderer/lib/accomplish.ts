@@ -149,6 +149,13 @@ interface AccomplishAPI {
   addBrandExample(brandId: string, exampleType: string, inputText: string | null, outputText: string, rating?: number): Promise<{ success: boolean }>;
   importBrandMemory(brandId: string, memoryData: BrandMemory): Promise<{ success: boolean; error?: string }>;
   getBrandMemory(brandId?: string): Promise<BrandMemory | null>;
+  uploadBrandAsset(
+    brandId: string,
+    assetType: 'logos' | 'characters' | 'scenes' | 'site-images',
+    filename: string,
+    contentType: string,
+    imageBase64: string
+  ): Promise<{ success: boolean; url?: string; error?: string }>;
 
   // Provider Settings API
   getProviderSettings(): Promise<ProviderSettings>;
