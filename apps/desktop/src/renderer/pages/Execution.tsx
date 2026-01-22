@@ -20,6 +20,9 @@ import { RichContentRenderer } from '../components/media/RichContentRenderer';
 import { isWaitingForUser } from '../lib/waiting-detection';
 import loadingSymbol from '/assets/loading-symbol.svg';
 import SettingsDialog from '../components/layout/SettingsDialog';
+import { CollapsibleThinking } from '../components/chat/CollapsibleThinking';
+import { CollapsibleToolCall } from '../components/chat/CollapsibleToolCall';
+import { ProgressIndicator } from '../components/chat/ProgressIndicator';
 
 // Debug log entry type
 interface DebugLogEntry {
@@ -873,35 +876,20 @@ export default function ExecutionPage() {
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -8 }}
                   transition={springs.gentle}
-                  className="flex items-center gap-2 py-1"
                   data-testid="execution-thinking-indicator"
                 >
-                  {/* Bullet point */}
-                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 shrink-0" />
-                  
-                  {/* Simple italic text for thinking/working - matches inactive style */}
-                  <span className="text-sm text-muted-foreground italic">
-                    {currentTool 
+                  <ProgressIndicator
+                    activity={currentTool 
                       ? (() => {
                           const activity = getActivityInfo(currentTool, currentToolInput);
                           const description = (currentToolInput as { description?: string })?.description;
-                          const timingHint = getSpaceToolTimingHint(currentTool);
-                          
-                          // Build the label
-                          let label = activity.detail 
+                          return activity.detail 
                             ? `${activity.label}: ${activity.detail}` 
                             : (description || activity.label);
-                          
-                          // Add timing hint for Space tools
-                          if (timingHint) {
-                            return `${label}... (may take ${timingHint})`;
-                          }
-                          return `${label}...`;
                         })()
-                      : 'Thinking...'}
-                  </span>
-                  
-                  <SpinningIcon className="h-3.5 w-3.5" />
+                      : 'Thinking'}
+                    timingHint={currentTool ? getSpaceToolTimingHint(currentTool) ?? undefined : undefined}
+                  />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -1371,6 +1359,7 @@ function getNextMessage(messages: TaskMessage[], currentMessage: TaskMessage): T
 }
 
 // Activity Bullet component for non-final messages (thinking, tools, skills, spaces)
+// Now uses CollapsibleToolCall for richer display with collapsible details
 const ActivityBullet = memo(function ActivityBullet({ 
   message, 
   isRunning = false,
@@ -1381,42 +1370,34 @@ const ActivityBullet = memo(function ActivityBullet({
   isLastMessage?: boolean;
 }) {
   const toolName = message.toolName || '';
-  const activity = getActivityInfo(toolName, message.toolInput);
-  const ActivityIcon = activity.icon;
+  const description = (message.toolInput as { description?: string })?.description;
+  
+  // Determine status based on toolStatus field or running state
+  const status: 'running' | 'success' | 'error' = 
+    isLastMessage && isRunning 
+      ? 'running' 
+      : message.toolStatus === 'error' 
+        ? 'error' 
+        : 'success';
 
   return (
     <motion.div
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: 1, x: 0 }}
       transition={springs.gentle}
-      className="flex items-center gap-2 py-1"
     >
-      {/* Bullet point */}
-      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 shrink-0" />
-      
-      {/* Badge for tool/skill/space - unified gray style */}
-      <Badge 
-        variant="outline" 
-        className="rounded-sm text-xs font-medium gap-1.5 py-0.5 px-2 bg-muted text-foreground border-border"
-      >
-        <ActivityIcon className="h-3 w-3" />
-        {activity.label}
-        {activity.detail && (
-          <span className="text-muted-foreground font-normal">
-            · {activity.detail}
-          </span>
-        )}
-      </Badge>
-      
-      {/* Loading spinner for active operations */}
-      {isLastMessage && isRunning && (
-        <SpinningIcon className="h-3.5 w-3.5" />
-      )}
+      <CollapsibleToolCall
+        name={toolName}
+        status={status}
+        description={description}
+        input={message.toolInput}
+      />
     </motion.div>
   );
 });
 
-// Intermediate assistant message - bullet point with italic text
+// Intermediate assistant message - collapsible thinking section
+// Shows reasoning/planning messages in a compact, expandable format
 const IntermediateMessage = memo(function IntermediateMessage({ 
   content,
   isRunning = false,
@@ -1431,17 +1412,14 @@ const IntermediateMessage = memo(function IntermediateMessage({
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: 1, x: 0 }}
       transition={springs.gentle}
-      className="flex items-center gap-2 py-1"
+      className="flex items-center gap-2"
     >
-      {/* Bullet point */}
-      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 shrink-0" />
-      
-      {/* Italic text */}
-      <span className="text-sm text-muted-foreground italic">
-        {content}
-      </span>
-      
-      {/* Loading spinner */}
+      <CollapsibleThinking 
+        content={content} 
+        defaultExpanded={false}
+        className="flex-1"
+      />
+      {/* Loading spinner for active thinking */}
       {isLastMessage && isRunning && (
         <SpinningIcon className="h-3.5 w-3.5 shrink-0" />
       )}
@@ -1530,7 +1508,7 @@ const MessageBubble = memo(function MessageBubble({
             ? 'bg-primary text-primary-foreground'
             : isSystem
               ? 'bg-muted/50 border border-border'
-              : 'bg-card border border-border'
+              : ''
         )}
       >
         {isSystem && (
