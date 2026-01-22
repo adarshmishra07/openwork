@@ -18,7 +18,7 @@ import type { NormalizedEvent } from '../claude-sdk/types';
 import { getSkillsPath } from './config-generator';
 import { getNpxPath, getBundledNodePaths } from '../utils/bundled-node';
 import { getActiveProviderModel } from '../store/providerSettings';
-import { getSelectedModel } from '../store/appSettings';
+import { getSelectedModel, getUseClaudeSdk } from '../store/appSettings';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -33,7 +33,9 @@ import {
   type PermissionRequest,
 } from '@brandwork/shared';
 
-// Feature flag for SDK adapter - enable via env var
+// Feature flag for SDK adapter - can be enabled via:
+// 1. UI Settings toggle (stored in appSettings)
+// 2. Environment variable USE_CLAUDE_SDK=true (for dev/testing)
 const USE_CLAUDE_SDK_ENV = process.env.USE_CLAUDE_SDK === 'true';
 
 /**
@@ -41,7 +43,11 @@ const USE_CLAUDE_SDK_ENV = process.env.USE_CLAUDE_SDK === 'true';
  * Only use SDK for Anthropic models - other providers need OpenCode CLI
  */
 function shouldUseSdkAdapter(): boolean {
-  if (!USE_CLAUDE_SDK_ENV) {
+  // Check settings first, then env var as fallback
+  const sdkEnabledInSettings = getUseClaudeSdk();
+  const sdkEnabled = sdkEnabledInSettings || USE_CLAUDE_SDK_ENV;
+  
+  if (!sdkEnabled) {
     return false;
   }
   
@@ -58,7 +64,7 @@ function shouldUseSdkAdapter(): boolean {
   const sdkSupportedProviders = ['anthropic'];
   const useSdk = sdkSupportedProviders.includes(selectedModel.provider);
   
-  console.log(`[TaskManager] Provider: ${selectedModel.provider}, Model: ${selectedModel.model}, Use SDK: ${useSdk}`);
+  console.log(`[TaskManager] Provider: ${selectedModel.provider}, Model: ${selectedModel.model}, SDK enabled: ${sdkEnabled}, Use SDK: ${useSdk}`);
   
   return useSdk;
 }

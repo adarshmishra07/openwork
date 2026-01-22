@@ -160,6 +160,10 @@ interface AccomplishAPI {
   setProviderDebugMode(enabled: boolean): Promise<void>;
   getProviderDebugMode(): Promise<boolean>;
 
+  // Claude SDK Settings (Experimental)
+  getUseClaudeSdk(): Promise<boolean>;
+  setUseClaudeSdk(enabled: boolean): Promise<{ success: boolean }>;
+
   // Event subscriptions
   onTaskUpdate(callback: (event: TaskUpdateEvent) => void): () => void;
   onTaskUpdateBatch?(callback: (event: { taskId: string; messages: TaskMessage[] }) => void): () => void;

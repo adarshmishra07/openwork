@@ -1591,6 +1591,23 @@ export function registerIPCHandlers(): void {
   });
 
   // ============================================
+  // App Settings Handlers
+  // ============================================
+
+  // Get Claude SDK setting
+  handle('settings:get-use-claude-sdk', async () => {
+    const { getUseClaudeSdk } = await import('../store/appSettings');
+    return getUseClaudeSdk();
+  });
+
+  // Set Claude SDK setting
+  handle('settings:set-use-claude-sdk', async (_event: IpcMainInvokeEvent, enabled: boolean) => {
+    const { setUseClaudeSdk } = await import('../store/appSettings');
+    setUseClaudeSdk(enabled);
+    return { success: true };
+  });
+
+  // ============================================
   // Brand Memory Handlers
   // ============================================
 

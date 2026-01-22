@@ -172,6 +172,12 @@ const accomplishAPI = {
   getProviderDebugMode: (): Promise<boolean> =>
     ipcRenderer.invoke('provider-settings:get-debug'),
 
+  // Claude SDK Settings (Experimental)
+  getUseClaudeSdk: (): Promise<boolean> =>
+    ipcRenderer.invoke('settings:get-use-claude-sdk'),
+  setUseClaudeSdk: (enabled: boolean): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('settings:set-use-claude-sdk', enabled),
+
   // Shopify
   connectShopify: (credentials: { shopDomain: string; accessToken: string }): Promise<{ success: boolean; shopDomain: string }> =>
     ipcRenderer.invoke('shopify:connect', credentials),

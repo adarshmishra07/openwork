@@ -15,6 +15,8 @@ interface AppSettingsSchema {
   ollamaConfig: OllamaConfig | null;
   /** LiteLLM proxy configuration */
   litellmConfig: LiteLLMConfig | null;
+  /** Use Claude Agent SDK for Anthropic models (experimental) */
+  useClaudeSdk: boolean;
 }
 
 const appSettingsStore = new Store<AppSettingsSchema>({
@@ -28,6 +30,7 @@ const appSettingsStore = new Store<AppSettingsSchema>({
     },
     ollamaConfig: null,
     litellmConfig: null,
+    useClaudeSdk: false, // Disabled by default, experimental feature
   },
 });
 
@@ -102,6 +105,20 @@ export function setLiteLLMConfig(config: LiteLLMConfig | null): void {
 }
 
 /**
+ * Get Claude SDK setting
+ */
+export function getUseClaudeSdk(): boolean {
+  return appSettingsStore.get('useClaudeSdk');
+}
+
+/**
+ * Set Claude SDK setting
+ */
+export function setUseClaudeSdk(enabled: boolean): void {
+  appSettingsStore.set('useClaudeSdk', enabled);
+}
+
+/**
  * Get all app settings
  */
 export function getAppSettings(): AppSettingsSchema {
@@ -111,6 +128,7 @@ export function getAppSettings(): AppSettingsSchema {
     selectedModel: appSettingsStore.get('selectedModel'),
     ollamaConfig: appSettingsStore.get('ollamaConfig') ?? null,
     litellmConfig: appSettingsStore.get('litellmConfig') ?? null,
+    useClaudeSdk: appSettingsStore.get('useClaudeSdk'),
   };
 }
 
