@@ -97,6 +97,7 @@ const config: Config = {
       },
       fontFamily: {
         sans: [
+          'DM Sans',
           'Segoe UI',
           'ui-sans-serif',
           'system-ui',

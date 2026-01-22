@@ -2,6 +2,10 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
+/**
+ * Base Vitest configuration shared across all test types.
+ * Use vitest.unit.config.ts or vitest.integration.config.ts for specific test runs.
+ */
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -18,18 +22,14 @@ export default defineConfig({
     include: ['__tests__/**/*.test.ts', '__tests__/**/*.test.tsx'],
     exclude: ['**/node_modules/**', '**/dist/**', '**/dist-electron/**', '**/release/**'],
     setupFiles: ['__tests__/setup.ts'],
-    // Use different environments based on test type
-    // Unit tests for main process use Node environment
-    // Unit tests for renderer use jsdom
     environment: 'node',
     environmentMatchGlobs: [
-      // Renderer tests use jsdom for DOM APIs
       ['__tests__/**/*.renderer.*.test.{ts,tsx}', 'jsdom'],
       ['__tests__/**/renderer/**/*.test.{ts,tsx}', 'jsdom'],
     ],
     coverage: {
       provider: 'v8',
-      enabled: false, // Enable via CLI with --coverage
+      enabled: false,
       reporter: ['text', 'html', 'lcov', 'json'],
       reportsDirectory: './coverage',
       include: ['src/**/*.{ts,tsx}'],
@@ -39,7 +39,7 @@ export default defineConfig({
         'src/vite-env.d.ts',
         'src/renderer/main.tsx',
         '**/node_modules/**',
-        // Thin UI wrappers (Radix UI components with only styling, no business logic)
+        // Thin UI wrappers (Radix components with only styling)
         'src/renderer/components/ui/avatar.tsx',
         'src/renderer/components/ui/badge.tsx',
         'src/renderer/components/ui/card.tsx',
@@ -54,28 +54,22 @@ export default defineConfig({
         'src/renderer/components/ui/select.tsx',
         // Simple page wrappers
         'src/renderer/pages/History.tsx',
-        // Infrastructure code - HTTP server and file system cleanup utilities
-        'src/main/permission-api.ts', // MCP permission HTTP server - infrastructure
-        'src/main/store/freshInstallCleanup.ts', // One-time cleanup utility
-        // E2E test utilities - not production code
+        // Infrastructure code
+        'src/main/permission-api.ts',
+        'src/main/store/freshInstallCleanup.ts',
         'src/main/test-utils/**',
       ],
       thresholds: {
         statements: 80,
-        branches: 70, // Branch coverage is harder to achieve with complex conditionals
+        branches: 70,
         functions: 80,
         lines: 80,
       },
     },
-    // Timeout for individual tests (5 seconds)
     testTimeout: 5000,
-    // Timeout for hooks (10 seconds)
     hookTimeout: 10000,
-    // Retry failed tests once
     retry: 0,
-    // Reporter configuration
     reporters: ['default'],
-    // Watch mode configuration
     watch: false,
   },
 });

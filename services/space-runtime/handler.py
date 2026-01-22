@@ -95,6 +95,7 @@ class SpaceExecutor:
         "steal-the-look": ("spaces.steal_the_look", "steal_the_look_workflow", "kwargs"),
         "sketch-to-product": ("spaces.sketch_to_product", "_sketch_to_product_workflow", "body"),
         "background-remover": ("spaces.background_remover", "_remove_background", "body"),
+        "store-display-banner": ("spaces.store_display_banner", "store_display_banner_execute", "body"),
     }
     
     @classmethod

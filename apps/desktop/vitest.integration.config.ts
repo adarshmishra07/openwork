@@ -1,34 +1,19 @@
-import { defineConfig } from 'vitest/config';
-import react from '@vitejs/plugin-react';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { defineConfig, mergeConfig } from 'vitest/config';
+import baseConfig from './vitest.config';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, 'src/renderer'),
-      '@main': path.resolve(__dirname, 'src/main'),
-      '@renderer': path.resolve(__dirname, 'src/renderer'),
-      '@shared': path.resolve(__dirname, '../../packages/shared/src'),
+/**
+ * Integration test configuration - extends base config with integration-specific settings.
+ * Run with: pnpm -F @accomplish/desktop test:integration
+ */
+export default mergeConfig(
+  baseConfig,
+  defineConfig({
+    test: {
+      name: 'integration',
+      include: ['__tests__/**/*.integration.test.{ts,tsx}'],
+      // Integration tests may need longer timeouts
+      testTimeout: 10000,
+      hookTimeout: 15000,
     },
-  },
-  test: {
-    name: 'integration',
-    globals: true,
-    root: __dirname,
-    include: ['__tests__/**/*.integration.test.{ts,tsx}'],
-    exclude: ['**/node_modules/**', '**/dist/**', '**/dist-electron/**', '**/release/**'],
-    setupFiles: ['__tests__/setup.ts'],
-    environment: 'node',
-    environmentMatchGlobs: [
-      ['__tests__/**/*.renderer.*.test.{ts,tsx}', 'jsdom'],
-      ['__tests__/**/renderer/**/*.test.{ts,tsx}', 'jsdom'],
-    ],
-    // Integration tests may need longer timeouts
-    testTimeout: 10000,
-    hookTimeout: 15000,
-  },
-});
+  })
+);

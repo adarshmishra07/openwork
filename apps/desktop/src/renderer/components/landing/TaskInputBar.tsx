@@ -3,13 +3,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { getAccomplish } from '../../lib/accomplish';
 import { analytics } from '../../lib/analytics';
-import { ArrowUp, Loader2, Store, Check, Paperclip, X, Image, FileText, File } from 'lucide-react';
-
-interface AttachedFile {
-  path: string;
-  name: string;
-  type: 'image' | 'document' | 'other';
-}
+import { ArrowUp, Loader2, Store, Check } from 'lucide-react';
 
 interface TaskInputBarProps {
   value: string;
@@ -20,27 +14,9 @@ interface TaskInputBarProps {
   disabled?: boolean;
   large?: boolean;
   autoFocus?: boolean;
-  files?: string[];
-  onFilesChange?: (files: string[]) => void;
   showStop?: boolean;
   onConnectStore?: () => void;
   shopifyRefreshKey?: number;
-}
-
-// Get file type from extension
-function getFileType(path: string): 'image' | 'document' | 'other' {
-  const ext = path.split('.').pop()?.toLowerCase() || '';
-  const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif'];
-  const docExts = ['pdf', 'txt', 'md', 'json', 'csv'];
-  
-  if (imageExts.includes(ext)) return 'image';
-  if (docExts.includes(ext)) return 'document';
-  return 'other';
-}
-
-// Get file name from path
-function getFileName(path: string): string {
-  return path.split('/').pop() || path.split('\\').pop() || path;
 }
 
 export default function TaskInputBar({
@@ -52,8 +28,6 @@ export default function TaskInputBar({
   disabled = false,
   large = false,
   autoFocus = false,
-  files = [],
-  onFilesChange,
   showStop = false,
   onConnectStore,
   shopifyRefreshKey = 0,
@@ -63,36 +37,6 @@ export default function TaskInputBar({
   const accomplish = getAccomplish();
   const [shopifyConnected, setShopifyConnected] = useState(false);
   const [shopDomain, setShopDomain] = useState<string | null>(null);
-
-  // Convert file paths to AttachedFile objects
-  const attachedFiles: AttachedFile[] = files.map(path => ({
-    path,
-    name: getFileName(path),
-    type: getFileType(path),
-  }));
-
-  // Handle file picker
-  const handleAttachFiles = async () => {
-    try {
-      const result = await accomplish.openFilePicker();
-      if (!result.canceled && result.filePaths.length > 0) {
-        const newFiles = [...files];
-        for (const path of result.filePaths) {
-          if (!newFiles.includes(path)) {
-            newFiles.push(path);
-          }
-        }
-        onFilesChange?.(newFiles);
-      }
-    } catch (error) {
-      console.error('Failed to open file picker:', error);
-    }
-  };
-
-  // Remove a file
-  const handleRemoveFile = (path: string) => {
-    onFilesChange?.(files.filter(f => f !== path));
-  };
 
   // Check Shopify connection status
   useEffect(() => {
@@ -132,38 +76,7 @@ export default function TaskInputBar({
   };
 
   return (
-    <div className="relative flex flex-col gap-2 rounded-[32px] border border-border bg-card px-4 py-4 shadow-lg transition-all duration-200 ease-accomplish focus-within:ring-1 focus-within:ring-ring/20">
-      
-      {/* Attached Files */}
-      {attachedFiles.length > 0 && (
-        <div className="flex flex-wrap gap-2 px-2 pb-2">
-          {attachedFiles.map((file) => (
-            <div
-              key={file.path}
-              className="flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-full bg-muted/50 text-sm text-foreground/80 group"
-              title={file.path}
-            >
-              {file.type === 'image' ? (
-                <Image className="h-3.5 w-3.5 text-muted-foreground" />
-              ) : file.type === 'document' ? (
-                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-              ) : (
-                <File className="h-3.5 w-3.5 text-muted-foreground" />
-              )}
-              <span className="max-w-[120px] truncate">{file.name}</span>
-              <button
-                type="button"
-                onClick={() => handleRemoveFile(file.path)}
-                className="flex h-5 w-5 items-center justify-center rounded-full hover:bg-foreground/10 transition-colors"
-                title="Remove file"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
+    <div className="relative flex flex-col gap-3 rounded-2xl border border-border bg-card px-5 py-4 shadow-xl transition-all duration-200 ease-accomplish focus-within:ring-2 focus-within:ring-ring/10">
       {/* Text input area */}
       <textarea
         data-testid="task-input-textarea"
@@ -174,23 +87,12 @@ export default function TaskInputBar({
         placeholder={placeholder}
         disabled={isDisabled}
         rows={1}
-        className={`max-h-[200px] min-h-[24px] w-full resize-none bg-transparent px-2 text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${large ? 'text-lg font-light tracking-tight' : 'text-sm'}`}
+        className={`max-h-[200px] min-h-[28px] w-full resize-none bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${large ? 'text-base' : 'text-sm'}`}
       />
 
       {/* Bottom Actions Row */}
-      <div className="flex items-center justify-between mt-2">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          {/* Attachment Button */}
-          <button 
-            type="button"
-            onClick={handleAttachFiles}
-            disabled={isDisabled}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Attach files"
-          >
-            <Paperclip className="h-4 w-4" />
-          </button>
-
           {/* Store Status Pill */}
           <button 
             type="button"
@@ -199,22 +101,22 @@ export default function TaskInputBar({
                 onConnectStore();
               }
             }}
-            className={`flex items-center gap-1.5 h-8 px-3 rounded-full border text-sm font-medium transition-colors ${
+            className={`flex items-center gap-2 h-9 px-4 rounded-full border text-sm font-medium transition-colors ${
               shopifyConnected 
                 ? 'border-foreground/20 bg-foreground/5 text-foreground cursor-default' 
-                : 'border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground cursor-pointer'
+                : 'border-border bg-card text-foreground hover:bg-muted cursor-pointer'
             }`}
             title={shopifyConnected ? `Connected to ${shopDomain}` : 'Click to connect a store'}
           >
             {shopifyConnected ? (
               <>
-                <Check className="h-3.5 w-3.5" />
-                <span>{shopDomain?.replace('.myshopify.com', '') || 'Store Connected'}</span>
+                <Check className="h-4 w-4" />
+                <span>{shopDomain?.replace('.myshopify.com', '') || 'Connected'}</span>
               </>
             ) : (
               <>
-                <Store className="h-3.5 w-3.5" />
-                <span>No Store</span>
+                <Store className="h-4 w-4" />
+                <span>Connect Store</span>
               </>
             )}
           </button>
@@ -232,16 +134,16 @@ export default function TaskInputBar({
               accomplish.logEvent({
                 level: 'info',
                 message: 'Task input submit clicked',
-                context: { prompt: value, files },
+                context: { prompt: value },
               });
               onSubmit();
             }
           }}
           disabled={!showStop && (!value.trim() || isDisabled)}
-          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all duration-200 ease-accomplish disabled:cursor-not-allowed disabled:opacity-40 ${
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all duration-200 ease-accomplish disabled:cursor-not-allowed disabled:opacity-40 ${
             showStop 
               ? 'bg-foreground text-background hover:bg-foreground/80' 
-              : 'bg-primary text-primary-foreground hover:bg-primary/80'
+              : 'bg-foreground text-background hover:bg-foreground/80'
           }`}
           title={showStop ? "Stop" : "Submit"}
         >

@@ -231,6 +231,85 @@
       "outputs": ["image"],
       "estimatedDuration": "5-15s",
       "apiProviders": ["prodia"]
+    },
+    {
+      "id": "store-display-banner",
+      "name": "Store Display Banner",
+      "description": "Generate large-format poster and store display visuals. Creates cinematic, atmospheric promotional materials optimized for in-store impact and print clarity.",
+      "category": "images",
+      "keywords": [
+        "store display",
+        "banner",
+        "poster",
+        "promotional",
+        "display banner",
+        "store poster",
+        "retail display",
+        "point of sale",
+        "POS",
+        "in-store",
+        "campaign visual",
+        "sale banner",
+        "promotional poster",
+        "window display",
+        "floor display"
+      ],
+      "patterns": [
+        "store.*display",
+        "display.*banner",
+        "promotional.*poster",
+        "retail.*poster",
+        "sale.*banner",
+        "campaign.*visual",
+        "in-store.*display",
+        "point.*of.*sale",
+        "window.*display",
+        "poster.*design"
+      ],
+      "inputs": [
+        {
+          "name": "product_images",
+          "type": "image[]",
+          "required": false,
+          "description": "Product images to feature in the poster"
+        },
+        {
+          "name": "user_query",
+          "type": "string",
+          "required": true,
+          "description": "Campaign message, offer details, or style direction"
+        },
+        {
+          "name": "aspect_ratio",
+          "type": "string",
+          "required": false,
+          "default": "1:1",
+          "description": "Aspect ratio (1:1, 2:3, 3:2, 4:5, 16:9)"
+        },
+        {
+          "name": "output_format",
+          "type": "string",
+          "required": false,
+          "default": "png",
+          "description": "Output format (jpeg, png)"
+        },
+        {
+          "name": "reference_image",
+          "type": "image",
+          "required": false,
+          "description": "Reference/moodboard image for style extraction"
+        },
+        {
+          "name": "num_variations",
+          "type": "number",
+          "required": false,
+          "default": 4,
+          "description": "Number of poster variations to generate (1-10)"
+        }
+      ],
+      "outputs": ["image"],
+      "estimatedDuration": "60-120s",
+      "apiProviders": ["openai", "gemini"]
     }
   ]
 }

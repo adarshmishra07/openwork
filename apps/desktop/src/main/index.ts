@@ -142,11 +142,12 @@ function createWindow() {
   // Maximize window by default
   mainWindow.maximize();
 
-  // Open DevTools in dev mode (non-packaged), but not during E2E tests
-  const isE2EMode = (global as Record<string, unknown>).E2E_SKIP_AUTH === true;
-  if (!app.isPackaged && !isE2EMode) {
-    mainWindow.webContents.openDevTools({ mode: 'right' });
-  }
+  // DevTools can be opened manually with Cmd+Option+I (Mac) or Ctrl+Shift+I (Windows/Linux)
+  // Uncomment below to auto-open DevTools in dev mode:
+  // const isE2EMode = (global as Record<string, unknown>).E2E_SKIP_AUTH === true;
+  // if (!app.isPackaged && !isE2EMode) {
+  //   mainWindow.webContents.openDevTools({ mode: 'right' });
+  // }
 
   // Load the local UI
   if (VITE_DEV_SERVER_URL) {

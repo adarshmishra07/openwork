@@ -11,6 +11,7 @@ import type { BrandProfile } from '@brandwork/shared';
 // Pages
 import HomePage from './pages/Home';
 import ExecutionPage from './pages/Execution';
+import HistoryPage from './pages/History';
 
 // Components
 import Sidebar from './components/layout/Sidebar';
@@ -167,6 +168,21 @@ export default function App() {
                   transition={springs.gentle}
                 >
                   <ExecutionPage />
+                </motion.div>
+              }
+            />
+            <Route
+              path="/history"
+              element={
+                <motion.div
+                  className="h-full"
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  variants={variants.fadeUp}
+                  transition={springs.gentle}
+                >
+                  <HistoryPage />
                 </motion.div>
               }
             />

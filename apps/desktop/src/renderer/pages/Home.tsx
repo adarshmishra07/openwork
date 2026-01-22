@@ -2,93 +2,107 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import TaskInputBar from '../components/landing/TaskInputBar';
+import SuggestionGrid from '../components/landing/SuggestionGrid';
 import SettingsDialog from '../components/layout/SettingsDialog';
 import { useTaskStore } from '../stores/taskStore';
 import { getAccomplish } from '../lib/accomplish';
-import { springs, staggerContainer, staggerItem } from '../lib/animations';
-import { Card, CardContent } from '@/components/ui/card';
-import { ChevronDown } from 'lucide-react';
-import { hasAnyReadyProvider } from '@brandwork/shared';
+import { springs } from '../lib/animations';
+import { hasAnyReadyProvider, BrandProfile } from '@brandwork/shared';
 
 // Import use case images for proper bundling in production
-import calendarPrepNotesImg from '/assets/usecases/calendar-prep-notes.png';
-import inboxPromoCleanupImg from '/assets/usecases/inbox-promo-cleanup.png';
+import aiImageWizardImg from '/assets/usecases/ai-image-wizard.webp';
 import competitorPricingDeckImg from '/assets/usecases/competitor-pricing-deck.png';
-import notionApiAuditImg from '/assets/usecases/notion-api-audit.png';
-import stagingVsProdVisualImg from '/assets/usecases/staging-vs-prod-visual.png';
-import prodBrokenLinksImg from '/assets/usecases/prod-broken-links.png';
-import stockPortfolioAlertsImg from '/assets/usecases/stock-portfolio-alerts.png';
-import jobApplicationAutomationImg from '/assets/usecases/job-application-automation.png';
-import eventCalendarBuilderImg from '/assets/usecases/event-calendar-builder.png';
+import landingPageCopyImg from '/assets/usecases/landing-page-copy.webp';
+import courseAnnouncementImg from '/assets/usecases/course-announcement.webp';
+import professionalHeadshotImg from '/assets/usecases/professional-headshot.webp';
+import pitchDeckImg from '/assets/usecases/pitch-deck.webp';
+import customWebToolImg from '/assets/usecases/custom-web-tool.webp';
+import socialContentImg from '/assets/usecases/bilingual-output.webp';
+import batchFileRenamingImg from '/assets/usecases/batch-file-renaming.webp';
 
 const USE_CASE_EXAMPLES = [
   {
-    title: 'Calendar Prep Notes',
-    description: 'Review tomorrow\'s meetings and draft a prep notes doc.',
-    prompt: 'Check my Google Calendar for tomorrow\'s meetings and draft preparation notes in a new Google Doc.',
-    image: calendarPrepNotesImg,
+    title: 'Product Photo Studio',
+    description: 'Remove backgrounds and create lifestyle product shots.',
+    prompt: 'Take this product image https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800 and remove the background, then place it on a clean marble countertop setting.',
+    image: aiImageWizardImg,
   },
   {
-    title: 'Inbox Promo Cleanup',
-    description: 'Clear promotional emails from the last 24 hours.',
-    prompt: 'Go to my Gmail inbox and delete all promotional emails from the last 24 hours.',
-    image: inboxPromoCleanupImg,
+    title: 'Launch New Product',
+    description: 'Create a complete product listing with copy and images.',
+    prompt: 'I want to launch a new product called "Summer Breeze Dress" on my Shopify store. Remove the background from this image https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?w=800, place it on a beach background, write compelling product copy, suggest pricing (competitors charge $65-95), and create the product on Shopify.',
+    image: pitchDeckImg,
   },
   {
-    title: 'Competitor Pricing Deck',
-    description: 'Analyze competitor pricing and draft a slide with recommendations.',
-    prompt: 'Pull pricing and features from these 5 competitor sites [list URLs], save to a CSV, analyze our pricing gaps, and draft a recommendation slide in Google Slides for Monday\'s meeting.',
+    title: 'Competitor Price Analysis',
+    description: 'Research competitor pricing and get recommendations.',
+    prompt: 'Research pricing for summer dresses from Zara, H&M, and ASOS. Compare their price ranges and recommend a pricing strategy for my new collection.',
     image: competitorPricingDeckImg,
   },
   {
-    title: 'Notion API Audit',
-    description: 'Scan a Notion wiki for old API mentions with direct links.',
-    prompt: 'Read through this Notion wiki at [URL] and find all mentions of the old API, listing them with page links.',
-    image: notionApiAuditImg,
+    title: 'Product Copywriter',
+    description: 'Generate SEO-optimized product descriptions.',
+    prompt: 'Write compelling product descriptions for a "Minimalist Leather Wallet" - premium Italian leather, RFID blocking, slim design. Include headline, features, and a call-to-action.',
+    image: landingPageCopyImg,
   },
   {
-    title: 'Staging vs Prod Visual Check',
-    description: 'Compare staging and production visuals with screenshots.',
-    prompt: 'Compare my staging site at [URL] to production at [URL] and screenshot any visual differences.',
-    image: stagingVsProdVisualImg,
+    title: 'Email Welcome Sequence',
+    description: 'Create automated email flows for new customers.',
+    prompt: 'Create a 3-email welcome sequence for customers who just purchased from my summer collection. Include a welcome email, a product care tips email, and a cross-sell email.',
+    image: courseAnnouncementImg,
   },
   {
-    title: 'Production Broken Links',
-    description: 'Check my website for broken links.',
-    prompt: 'Open [URL], click through every link, and report any 404 errors.',
-    image: prodBrokenLinksImg,
+    title: 'Editorial Style Shot',
+    description: 'Match your products to campaign-style photography.',
+    prompt: 'Take my product photo https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800 and create editorial campaign-style images matching this aesthetic https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800',
+    image: professionalHeadshotImg,
   },
   {
-    title: 'Portfolio Monitoring',
-    description: 'Watch stock prices, and alert on drops and spikes.',
-    prompt: 'Monitor my stock portfolio on [broker site], alert on price drops and spikes.',
-    image: stockPortfolioAlertsImg,
+    title: 'Sketch to Product',
+    description: 'Turn product sketches into photorealistic renders.',
+    prompt: 'I have a sketch of a new handbag design. Turn it into a photorealistic product render with brushed gold hardware and burgundy leather finish.',
+    image: customWebToolImg,
   },
   {
-    title: 'Job Application Automation',
-    description: 'Filter jobs and submit applications with saved profiles.',
-    prompt: 'Find job listings from Indeed for [query], sort by salary, and apply to the top 5 using my profile.',
-    image: jobApplicationAutomationImg,
+    title: 'Social Media Kit',
+    description: 'Create posts for product launches.',
+    prompt: 'Create Instagram and Facebook posts announcing the launch of our new "Coastal Collection" summer line. Include engaging captions, relevant hashtags, and suggest the best posting times.',
+    image: socialContentImg,
   },
   {
-    title: 'Event Calendar Builder',
-    description: 'Select top events and add them to the calendar.',
-    prompt: 'Scrape event listings from Eventbrite, filter by location, and add top 5 to my calendar.',
-    image: eventCalendarBuilderImg,
+    title: 'Bulk Product Updates',
+    description: 'Update multiple products on Shopify at once.',
+    prompt: 'Update all products in my "Winter Collection" on Shopify - add a "SALE" tag, reduce prices by 20%, and add "Limited Time Offer" to each description.',
+    image: batchFileRenamingImg,
   },
 ];
 
 export default function HomePage() {
   const [prompt, setPrompt] = useState('');
-  const [showExamples, setShowExamples] = useState(true);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>(undefined);
   const [shopifyRefreshKey, setShopifyRefreshKey] = useState(0);
+  const [brandName, setBrandName] = useState<string | null>(null);
   const { startTask, isLoading, addTaskUpdate, setPermissionRequest } = useTaskStore();
   const navigate = useNavigate();
   const accomplish = getAccomplish();
+
+  // Fetch brand name from brand memory
+  useEffect(() => {
+    const fetchBrandName = async () => {
+      try {
+        const profile = await accomplish.getActiveBrandProfile() as BrandProfile | null;
+        if (profile?.name) {
+          setBrandName(profile.name);
+        }
+      } catch (error) {
+        console.error('Failed to fetch brand profile:', error);
+      }
+    };
+    fetchBrandName();
+  }, [accomplish]);
 
   // Subscribe to task events
   useEffect(() => {
@@ -166,116 +180,58 @@ export default function HomePage() {
         onApiKeySaved={handleApiKeySaved}
         initialTab={settingsInitialTab}
       />
-      <div
-        className="h-full flex items-center justify-center p-6 overflow-y-auto bg-accent"
-      >
-      <div className="w-full max-w-2xl flex flex-col items-center gap-8">
-        {/* Main Title */}
-        <motion.h1
-          data-testid="home-title"
+      <div className="h-full flex flex-col items-center p-6 pt-16 overflow-y-auto bg-accent">
+        {/* Greeting Section */}
+        <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={springs.gentle}
-          className="text-4xl font-light tracking-tight text-foreground"
+          className="text-center mb-8"
         >
-          What will you accomplish today?
-        </motion.h1>
+          <h1
+            data-testid="home-title"
+            className="text-3xl font-medium text-foreground mb-2"
+          >
+            Hello{brandName ? ` ${brandName}` : ''}
+          </h1>
+          <p className="text-xl text-muted-foreground">
+            What are you going to sell today?
+          </p>
+        </motion.div>
 
+        {/* Input Card */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ ...springs.gentle, delay: 0.1 }}
-          className="w-full"
+          className="w-full max-w-2xl mb-12"
         >
-          <Card className="w-full bg-card/95 backdrop-blur-md shadow-xl gap-0 py-0 flex flex-col max-h-[calc(100vh-3rem)]">
-            <CardContent className="p-6 pb-4 flex-shrink-0">
-              {/* Input Section */}
-              <TaskInputBar
-                value={prompt}
-                onChange={setPrompt}
-                onSubmit={handleSubmit}
-                isLoading={isLoading}
-                placeholder="Describe a task and let AI handle the rest"
-                large={true}
-                autoFocus={true}
-                onConnectStore={handleConnectStore}
-                shopifyRefreshKey={shopifyRefreshKey}
-              />
-            </CardContent>
+          <TaskInputBar
+            value={prompt}
+            onChange={setPrompt}
+            onSubmit={handleSubmit}
+            isLoading={isLoading}
+            placeholder="Ask anything..."
+            large={true}
+            autoFocus={true}
+            onConnectStore={handleConnectStore}
+            shopifyRefreshKey={shopifyRefreshKey}
+          />
+        </motion.div>
 
-            {/* Examples Toggle */}
-            <div className="border-t border-border">
-              <button
-                onClick={() => setShowExamples(!showExamples)}
-                className="w-full px-6 py-3 flex items-center justify-between text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors duration-200"
-              >
-                <span>Example prompts</span>
-                <motion.div
-                  animate={{ rotate: showExamples ? 180 : 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <ChevronDown className="h-4 w-4" />
-                </motion.div>
-              </button>
-
-              <AnimatePresence>
-                {showExamples && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="overflow-hidden"
-                  >
-                    <div
-                      className="px-6 pt-1 pb-4 overflow-y-auto max-h-[360px]"
-                      style={{
-                        background: 'linear-gradient(to bottom, hsl(var(--muted)) 0%, hsl(var(--background)) 100%)',
-                        backgroundAttachment: 'fixed',
-                      }}
-                    >
-                      <motion.div
-                        variants={staggerContainer}
-                        initial="initial"
-                        animate="animate"
-                        className="grid grid-cols-3 gap-3"
-                      >
-                        {USE_CASE_EXAMPLES.map((example, index) => (
-                          <motion.button
-                            key={index}
-                            data-testid={`home-example-${index}`}
-                            variants={staggerItem}
-                            transition={springs.gentle}
-                            whileHover={{ scale: 1.03, transition: { duration: 0.15 } }}
-                            whileTap={{ scale: 0.97 }}
-                            onClick={() => handleExampleClick(example.prompt)}
-                            className="flex flex-col items-center gap-2 p-3 rounded-lg border border-border bg-card hover:border-ring hover:bg-muted/50"
-                          >
-                            <img
-                              src={example.image}
-                              alt={example.title}
-                              className="w-12 h-12 object-cover rounded"
-                            />
-                            <div className="flex flex-col items-center gap-1 w-full">
-                              <div className="font-medium text-xs text-foreground text-center">
-                                {example.title}
-                              </div>
-                              <div className="text-xs text-muted-foreground text-center line-clamp-2">
-                                {example.description}
-                              </div>
-                            </div>
-                          </motion.button>
-                        ))}
-                      </motion.div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </Card>
+        {/* Suggestions Grid */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ ...springs.gentle, delay: 0.2 }}
+          className="w-full max-w-5xl"
+        >
+          <SuggestionGrid
+            suggestions={USE_CASE_EXAMPLES}
+            onSelect={handleExampleClick}
+          />
         </motion.div>
       </div>
-    </div>
     </>
   );
 }
