@@ -13,6 +13,7 @@ import googleLogo from '/assets/ai-logos/google.svg';
 import xaiLogo from '/assets/ai-logos/xai.svg';
 import deepseekLogo from '/assets/ai-logos/deepseek.svg';
 import zaiLogo from '/assets/ai-logos/zai.svg';
+import glmLogo from '/assets/ai-logos/glm.svg';
 import bedrockLogo from '/assets/ai-logos/bedrock.svg';
 import ollamaLogo from '/assets/ai-logos/ollama.svg';
 import openrouterLogo from '/assets/ai-logos/openrouter.svg';
@@ -28,6 +29,7 @@ const PROVIDER_LOGOS: Record<ProviderId, string> = {
   xai: xaiLogo,
   deepseek: deepseekLogo,
   zai: zaiLogo,
+  glm: glmLogo,
   bedrock: bedrockLogo,
   ollama: ollamaLogo,
   openrouter: openrouterLogo,

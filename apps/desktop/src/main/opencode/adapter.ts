@@ -725,20 +725,6 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
         // Only complete if reason is 'stop' or 'end_turn' (final completion)
         // 'tool_use' means there are more steps coming
         if (message.part.reason === 'stop' || message.part.reason === 'end_turn') {
-          // Find and mark last assistant message as final
-          const messages = this.currentTask?.messages || [];
-          const lastAssistantMessage = [...messages].reverse().find(m => 
-            m.type === 'assistant' && !(m as any).isFinal
-          );
-          
-          if (lastAssistantMessage) {
-            // Update the message in the task store
-            this.emit('task-update', {
-              type: 'message',
-              message: { ...lastAssistantMessage, isFinal: true }
-            });
-          }
-
           this.hasCompleted = true;
           this.emit('complete', {
             status: 'success',

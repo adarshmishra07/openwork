@@ -1,14 +1,24 @@
 /**
- * TaskManager - Manages multiple concurrent OpenCode CLI task executions
+ * TaskManager - Manages multiple concurrent agent task executions
  *
  * This class implements a process manager pattern to support true parallel
- * session execution. Each task gets its own OpenCodeAdapter instance with
- * isolated PTY process, state, and event handling.
+ * session execution. Each task gets its own adapter instance with
+ * isolated state and event handling.
+ * 
+ * Supports two adapters:
+ * - OpenCodeAdapter (PTY-based, legacy) - stable, uses CLI
+ * - ClaudeAgentAdapter (SDK-based) - new, direct SDK integration
+ * 
+ * Use USE_CLAUDE_SDK=true environment variable to enable the new adapter.
  */
 
 import { OpenCodeAdapter, isOpenCodeCliInstalled, OpenCodeCliNotFoundError } from './adapter';
+import { ClaudeAgentAdapter, createClaudeAgentAdapter } from '../claude-sdk/adapter';
+import type { NormalizedEvent } from '../claude-sdk/types';
 import { getSkillsPath } from './config-generator';
 import { getNpxPath, getBundledNodePaths } from '../utils/bundled-node';
+import { getActiveProviderModel } from '../store/providerSettings';
+import { getSelectedModel } from '../store/appSettings';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -22,6 +32,39 @@ import {
   type OpenCodeMessage,
   type PermissionRequest,
 } from '@brandwork/shared';
+
+// Feature flag for SDK adapter - enable via env var
+const USE_CLAUDE_SDK_ENV = process.env.USE_CLAUDE_SDK === 'true';
+
+/**
+ * Determine if we should use the Claude SDK adapter
+ * Only use SDK for Anthropic models - other providers need OpenCode CLI
+ */
+function shouldUseSdkAdapter(): boolean {
+  if (!USE_CLAUDE_SDK_ENV) {
+    return false;
+  }
+  
+  // Check current provider - SDK only works with Anthropic
+  const activeModel = getActiveProviderModel();
+  const selectedModel = activeModel || getSelectedModel();
+  
+  if (!selectedModel?.provider) {
+    // Default to SDK if no provider set (will use default Anthropic)
+    return true;
+  }
+  
+  // SDK only supports Anthropic models
+  const sdkSupportedProviders = ['anthropic'];
+  const useSdk = sdkSupportedProviders.includes(selectedModel.provider);
+  
+  console.log(`[TaskManager] Provider: ${selectedModel.provider}, Model: ${selectedModel.model}, Use SDK: ${useSdk}`);
+  
+  return useSdk;
+}
+
+// Adapter type union
+type AgentAdapter = OpenCodeAdapter | ClaudeAgentAdapter;
 
 /**
  * Check if system Chrome is installed
@@ -273,10 +316,11 @@ export interface TaskCallbacks {
  */
 interface ManagedTask {
   taskId: string;
-  adapter: OpenCodeAdapter;
+  adapter: AgentAdapter;
   callbacks: TaskCallbacks;
   cleanup: () => void;
   createdAt: Date;
+  usingSdk: boolean; // Track which adapter is being used
 }
 
 /**
@@ -377,19 +421,42 @@ export class TaskManager {
 
   /**
    * Execute a task immediately (internal)
+   * Supports both PTY-based (OpenCodeAdapter) and SDK-based (ClaudeAgentAdapter)
    */
   private async executeTask(
     taskId: string,
     config: TaskConfig,
     callbacks: TaskCallbacks
   ): Promise<Task> {
-    // Create a new adapter instance for this task
-    const adapter = new OpenCodeAdapter(taskId);
+    // Determine which adapter to use (SDK only works with Anthropic)
+    const usingSdk = shouldUseSdkAdapter();
+    
+    // Create adapter instance based on feature flag
+    const adapter: AgentAdapter = usingSdk 
+      ? createClaudeAgentAdapter(taskId)
+      : new OpenCodeAdapter(taskId);
 
-    // Wire up event listeners
-    const onMessage = (message: OpenCodeMessage) => {
-      callbacks.onMessage(message);
-    };
+    console.log(`[TaskManager] Using ${usingSdk ? 'Claude SDK' : 'PTY'} adapter for task ${taskId}`);
+
+    // Wire up event listeners - different for SDK vs PTY adapter
+    // Using 'any' type here because the two adapters emit different event types
+    // and TypeScript can't unify them properly
+    let onMessage: (message: any) => void;
+    
+    if (usingSdk) {
+      // SDK adapter emits NormalizedEvent, transform to OpenCodeMessage
+      onMessage = (event: NormalizedEvent) => {
+        const message = this.normalizedEventToOpenCodeMessage(event);
+        if (message) {
+          callbacks.onMessage(message);
+        }
+      };
+    } else {
+      // PTY adapter emits OpenCodeMessage directly
+      onMessage = (message: OpenCodeMessage) => {
+        callbacks.onMessage(message);
+      };
+    }
 
     const onProgress = (progress: { stage: string; message?: string }) => {
       callbacks.onProgress(progress);
@@ -418,18 +485,18 @@ export class TaskManager {
     };
 
     // Attach listeners
-    adapter.on('message', onMessage);
+    adapter.on('message', onMessage as any);
     adapter.on('progress', onProgress);
-    adapter.on('permission-request', onPermissionRequest);
+    adapter.on('permission-request', onPermissionRequest as any);
     adapter.on('complete', onComplete);
     adapter.on('error', onError);
     adapter.on('debug', onDebug);
 
     // Create cleanup function
     const cleanup = () => {
-      adapter.off('message', onMessage);
+      adapter.off('message', onMessage as any);
       adapter.off('progress', onProgress);
-      adapter.off('permission-request', onPermissionRequest);
+      adapter.off('permission-request', onPermissionRequest as any);
       adapter.off('complete', onComplete);
       adapter.off('error', onError);
       adapter.off('debug', onDebug);
@@ -443,6 +510,7 @@ export class TaskManager {
       callbacks,
       cleanup,
       createdAt: new Date(),
+      usingSdk,
     };
     this.activeTasks.set(taskId, managedTask);
 
@@ -462,6 +530,7 @@ export class TaskManager {
     (async () => {
       try {
         // Ensure browser is available (may download Playwright if needed)
+        // SDK adapter handles browser via MCP servers, but still good to pre-warm
         await ensureDevBrowserServer(callbacks.onProgress);
 
         // Now start the agent
@@ -475,6 +544,88 @@ export class TaskManager {
     })();
 
     return task;
+  }
+
+  /**
+   * Convert SDK NormalizedEvent to OpenCodeMessage format
+   * This maintains backwards compatibility with the existing UI
+   */
+  private normalizedEventToOpenCodeMessage(event: NormalizedEvent): OpenCodeMessage | null {
+    const baseId = `sdk_${Date.now()}`;
+    const sessionId = event.sessionId || '';
+    
+    switch (event.type) {
+      case 'text':
+      case 'text_delta':
+        return {
+          type: 'text',
+          part: {
+            id: baseId,
+            sessionID: sessionId,
+            messageID: baseId,
+            type: 'text',
+            text: event.content || '',
+          },
+        };
+      
+      case 'thinking':
+        // Thinking content is sent as regular text.
+        // The UI will detect this as thinking when followed by a tool call message
+        return {
+          type: 'text',
+          part: {
+            id: baseId,
+            sessionID: sessionId,
+            messageID: baseId,
+            type: 'text',
+            text: event.content || '',
+          },
+        };
+      
+      case 'tool_use_start':
+        return {
+          type: 'tool_use',
+          part: {
+            id: event.toolCallId || baseId,
+            sessionID: sessionId,
+            messageID: baseId,
+            type: 'tool',
+            tool: event.toolName || 'unknown',
+            state: {
+              status: 'running',
+              input: event.toolInput,
+            },
+          },
+        };
+      
+      case 'tool_use_result':
+        return {
+          type: 'tool_result',
+          part: {
+            id: baseId,
+            sessionID: sessionId,
+            messageID: baseId,
+            type: 'tool-result',
+            toolCallID: event.toolCallId || baseId,
+            output: event.toolResult || '',
+            isError: event.isError,
+          },
+        };
+      
+      case 'error':
+        return {
+          type: 'error',
+          error: event.error || 'Unknown error',
+        };
+      
+      case 'session_init':
+      case 'done':
+        // These don't need to be forwarded as messages
+        return null;
+      
+      default:
+        return null;
+    }
   }
 
   /**
