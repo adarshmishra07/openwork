@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight, Brain } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface CollapsibleThinkingProps {
   content: string;
@@ -85,7 +86,39 @@ export const CollapsibleThinking = memo(function CollapsibleThinking({
                 'prose-li:text-muted-foreground prose-li:my-0.5',
                 'prose-code:text-muted-foreground prose-code:bg-muted/50 prose-code:px-1 prose-code:rounded',
               )}>
-                <ReactMarkdown>{content}</ReactMarkdown>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    table: ({ children }) => (
+                      <div className="overflow-x-auto my-2">
+                        <table className="min-w-full border-collapse border border-border rounded-lg text-xs">
+                          {children}
+                        </table>
+                      </div>
+                    ),
+                    thead: ({ children }) => (
+                      <thead className="bg-muted/50">{children}</thead>
+                    ),
+                    tbody: ({ children }) => (
+                      <tbody className="divide-y divide-border">{children}</tbody>
+                    ),
+                    tr: ({ children }) => (
+                      <tr className="border-b border-border">{children}</tr>
+                    ),
+                    th: ({ children }) => (
+                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-muted-foreground border-r border-border last:border-r-0">
+                        {children}
+                      </th>
+                    ),
+                    td: ({ children }) => (
+                      <td className="px-3 py-1.5 text-xs text-muted-foreground border-r border-border last:border-r-0">
+                        {children}
+                      </td>
+                    ),
+                  }}
+                >
+                  {content}
+                </ReactMarkdown>
               </div>
             </div>
           </motion.div>

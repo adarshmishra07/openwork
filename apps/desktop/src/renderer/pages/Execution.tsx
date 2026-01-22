@@ -15,6 +15,7 @@ import { XCircle, CornerDownLeft, ArrowLeft, CheckCircle2, AlertCircle, AlertTri
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { StreamingText } from '../components/ui/streaming-text';
 import { RichContentRenderer } from '../components/media/RichContentRenderer';
 import { isWaitingForUser } from '../lib/waiting-detection';
@@ -1535,7 +1536,39 @@ const MessageBubble = memo(function MessageBubble({
           >
             {(streamedText) => (
               <div className={proseClasses}>
-                <ReactMarkdown>{streamedText}</ReactMarkdown>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    table: ({ children }) => (
+                      <div className="overflow-x-auto my-4">
+                        <table className="min-w-full border-collapse border border-border rounded-lg">
+                          {children}
+                        </table>
+                      </div>
+                    ),
+                    thead: ({ children }) => (
+                      <thead className="bg-muted/50">{children}</thead>
+                    ),
+                    tbody: ({ children }) => (
+                      <tbody className="divide-y divide-border">{children}</tbody>
+                    ),
+                    tr: ({ children }) => (
+                      <tr className="border-b border-border">{children}</tr>
+                    ),
+                    th: ({ children }) => (
+                      <th className="px-4 py-2 text-left text-sm font-semibold text-foreground border-r border-border last:border-r-0">
+                        {children}
+                      </th>
+                    ),
+                    td: ({ children }) => (
+                      <td className="px-4 py-2 text-sm text-foreground border-r border-border last:border-r-0">
+                        {children}
+                      </td>
+                    ),
+                  }}
+                >
+                  {streamedText}
+                </ReactMarkdown>
               </div>
             )}
           </StreamingText>

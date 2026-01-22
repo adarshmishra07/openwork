@@ -8,6 +8,7 @@
 
 import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { extractMediaUrls, MediaType, type ExtractedMedia, isLocalPath, normalizeLocalPath } from '@/lib/media-utils';
 import { ImageRenderer, ImageGallery } from './ImageRenderer';
 import { VideoRenderer } from './VideoRenderer';
@@ -67,6 +68,7 @@ export function RichContentRenderer({ content, className }: RichContentRendererP
       {/* Text content with markdown */}
       <div className={className}>
         <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
           components={{
             // Override img to handle both remote and local images properly
             img: ({ src, alt }) => {
@@ -115,6 +117,33 @@ export function RichContentRenderer({ content, className }: RichContentRendererP
                 </a>
               );
             },
+            // Table components for GFM tables
+            table: ({ children }) => (
+              <div className="overflow-x-auto my-4">
+                <table className="min-w-full border-collapse border border-border rounded-lg">
+                  {children}
+                </table>
+              </div>
+            ),
+            thead: ({ children }) => (
+              <thead className="bg-muted/50">{children}</thead>
+            ),
+            tbody: ({ children }) => (
+              <tbody className="divide-y divide-border">{children}</tbody>
+            ),
+            tr: ({ children }) => (
+              <tr className="border-b border-border">{children}</tr>
+            ),
+            th: ({ children }) => (
+              <th className="px-4 py-2 text-left text-sm font-semibold text-foreground border-r border-border last:border-r-0">
+                {children}
+              </th>
+            ),
+            td: ({ children }) => (
+              <td className="px-4 py-2 text-sm text-foreground border-r border-border last:border-r-0">
+                {children}
+              </td>
+            ),
           }}
         >
           {textContent}

@@ -12,6 +12,7 @@ import path from 'path';
 import { app } from 'electron';
 import { getSkillsPath } from '../opencode/config-generator';
 import { getAllApiKeys, getBedrockCredentials } from '../store/secureStorage';
+import { generateBrandContext } from '../store/brandMemory';
 import { getActiveProviderModel } from '../store/providerSettings';
 import { getSelectedModel } from '../store/appSettings';
 import { getBundledNodePaths } from '../utils/bundled-node';
@@ -286,15 +287,20 @@ export async function buildEnvironment(): Promise<Record<string, string>> {
  * This is appended to the Claude Code preset prompt
  */
 export function getSystemPrompt(): string {
+  // Get active brand context
+  const brandContext = generateBrandContext();
+
   // Return brand-specific instructions that augment Claude Code's default
   return `
 You are an AI assistant for e-commerce brands. When working with this user:
 
-1. **Brand Voice**: Maintain consistency with any brand guidelines provided
+1. **Brand Voice**: Maintain consistency with the brand guidelines below.
 2. **E-commerce Focus**: Prioritize solutions that work well for online retail
 3. **Shopify Awareness**: When working with Shopify, use best practices for the platform
 4. **Image Generation**: Use the space-runtime tools for product photography and image generation
 5. **Browser Automation**: Use the dev-browser tools for web scraping, competitor research, and testing
+
+${brandContext}
 
 Always be helpful, accurate, and respect the user's time.
 `.trim();

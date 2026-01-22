@@ -5,6 +5,7 @@ import { PERMISSION_API_PORT, QUESTION_API_PORT } from '../permission-api';
 // New provider settings system from remote + our Shopify/LiteLLM imports
 import { getOllamaConfig, getLiteLLMConfig } from '../store/appSettings';
 import { getApiKey, getShopifyCredentials } from '../store/secureStorage';
+import { generateBrandContext } from '../store/brandMemory';
 import { getProviderSettings, getActiveProviderModel, getConnectedProviderIds } from '../store/providerSettings';
 import type { BedrockCredentials, ProviderId } from '@brandwork/shared';
 
@@ -91,6 +92,8 @@ CRITICAL: You CAN and SHOULD browse the internet! You have a real Chrome browser
 NEVER say "I can't access websites" or "I can't browse the internet" - YOU CAN!
 When a task requires finding something online, USE THE BROWSER via the dev-browser skill.
 </identity>
+
+{{BRAND_CONTEXT}}
 
 <critical-instruction name="task-completion-mandate">
 ##############################################################################
@@ -677,7 +680,8 @@ export async function generateOpenCodeConfig(): Promise<string> {
   // Build platform-specific system prompt by replacing placeholders
   const systemPrompt = ACCOMPLISH_SYSTEM_PROMPT_TEMPLATE
     .replace(/\{\{SKILLS_PATH\}\}/g, skillsPath)
-    .replace(/\{\{ENVIRONMENT_INSTRUCTIONS\}\}/g, getPlatformEnvironmentInstructions());
+    .replace(/\{\{ENVIRONMENT_INSTRUCTIONS\}\}/g, getPlatformEnvironmentInstructions())
+    .replace(/\{\{BRAND_CONTEXT\}\}/g, generateBrandContext());
 
   // Get OpenCode config directory (parent of skills/) for OPENCODE_CONFIG_DIR
   const openCodeConfigDir = getOpenCodeConfigDir();
