@@ -423,7 +423,12 @@ Examples:
 </when-to-use>
 
 <how-to-generate>
+IMPORTANT: Always save generated images to /tmp/ with descriptive filenames!
+
 \`\`\`bash
+# Generate a unique filename with timestamp
+OUTPUT_FILE="/tmp/generated_$(date +%Y%m%d_%H%M%S).png"
+
 curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=$GOOGLE_GENERATIVE_AI_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -432,8 +437,16 @@ curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flas
       "temperature": 1.0,
       "responseModalities": ["image", "text"]
     }
-  }' | jq -r '.candidates[0].content.parts[] | select(.inlineData) | .inlineData.data' | base64 -d > output.png
+  }' | jq -r '.candidates[0].content.parts[] | select(.inlineData) | .inlineData.data' | base64 -d > "$OUTPUT_FILE"
+
+echo "Image saved to: $OUTPUT_FILE"
 \`\`\`
+
+CRITICAL: 
+- ALWAYS use absolute paths starting with /tmp/ for generated images
+- NEVER use relative paths like "output.png" or "image.png"
+- Include the full path in your response so the user can see the image
+- Example: "I've generated the image and saved it to /tmp/generated_20240122_143052.png"
 </how-to-generate>
 
 <consistency-for-model-shoots>

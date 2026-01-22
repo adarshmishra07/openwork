@@ -292,6 +292,32 @@ export function extractMediaUrls(text: string): ExtractedMedia[] {
     }
   }
 
+  // 5. Extract relative paths (fallback for cases where agent uses relative paths)
+  // Match patterns like: output.png, model_on_beach.png, generated_image.jpg
+  // Look for "saved to: filename.ext" or "> filename.ext" patterns
+  // Also match markdown images with relative paths: ![alt](filename.png)
+  const relativePathPatterns = [
+    // "saved to: filename.png" or "saved to filename.png"
+    /saved to:?\s*["']?([a-zA-Z0-9_\-]+\.[a-z0-9]+)["']?/gi,
+    // "> filename.png" (bash redirect output)
+    /> ["']?([a-zA-Z0-9_\-]+\.[a-z0-9]+)["']?(?:\s|$)/gi,
+    // Markdown image with relative path: ![alt](filename.png)
+    /!\[[^\]]*\]\(([a-zA-Z0-9_\-]+\.[a-z0-9]+)\)/gi,
+    // Standalone relative filename mentioned in text (be more conservative)
+    /(?:^|\s)([a-zA-Z0-9_\-]+\.(?:png|jpg|jpeg|gif|webp|mp4|pdf))(?:\s|$|[,.])/gi,
+  ];
+
+  for (const regex of relativePathPatterns) {
+    regex.lastIndex = 0; // Reset regex state
+    while ((match = regex.exec(text)) !== null) {
+      const relativePath = match[1];
+      // Convert relative path to /tmp/ path as best guess for working directory
+      // This is a fallback - the agent should ideally use absolute paths
+      const assumedAbsolutePath = `/tmp/${relativePath}`;
+      addMedia(assumedAbsolutePath, true);
+    }
+  }
+
   return results;
 }
 
