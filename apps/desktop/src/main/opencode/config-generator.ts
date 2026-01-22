@@ -701,6 +701,7 @@ export async function generateOpenCodeConfig(): Promise<string> {
     xai: 'xai',
     deepseek: 'deepseek',
     zai: 'zai-coding-plan',
+    glm: 'glm',
     bedrock: 'amazon-bedrock',
     ollama: 'ollama',
     openrouter: 'openrouter',
