@@ -350,6 +350,8 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
       try {
         await accomplish.setSelectedModel(newSelection);
         setSelectedModel(newSelection);
+        // Also update active provider to match the selected model
+        await accomplish.setActiveProvider(model.provider as SharedProviderId);
         setModelStatusMessage(`Model updated to ${model.displayName}`);
       } catch (err) {
         console.error('Failed to save model selection:', err);
