@@ -57,7 +57,10 @@ function useLocalFileLoader(url: string): {
       try {
         // Use the accomplish API to load the file
         if (window.accomplish?.loadLocalFile) {
-          const result = await window.accomplish.loadLocalFile(url);
+          // Extract the file path from local-media:// URL
+          // local-media:///path/to/file -> /path/to/file
+          const filePath = url.replace('local-media://', '');
+          const result = await window.accomplish.loadLocalFile(filePath);
           setResolvedUrl(result.dataUrl);
         } else {
           throw new Error('Local file loading not available');
@@ -347,7 +350,9 @@ function useLocalFilesLoader(urls: string[]): {
 
           try {
             if (window.accomplish?.loadLocalFile) {
-              const result = await window.accomplish.loadLocalFile(url);
+              // Extract the file path from local-media:// URL
+              const filePath = url.replace('local-media://', '');
+              const result = await window.accomplish.loadLocalFile(filePath);
               return result.dataUrl;
             } else {
               throw new Error('Local file loading not available');
