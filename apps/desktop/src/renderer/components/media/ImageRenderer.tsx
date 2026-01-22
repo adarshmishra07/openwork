@@ -163,9 +163,11 @@ export function ImageRenderer({
 
         {/* Error state */}
         {loadingState === 'error' && (
-          <div className="flex items-center gap-2 p-4 text-destructive">
-            <AlertCircle className="w-5 h-5" />
-            <span className="text-sm">{localError || 'Failed to load image'}</span>
+          <div className="flex items-center gap-2 p-3 text-muted-foreground bg-muted/30 rounded-md">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span className="text-xs">
+              {localError || 'Image not found (may have been generated in a previous session)'}
+            </span>
           </div>
         )}
 
