@@ -2,6 +2,15 @@
 Space Runtime - AWS Lambda Handler
 
 FastAPI application that executes Python spaces on AWS Lambda.
+
+Required Environment Variables (set during deployment from .env):
+- GEMINI_API_KEY: Google Gemini API key for image generation and LLM
+- OPENAI_API_KEY: OpenAI API key for chat completions
+- PRODIA_API_KEY: Prodia API key for additional image generation
+- AWS_S3_BUCKET: S3 bucket for storing generated assets
+- AWS_REGION_NAME: AWS region for S3
+
+Deployed: 2026-01-22
 """
 import os
 import json
