@@ -159,6 +159,9 @@ export const CollapsibleToolCall = memo(function CollapsibleToolCall({
   const Icon = getActivityIcon(type, name);
   const displayName = formatToolName(name);
   const hasDetails = input || output || error;
+  
+  // Apply pulsating glow when browser tool is running
+  const isBrowserRunning = type === 'browser' && status === 'running';
 
   // Status indicator
   const StatusIcon = () => {
@@ -173,7 +176,11 @@ export const CollapsibleToolCall = memo(function CollapsibleToolCall({
   };
 
   return (
-    <div className={cn('group', className)}>
+    <div className={cn(
+      'group',
+      isBrowserRunning && 'browser-active-glow',
+      className
+    )}>
       <button
         onClick={() => hasDetails && setIsExpanded(!isExpanded)}
         disabled={!hasDetails}

@@ -95,6 +95,8 @@ When a task requires finding something online, USE THE BROWSER via the dev-brows
 
 {{BRAND_CONTEXT}}
 
+{{SHOPIFY_CONTEXT}}
+
 <critical-instruction name="task-completion-mandate">
 ##############################################################################
 # MANDATORY: WORK UNTIL THE OUTCOME IS ACHIEVED
@@ -207,6 +209,54 @@ See the ask-user-question skill for full documentation and examples.
 - Use AskUserQuestion tool for clarifying questions before starting ambiguous tasks
 - Use MCP tools directly - browser_navigate, browser_snapshot, browser_click, browser_type, browser_screenshot, browser_sequence
 - **NEVER use shell commands (open, xdg-open, start, subprocess, webbrowser) to open browsers or URLs** - these open the user's default browser, not the automation-controlled Chrome. ALL browser operations MUST use browser_* MCP tools.
+
+**IMMEDIATE RESPONSE AND TASK TRACKING - CRITICAL:**
+##############################################################################
+# RESPOND IMMEDIATELY, PLAN VISIBLY WITH TODOS, EXECUTE CONTINUOUSLY
+##############################################################################
+
+When you receive a task:
+
+1. **RESPOND IMMEDIATELY** (your first message must appear quickly):
+   - Acknowledge what you're going to do in 1 sentence
+   - Example: "I'll research the top car perfumes in India and analyze their marketing strategies."
+   - NEVER go silent while thinking - always output something first
+
+2. **CREATE A TODO LIST** (use TodoWrite tool for multi-step tasks):
+   - Break the task into clear, trackable steps
+   - This shows the user your plan and lets them see progress
+   - Example todos:
+     - "Research best-selling car perfumes in India"
+     - "Analyze marketing tactics of top brands"  
+     - "Apply insights to user's store"
+
+3. **EXECUTE AND UPDATE TODOS**:
+   - Start working immediately after creating todos
+   - Mark items "in_progress" when you start them
+   - Mark items "completed" when done
+   - This gives real-time visibility into your progress
+
+4. **NARRATE AS YOU GO**:
+   - Brief updates between actions: "Searching for market data..." "Found the top brands..."
+   - Don't go silent for long periods
+   - If something takes time, say so: "This will take about a minute..."
+
+WRONG (silent, invisible planning):
+[30 seconds of silence while AI thinks]
+"Here's my detailed plan..."
+[More silence]
+
+RIGHT (immediate, visible, continuous):
+"I'll research car perfume marketing tactics for your store."
+[TodoWrite: creates task list]
+"Starting with market research..."
+[browser_navigate]
+[TodoWrite: marks research in_progress]
+"Found some great data on top brands..."
+[TodoWrite: marks research completed, analysis in_progress]
+...continues with visible progress...
+
+##############################################################################
 
 **BROWSER ACTION VERBOSITY - Be descriptive about web interactions:**
 - Before each browser action, briefly explain what you're about to do in user terms
@@ -677,11 +727,32 @@ export async function generateOpenCodeConfig(): Promise<string> {
   // Get skills directory path
   const skillsPath = getSkillsPath();
 
+  // Get Shopify credentials to provide store context
+  const shopifyCredentials = getShopifyCredentials();
+  let shopifyContext = '';
+  if (shopifyCredentials) {
+    const domain = shopifyCredentials.shopDomain;
+    // Try to extract a clean name from the domain (e.g. "my-store.myshopify.com" -> "My Store")
+    const namePart = domain.split('.')[0] || domain;
+    const cleanName = namePart.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+    
+    shopifyContext = `<shopify-store>
+Your connected Shopify store is: **${cleanName}**
+Store Domain: ${domain}
+Store Admin URL: https://${domain}/admin
+When providing product links to the user, always use the format: https://${domain}/products/[product-handle]
+NEVER use placeholder domains like "yourstore.myshopify.com" - always use the actual store domain: ${domain}
+</shopify-store>`;
+  } else {
+    shopifyContext = '<shopify-store>No Shopify store is currently connected.</shopify-store>';
+  }
+
   // Build platform-specific system prompt by replacing placeholders
   const systemPrompt = ACCOMPLISH_SYSTEM_PROMPT_TEMPLATE
     .replace(/\{\{SKILLS_PATH\}\}/g, skillsPath)
     .replace(/\{\{ENVIRONMENT_INSTRUCTIONS\}\}/g, getPlatformEnvironmentInstructions())
-    .replace(/\{\{BRAND_CONTEXT\}\}/g, generateBrandContext());
+    .replace(/\{\{BRAND_CONTEXT\}\}/g, generateBrandContext())
+    .replace(/\{\{SHOPIFY_CONTEXT\}\}/g, shopifyContext);
 
   // Get OpenCode config directory (parent of skills/) for OPENCODE_CONFIG_DIR
   const openCodeConfigDir = getOpenCodeConfigDir();
@@ -1015,7 +1086,6 @@ export async function generateOpenCodeConfig(): Promise<string> {
   };
 
   // Conditionally add Shopify MCP server if connected (our feature)
-  const shopifyCredentials = getShopifyCredentials();
   if (shopifyCredentials && config.mcp) {
     config.mcp['shopify'] = {
       type: 'local',

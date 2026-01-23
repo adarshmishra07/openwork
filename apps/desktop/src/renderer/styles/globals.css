@@ -186,3 +186,27 @@ textarea::placeholder {
 .prose li > * {
   color: hsl(var(--foreground)) !important;
 }
+
+/* ============================================
+   Browser Activity Pulsating Glow
+   Using ShopOS logo colors: Magenta, Purple, Peach
+   ============================================ */
+@keyframes browser-glow-pulse {
+  0%, 100% {
+    box-shadow: 
+      0 0 15px rgba(255, 0, 255, 0.3),
+      0 0 30px rgba(155, 48, 255, 0.2),
+      0 0 45px rgba(255, 171, 145, 0.15);
+  }
+  50% {
+    box-shadow: 
+      0 0 25px rgba(255, 0, 255, 0.5),
+      0 0 50px rgba(155, 48, 255, 0.4),
+      0 0 75px rgba(255, 171, 145, 0.3);
+  }
+}
+
+.browser-active-glow {
+  animation: browser-glow-pulse 2s ease-in-out infinite;
+  border-radius: 0.5rem;
+}

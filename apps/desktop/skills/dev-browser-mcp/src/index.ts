@@ -37,6 +37,9 @@ let connectingPromise: Promise<Browser> | null = null;
 // Cached server mode (fetched once at connection time)
 let cachedServerMode: string | null = null;
 
+// Track pages that have persistent glow set up (prevents duplicate addInitScript calls)
+const glowSetupPages = new WeakSet<Page>();
+
 /**
  * Fetch with retry for handling concurrent connection issues
  */
@@ -138,6 +141,172 @@ async function findPageByTargetId(b: Browser, targetId: string): Promise<Page | 
   return null;
 }
 
+/**
+ * ShopOS AI Activity Glow Overlay - PERSISTENT VERSION
+ * Injects a pulsating gradient border into the browser page to indicate AI is controlling it.
+ * Uses ShopOS brand colors: Magenta (#FF00FF), Purple (#9B30FF), Peach (#FFAB91)
+ * 
+ * This script is designed to be used with page.addInitScript() for persistent injection
+ * across all navigations. It handles:
+ * - Early injection (before DOM is ready)
+ * - Re-injection if overlay is removed (SPAs, dynamic content)
+ */
+const SHOPOS_GLOW_SCRIPT = `
+(function() {
+  function injectGlow() {
+    // Check if already injected
+    if (document.getElementById('shopos-ai-glow-overlay')) return;
+    
+    // Need a target to append to
+    const target = document.documentElement || document.body;
+    if (!target) return;
+    
+    // Create style element if not exists
+    if (!document.getElementById('shopos-ai-glow-style')) {
+      const style = document.createElement('style');
+      style.id = 'shopos-ai-glow-style';
+      style.textContent = \`
+        @keyframes shopos-glow-wave {
+          0% {
+            box-shadow: 
+              inset 0 0 16px rgba(155, 48, 255, 0.5),
+              inset 0 0 32px rgba(255, 0, 255, 0.25);
+          }
+          25% {
+            box-shadow: 
+              inset 0 0 28px rgba(255, 0, 255, 0.6),
+              inset 0 0 48px rgba(155, 48, 255, 0.3);
+          }
+          50% {
+            box-shadow: 
+              inset 0 0 20px rgba(155, 48, 255, 0.4),
+              inset 0 0 40px rgba(255, 171, 145, 0.3);
+          }
+          75% {
+            box-shadow: 
+              inset 0 0 30px rgba(255, 171, 145, 0.5),
+              inset 0 0 50px rgba(155, 48, 255, 0.35);
+          }
+          100% {
+            box-shadow: 
+              inset 0 0 16px rgba(155, 48, 255, 0.5),
+              inset 0 0 32px rgba(255, 0, 255, 0.25);
+          }
+        }
+        
+        #shopos-ai-glow-overlay {
+          position: fixed !important;
+          top: 0 !important;
+          left: 0 !important;
+          width: 100vw !important;
+          height: 100vh !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          pointer-events: none !important;
+          z-index: 2147483647 !important;
+          animation: shopos-glow-wave 3s ease-in-out infinite;
+          border: 2px solid rgba(155, 48, 255, 0.5) !important;
+          box-sizing: border-box !important;
+          overflow: hidden !important;
+        }
+        
+        #shopos-ai-indicator {
+          position: fixed !important;
+          top: 8px !important;
+          left: 50% !important;
+          transform: translateX(-50%) !important;
+          z-index: 2147483647 !important;
+          pointer-events: none !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 6px !important;
+          background: rgba(255, 255, 255, 0.95) !important;
+          backdrop-filter: blur(8px) !important;
+          padding: 6px 12px !important;
+          border-radius: 16px !important;
+          box-shadow: 0 2px 8px rgba(155, 48, 255, 0.3) !important;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+          font-size: 12px !important;
+          font-weight: 500 !important;
+          color: #1a1a1a !important;
+          margin: 0 !important;
+          line-height: 1 !important;
+        }
+        
+        #shopos-ai-indicator svg {
+          width: 14px !important;
+          height: 14px !important;
+          color: #9B30FF !important;
+          flex-shrink: 0 !important;
+        }
+        
+        #shopos-ai-indicator .pulse-dot {
+          width: 6px !important;
+          height: 6px !important;
+          border-radius: 50% !important;
+          background: #9B30FF !important;
+          animation: shopos-dot-pulse 1s ease-in-out infinite;
+          flex-shrink: 0 !important;
+        }
+        
+        @keyframes shopos-dot-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+      \`;
+      (document.head || target).appendChild(style);
+    }
+    
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'shopos-ai-glow-overlay';
+    target.appendChild(overlay);
+    
+    // Create indicator pill
+    const indicator = document.createElement('div');
+    indicator.id = 'shopos-ai-indicator';
+    indicator.innerHTML = \`
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="2" y1="12" x2="22" y2="12"></line>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+      </svg>
+      <span>AI is controlling this browser</span>
+      <div class="pulse-dot"></div>
+    \`;
+    target.appendChild(indicator);
+  }
+  
+  // Handle early injection (before DOM is ready)
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectGlow);
+  } else {
+    injectGlow();
+  }
+  
+  // Re-inject if overlay gets removed (SPAs, dynamic content changes)
+  // Use a MutationObserver to watch for removal
+  const observer = new MutationObserver(function() {
+    if (!document.getElementById('shopos-ai-glow-overlay')) {
+      injectGlow();
+    }
+  });
+  
+  // Start observing once DOM is ready
+  function startObserver() {
+    if (document.documentElement) {
+      observer.observe(document.documentElement, { childList: true, subtree: true });
+    }
+  }
+  
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startObserver);
+  } else {
+    startObserver();
+  }
+})();
+`;
+
 interface GetPageRequest {
   name: string;
   viewport?: { width: number; height: number };
@@ -177,16 +346,19 @@ async function getPage(pageName?: string): Promise<Page> {
     if (allPages.length === 0) {
       throw new Error('No pages available in browser');
     }
+    let selectedPage: Page;
     if (allPages.length === 1) {
-      return allPages[0]!;
-    }
-    if (pageInfo.url) {
+      selectedPage = allPages[0]!;
+    } else if (pageInfo.url) {
       const matchingPage = allPages.find((p) => p.url() === pageInfo.url);
-      if (matchingPage) {
-        return matchingPage;
-      }
+      selectedPage = matchingPage || allPages[0]!;
+    } else {
+      selectedPage = allPages[0]!;
     }
-    return allPages[0]!;
+    
+    // Set up persistent glow for extension mode pages too
+    await setupPersistentGlow(selectedPage);
+    return selectedPage;
   }
 
   const page = await findPageByTargetId(b, targetId);
@@ -194,7 +366,37 @@ async function getPage(pageName?: string): Promise<Page> {
     throw new Error(`Page "${fullName}" not found in browser contexts`);
   }
 
+  // Set up persistent glow if not already done for this page
+  await setupPersistentGlow(page);
+
   return page;
+}
+
+/**
+ * Set up persistent AI glow overlay on a page
+ * Uses addInitScript so glow persists across navigations
+ */
+async function setupPersistentGlow(page: Page): Promise<void> {
+  if (glowSetupPages.has(page)) {
+    return; // Already set up
+  }
+  
+  try {
+    // Add init script that runs on every navigation
+    await page.addInitScript(SHOPOS_GLOW_SCRIPT);
+    glowSetupPages.add(page);
+    
+    // Also inject immediately for current page state
+    try {
+      await page.evaluate(SHOPOS_GLOW_SCRIPT);
+    } catch {
+      // Ignore - page might be navigating
+    }
+    
+    console.error('[dev-browser-mcp] Persistent glow set up for page');
+  } catch (err) {
+    console.error('[dev-browser-mcp] Failed to set up persistent glow:', err);
+  }
 }
 
 /**

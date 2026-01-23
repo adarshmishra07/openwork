@@ -111,10 +111,15 @@ export function buildAllowedTools(): string[] {
 
 /**
  * Get the model string for the SDK based on provider settings
+ * Prefers selectedModel from app-settings (what user explicitly chose in UI)
+ * over activeProviderModel from provider-settings
  */
 export async function getModelForSdk(): Promise<string | undefined> {
-  const activeModel = getActiveProviderModel();
-  const selectedModel = activeModel || getSelectedModel();
+  // Prefer selectedModel from app-settings (user's explicit choice in the dropdown)
+  // Fall back to activeProviderModel from provider-settings
+  const appSelectedModel = getSelectedModel();
+  const providerModel = getActiveProviderModel();
+  const selectedModel = appSelectedModel || providerModel;
   
   if (!selectedModel?.model) {
     return undefined;
@@ -125,7 +130,11 @@ export async function getModelForSdk(): Promise<string | undefined> {
   
   switch (provider) {
     case 'anthropic':
-      // SDK uses model ID directly for Anthropic
+      // SDK expects model ID without 'anthropic/' prefix
+      // e.g., 'claude-opus-4-5' not 'anthropic/claude-opus-4-5'
+      if (model.startsWith('anthropic/')) {
+        return model.replace('anthropic/', '');
+      }
       return model;
     
     case 'bedrock':

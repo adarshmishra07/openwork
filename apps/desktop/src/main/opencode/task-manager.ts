@@ -52,8 +52,10 @@ function shouldUseSdkAdapter(): boolean {
   }
   
   // Check current provider - SDK only works with Anthropic
-  const activeModel = getActiveProviderModel();
-  const selectedModel = activeModel || getSelectedModel();
+  // Prefer selectedModel from app-settings (user's explicit choice)
+  const appSelectedModel = getSelectedModel();
+  const providerModel = getActiveProviderModel();
+  const selectedModel = appSelectedModel || providerModel;
   
   if (!selectedModel?.provider) {
     // Default to SDK if no provider set (will use default Anthropic)
@@ -343,7 +345,8 @@ interface QueuedTask {
  * Default maximum number of concurrent tasks
  * Can be configured via constructor
  */
-const DEFAULT_MAX_CONCURRENT_TASKS = 10;
+// Max concurrent tasks - reduced from 10 to 4 to prevent overwhelming API rate limits
+const DEFAULT_MAX_CONCURRENT_TASKS = 4;
 
 /**
  * TaskManager manages OpenCode CLI task executions with parallel execution

@@ -73,6 +73,9 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
   private isDisposed: boolean = false;
   private wasInterrupted: boolean = false;
   private lastErrorOutput: string = ''; // Capture recent output for error messages
+  private toolCallCount: number = 0; // Track number of tool calls in this session
+  private autoContinueCount: number = 0; // Prevent infinite auto-continue loops
+  private static MAX_AUTO_CONTINUES = 3; // Max times to auto-continue
 
   /**
    * Create a new OpenCodeAdapter instance
@@ -157,6 +160,8 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     this.hasCompleted = false;
     this.wasInterrupted = false;
     this.lastErrorOutput = '';
+    this.toolCallCount = 0; // Reset tool call counter for new task
+    this.autoContinueCount = 0; // Reset auto-continue counter
 
     // Start the log watcher to detect errors that aren't output as JSON
     if (this.logWatcher) {
@@ -649,6 +654,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
         const toolInput = message.part.input;
 
         console.log('[OpenCode Adapter] Tool call:', toolName);
+        this.toolCallCount++; // Track tool usage for auto-continue logic
 
         this.emit('tool-use', toolName, toolInput);
         this.emit('progress', {
@@ -668,6 +674,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
         const toolUseName = toolUseMessage.part.tool || 'unknown';
         const toolUseInput = toolUseMessage.part.state?.input;
         const toolUseOutput = toolUseMessage.part.state?.output || '';
+        this.toolCallCount++; // Track tool usage for auto-continue logic
 
         // For models that don't emit text messages (like Gemini), emit the tool description
         // as a thinking message so users can see what the AI is doing
@@ -725,6 +732,22 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
         // Only complete if reason is 'stop' or 'end_turn' (final completion)
         // 'tool_use' means there are more steps coming
         if (message.part.reason === 'stop' || message.part.reason === 'end_turn') {
+          // Auto-continue: If agent stopped without calling any tools, it likely just
+          // shared a plan without executing. Send a nudge to continue.
+          if (this.toolCallCount === 0 && 
+              this.autoContinueCount < OpenCodeAdapter.MAX_AUTO_CONTINUES &&
+              this.ptyProcess) {
+            this.autoContinueCount++;
+            console.log(`[OpenCode Adapter] Auto-continuing (${this.autoContinueCount}/${OpenCodeAdapter.MAX_AUTO_CONTINUES}) - agent stopped without tool calls`);
+            this.emit('debug', { 
+              type: 'info', 
+              message: `Auto-continuing: agent shared plan but didn't execute (attempt ${this.autoContinueCount})` 
+            });
+            // Send a nudge to continue executing
+            this.ptyProcess.write('Continue executing the plan. Start with the first step now.\n');
+            return; // Don't emit complete yet
+          }
+          
           this.hasCompleted = true;
           this.emit('complete', {
             status: 'success',

@@ -348,8 +348,18 @@ export function registerIPCHandlers(): void {
     // Create task-scoped callbacks for the TaskManager
     const callbacks: TaskCallbacks = {
       onMessage: (message: OpenCodeMessage) => {
+        console.log('[IPC handlers] onMessage received:', message.type, 
+          message.type === 'text' ? `text: "${(message as any).part?.text?.substring(0, 50)}..."` : '',
+          message.type === 'tool_use' ? `tool: ${(message as any).part?.tool}, status: ${(message as any).part?.state?.status}` : ''
+        );
+        
         const taskMessage = toTaskMessage(message);
-        if (!taskMessage) return;
+        if (!taskMessage) {
+          console.log('[IPC handlers] toTaskMessage returned null for:', message.type);
+          return;
+        }
+        
+        console.log('[IPC handlers] taskMessage created:', taskMessage.type, taskMessage.content?.substring(0, 50));
 
         // Queue message for batching instead of immediate send
         queueMessage(taskId, taskMessage, forwardToRenderer, addTaskMessage);
@@ -2063,7 +2073,33 @@ function toTaskMessage(message: OpenCodeMessage): TaskMessage | null {
     const toolOutput = toolUseMsg.part.state?.output || '';
     const status = toolUseMsg.part.state?.status;
 
-    // Only create message for completed/error status (not pending/running)
+    // For running status, show the tool description as a thinking message
+    // This helps users understand what the agent is doing (especially for Gemini which doesn't emit text messages)
+    if (status === 'running' || status === 'pending') {
+      const description = (toolInput as { description?: string })?.description;
+      if (description) {
+        // Emit as assistant message (thinking) so user sees what agent is planning
+        return {
+          id: createMessageId(),
+          type: 'assistant',
+          content: description,
+          timestamp: new Date().toISOString(),
+          subtype: 'thinking',
+        };
+      }
+      // For tools without description, show a brief "Using X" message
+      return {
+        id: createMessageId(),
+        type: 'tool',
+        content: `Using ${toolName}...`,
+        toolName,
+        toolInput,
+        toolStatus: 'running',
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    // For completed/error status, show the result
     if (status === 'completed' || status === 'error') {
       // Extract screenshots from tool output
       const { cleanedText, attachments } = extractScreenshots(toolOutput);
@@ -2083,6 +2119,7 @@ function toTaskMessage(message: OpenCodeMessage): TaskMessage | null {
         content: displayText || `Tool ${toolName} ${status}`,
         toolName,
         toolInput,
+        toolStatus: status,
         timestamp: new Date().toISOString(),
         attachments: attachments.length > 0 ? attachments : undefined,
       };

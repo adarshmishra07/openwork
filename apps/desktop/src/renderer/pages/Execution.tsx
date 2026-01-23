@@ -6,12 +6,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTaskStore } from '../stores/taskStore';
 import { getAccomplish } from '../lib/accomplish';
 import { springs } from '../lib/animations';
-import type { TaskMessage } from '@brandwork/shared';
+import type { TaskMessage, TodoItem } from '@brandwork/shared';
 import { hasAnyReadyProvider } from '@brandwork/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { XCircle, CornerDownLeft, ArrowLeft, CheckCircle2, AlertCircle, AlertTriangle, Terminal, Wrench, FileText, Search, Code, Brain, Clock, Square, Play, Download, File, Bug, ChevronUp, ChevronDown, Trash2, Check, Sparkles, BookOpen, Palette } from 'lucide-react';
+import { XCircle, CornerDownLeft, ArrowLeft, CheckCircle2, AlertCircle, AlertTriangle, Terminal, Wrench, FileText, Search, Code, Brain, Clock, Square, Play, Download, File, Bug, ChevronUp, ChevronDown, Trash2, Check, Sparkles, BookOpen, Palette, Globe } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
@@ -24,6 +24,7 @@ import SettingsDialog from '../components/layout/SettingsDialog';
 import { CollapsibleThinking } from '../components/chat/CollapsibleThinking';
 import { CollapsibleToolCall } from '../components/chat/CollapsibleToolCall';
 import { ProgressIndicator } from '../components/chat/ProgressIndicator';
+import { TodoList } from '../components/chat/TodoList';
 
 // Debug log entry type
 interface DebugLogEntry {
@@ -749,16 +750,12 @@ export default function ExecutionPage() {
                 // Determine if this message should be expanded
                 // Expanded if:
                 // 1. It's a user message
-                // 2. It's an assistant message that is NOT followed by a tool (thinking pattern)
-                const nextMessage = filteredMessages[index + 1];
-                const isFollowedByTool = nextMessage?.type === 'tool';
-                
-                const isExpanded = message.type === 'user' || (
-                  message.type === 'assistant' && !isFollowedByTool
-                );
+                // 2. It's an assistant message (ALL assistant messages are now shown expanded, including thinking)
+                // Only tool messages are collapsed
+                const isExpanded = message.type === 'user' || message.type === 'assistant';
 
                 if (isExpanded) {
-                  // If we have pending collapsed messages, push them as a block first
+                  // If we have pending collapsed messages (tools), push them as a block first
                   if (currentCollapsed.length > 0) {
                     blocks.push({ type: 'collapsed', messages: [...currentCollapsed] });
                     currentCollapsed = [];
@@ -771,7 +768,7 @@ export default function ExecutionPage() {
                     isLastAssistant 
                   });
                 } else {
-                  // Add to current collapsed group
+                  // Only tool messages go into collapsed group
                   currentCollapsed.push(message);
                 }
               });
@@ -792,12 +789,16 @@ export default function ExecutionPage() {
                     (currentTask.status === 'interrupted' ||
                      (currentTask.status === 'completed' && isWaitingForUser(message.content)));
 
+                  // Stream assistant messages while task is running
+                  // All assistant messages should stream, not just the last one
+                  const shouldStreamThis = message.type === 'assistant' && currentTask.status === 'running';
+                  
                   return (
                     <MessageBubble
                       key={message.id}
                       message={message}
                       nextMessage={nextMsg}
-                      shouldStream={isLastAssistant && currentTask.status === 'running'}
+                      shouldStream={shouldStreamThis}
                       isLastMessage={isLast}
                       isLastAssistantMessage={isLastAssistant}
                       isRunning={currentTask.status === 'running'}
@@ -1361,6 +1362,7 @@ function getNextMessage(messages: TaskMessage[], currentMessage: TaskMessage): T
 
 // Activity Bullet component for non-final messages (thinking, tools, skills, spaces)
 // Now uses CollapsibleToolCall for richer display with collapsible details
+// Special handling for TodoWrite to render inline checklist
 const ActivityBullet = memo(function ActivityBullet({ 
   message, 
   isRunning = false,
@@ -1372,6 +1374,20 @@ const ActivityBullet = memo(function ActivityBullet({
 }) {
   const toolName = message.toolName || '';
   const description = (message.toolInput as { description?: string })?.description;
+  
+  // Special handling for TodoWrite - render inline todo list (case-insensitive check)
+  const toolInput = message.toolInput as { todos?: TodoItem[] } | undefined;
+  if (toolName.toLowerCase() === 'todowrite' && toolInput?.todos) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={springs.gentle}
+      >
+        <TodoList todos={toolInput.todos} />
+      </motion.div>
+    );
+  }
   
   // Determine status based on toolStatus field or running state
   const status: 'running' | 'success' | 'error' = 
@@ -1397,8 +1413,8 @@ const ActivityBullet = memo(function ActivityBullet({
   );
 });
 
-// Intermediate assistant message - collapsible thinking section
-// Shows reasoning/planning messages in a compact, expandable format
+// Intermediate assistant message - shows thinking/reasoning as plain text
+// No longer collapsible - streams and stays visible
 const IntermediateMessage = memo(function IntermediateMessage({ 
   content,
   isRunning = false,
@@ -1410,19 +1426,18 @@ const IntermediateMessage = memo(function IntermediateMessage({
 }) {
   return (
     <motion.div
-      initial={{ opacity: 0, x: -8 }}
-      animate={{ opacity: 1, x: 0 }}
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
       transition={springs.gentle}
-      className="flex items-center gap-2"
+      className="flex items-start gap-3 py-1"
     >
-      <CollapsibleThinking 
-        content={content} 
-        defaultExpanded={false}
-        className="flex-1"
-      />
+      {/* Thinking content rendered as markdown */}
+      <div className="flex-1 text-sm text-foreground/90 prose prose-sm max-w-none prose-p:my-1 prose-p:leading-relaxed prose-headings:text-foreground prose-strong:text-foreground prose-code:text-xs prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+      </div>
       {/* Loading spinner for active thinking */}
       {isLastMessage && isRunning && (
-        <SpinningIcon className="h-3.5 w-3.5 shrink-0" />
+        <SpinningIcon className="h-3.5 w-3.5 shrink-0 mt-1" />
       )}
     </motion.div>
   );
@@ -1441,7 +1456,9 @@ const MessageBubble = memo(function MessageBubble({
   onContinue, 
   isLoading = false 
 }: MessageBubbleProps) {
-  const [streamComplete, setStreamComplete] = useState(!shouldStream);
+  // Track whether streaming animation has completed
+  // Initialized to false so streaming can start, will be set true when animation finishes or shouldStream becomes false
+  const [streamComplete, setStreamComplete] = useState(false);
   const isUser = message.type === 'user';
   const isTool = message.type === 'tool';
   const isSystem = message.type === 'system';
@@ -1450,7 +1467,7 @@ const MessageBubble = memo(function MessageBubble({
   // Check if this should be rendered as a bullet or full bubble
   const shouldRenderAsBullet = !isFinalResponse(message, isLastAssistantMessage, nextMessage);
 
-  // Mark stream as complete when shouldStream becomes false
+  // If shouldStream becomes false (task stopped), mark streaming as complete to show full content
   useEffect(() => {
     if (!shouldStream) {
       setStreamComplete(true);
@@ -1598,6 +1615,7 @@ const MessageBubble = memo(function MessageBubble({
   );
 }, (prev, next) => 
   prev.message.id === next.message.id && 
+  prev.message.content === next.message.content &&
   prev.shouldStream === next.shouldStream && 
   prev.isLastMessage === next.isLastMessage && 
   prev.isLastAssistantMessage === next.isLastAssistantMessage &&

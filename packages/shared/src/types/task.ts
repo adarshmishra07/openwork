@@ -96,3 +96,14 @@ export interface TaskUpdateEvent {
   result?: TaskResult;
   error?: string;
 }
+
+/**
+ * Todo item from TodoWrite tool calls
+ * Used for displaying agent task progress in the UI
+ */
+export interface TodoItem {
+  id: string;
+  content: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  priority: 'high' | 'medium' | 'low';
+}

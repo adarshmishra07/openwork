@@ -89,6 +89,7 @@ export async function serve(options: ServeOptions = {}): Promise<DevBrowserServe
       context = await chromium.launchPersistentContext(chromeUserDataDir, {
         headless,
         channel: 'chrome', // Use system Chrome instead of Playwright's Chromium
+        bypassCSP: true, // Allow AI activity glow to work on sites with strict CSP
         ignoreDefaultArgs: ['--enable-automation'], // Remove automation flag
         args: [
           `--remote-debugging-port=${cdpPort}`,
@@ -112,6 +113,7 @@ export async function serve(options: ServeOptions = {}): Promise<DevBrowserServe
     console.log("Launching browser with Playwright Chromium...");
     context = await chromium.launchPersistentContext(playwrightUserDataDir, {
       headless,
+      bypassCSP: true, // Allow AI activity glow to work on sites with strict CSP
       ignoreDefaultArgs: ['--enable-automation'], // Remove automation flag
       args: [
         `--remote-debugging-port=${cdpPort}`,
