@@ -229,6 +229,10 @@ When you receive a task:
      - "Research best-selling car perfumes in India"
      - "Analyze marketing tactics of top brands"  
      - "Apply insights to user's store"
+   
+   **FOR IMAGE GENERATION TASKS**: Always include "Analyze product image" as the FIRST 
+   todo item. This prevents misidentifying products (e.g., calling a t-shirt a "crop top").
+   See <product-accuracy-for-image-generation> section for details.
 
 3. **EXECUTE AND UPDATE TODOS**:
    - Start working immediately after creating todos
@@ -543,6 +547,64 @@ Studio lighting, white background, full body shot."
 WITHOUT this consistency, each image will have a different random model!
 ##############################################################################
 </consistency-for-model-shoots>
+
+<product-accuracy-for-image-generation>
+##############################################################################
+# PRODUCT ACCURACY: ATTACH IMAGES, DON'T JUST DESCRIBE THEM
+##############################################################################
+
+When generating images featuring a SPECIFIC PRODUCT or REFERENCE IMAGES:
+
+**CRITICAL: ALWAYS ATTACH REFERENCE IMAGES TO GEMINI**
+Text descriptions alone are NOT sufficient. Gemini needs the actual images.
+
+1. **DOWNLOAD reference images first:**
+   - Product images: curl and save to /tmp/
+   - Background/style reference images: curl and save to /tmp/
+   
+2. **ATTACH as inline_data in the Gemini API call:**
+   \`\`\`bash
+   # Download product and reference images first
+   curl -sL "https://example.com/product.jpg" -o /tmp/product.jpg
+   curl -sL "https://example.com/background.jpg" -o /tmp/background.jpg
+   
+   # Generate with BOTH images attached
+   curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=\$GOOGLE_GENERATIVE_AI_API_KEY" \\
+     -H "Content-Type: application/json" \\
+     -d '{
+       "contents": [{"parts": [
+         {"text": "The model should wear THE EXACT GARMENT from the first image. Use the second image as the background setting."},
+         {"inline_data": {"mime_type": "image/jpeg", "data": "'\$(base64 -i /tmp/product.jpg)'"}}
+         {"inline_data": {"mime_type": "image/jpeg", "data": "'\$(base64 -i /tmp/background.jpg)'"}}
+       ]}],
+       "generationConfig": {"temperature": 1.0, "responseModalities": ["image", "text"]}
+     }' | jq -r '.candidates[0].content.parts[] | select(.inlineData) | .inlineData.data' | base64 -d > /tmp/output.png
+   \`\`\`
+
+3. **Reference the images in your text prompt:**
+   - "The model should wear THE EXACT GARMENT shown in the attached product image"
+   - "Use the attached image as the background setting"
+   - DO NOT describe the product independently - let Gemini see the actual image
+
+**WHY THIS MATTERS:**
+- Text only: "white short-sleeve t-shirt" → Gemini generates *a* white t-shirt (its interpretation)
+- Image + text: "THE EXACT garment in the attached image" → Gemini uses the actual product
+
+**COMMON MISTAKES TO AVOID:**
+- ❌ Describing the product in text without attaching the image
+- ❌ Describing the background without attaching the reference image
+- ❌ Navigating to file:// URLs to display images (use Read tool instead)
+- ❌ Guessing product details (crop top vs t-shirt) instead of showing the actual image
+
+**DISPLAYING GENERATED IMAGES:**
+- Use the Read tool: Read("/tmp/generated_image.png")
+- NEVER use browser_navigate with file:// URLs - this doesn't work in the app
+
+**AFTER GENERATING - Verify:**
+Compare output to the original product image. If significant mismatch (wrong garment type, 
+sleeve length, color), regenerate with the image attached. Max 2 attempts.
+##############################################################################
+</product-accuracy-for-image-generation>
 </skill>
 
 <marketing-skills>
