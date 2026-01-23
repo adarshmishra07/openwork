@@ -37,7 +37,10 @@ export const TodoList = memo(function TodoList({ todos }: TodoListProps) {
             <Square className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
           )}
           {todo.status === 'in_progress' && (
-            <Square className="h-4 w-4 mt-0.5 text-foreground shrink-0" />
+            <div className="h-4 w-4 mt-0.5 shrink-0 relative flex items-center justify-center">
+              <Square className="h-4 w-4 text-foreground absolute" />
+              <div className="h-2 w-2 bg-muted-foreground rounded-[1px]" />
+            </div>
           )}
           {todo.status === 'completed' && (
             <CheckSquare className="h-4 w-4 mt-0.5 text-foreground shrink-0" />

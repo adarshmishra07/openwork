@@ -12,7 +12,7 @@ import {
 import { getAllApiKeys, getBedrockCredentials } from '../store/secureStorage';
 import { getSelectedModel } from '../store/appSettings';
 import { getActiveProviderModel } from '../store/providerSettings';
-import { generateOpenCodeConfig, ACCOMPLISH_AGENT_NAME, syncApiKeysToOpenCodeAuth } from './config-generator';
+import { generateOpenCodeConfig, ACCOMPLISH_AGENT_NAME, syncApiKeysToOpenCodeAuth, getAppScopedDataHome } from './config-generator';
 import { getExtendedNodePath } from '../utils/system-path';
 import { getBundledNodePaths, logBundledNodeInfo } from '../utils/bundled-node';
 import path from 'path';
@@ -169,7 +169,13 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     }
 
     // Sync API keys to OpenCode CLI's auth.json (for DeepSeek, Z.AI support)
-    await syncApiKeysToOpenCodeAuth();
+    // Skip if using subscription mode - we want to use global auth as-is
+    const useSubscription = process.env.USE_OPENCODE_SUBSCRIPTION === '1';
+    if (!useSubscription) {
+      await syncApiKeysToOpenCodeAuth();
+    } else {
+      console.log('[OpenCode CLI] Skipping API key sync (using subscription mode)');
+    }
 
     // Generate OpenCode config file with MCP settings and agent
     console.log('[OpenCode CLI] Generating OpenCode config with MCP settings and agent...');
@@ -425,6 +431,21 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     const env: NodeJS.ProcessEnv = {
       ...process.env,
     };
+
+    // Check if user wants to use their OpenCode subscription instead of API keys
+    // Set USE_OPENCODE_SUBSCRIPTION=1 to use global auth (OAuth subscription)
+    const useSubscription = process.env.USE_OPENCODE_SUBSCRIPTION === '1';
+    
+    if (useSubscription) {
+      // Use global OpenCode auth (user's subscription)
+      console.log('[OpenCode CLI] USE_OPENCODE_SUBSCRIPTION=1: Using global OpenCode auth (subscription)');
+    } else {
+      // Set app-scoped XDG_DATA_HOME so OpenCode uses isolated auth/data.
+      // This allows the app to use API keys while the user's global OpenCode CLI
+      // continues using their OAuth subscription.
+      env.XDG_DATA_HOME = getAppScopedDataHome();
+      console.log('[OpenCode CLI] Using app-scoped XDG_DATA_HOME:', env.XDG_DATA_HOME);
+    }
 
     if (app.isPackaged) {
       // Run the bundled CLI with Electron acting as Node (no system Node required).

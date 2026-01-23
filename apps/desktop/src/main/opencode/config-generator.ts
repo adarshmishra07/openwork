@@ -1123,20 +1123,31 @@ export function getOpenCodeConfigPath(): string {
 }
 
 /**
- * Get the path to OpenCode CLI's auth.json
- * OpenCode stores credentials in ~/.local/share/opencode/auth.json
+ * Get the app-scoped XDG_DATA_HOME directory.
+ * This isolates the app's OpenCode data from the user's global OpenCode CLI config,
+ * allowing the app to use API keys while the user's CLI uses their OAuth subscription.
  */
-export function getOpenCodeAuthPath(): string {
-  const homeDir = app.getPath('home');
-  if (process.platform === 'win32') {
-    return path.join(homeDir, 'AppData', 'Local', 'opencode', 'auth.json');
-  }
-  return path.join(homeDir, '.local', 'share', 'opencode', 'auth.json');
+export function getAppScopedDataHome(): string {
+  return path.join(app.getPath('userData'), 'opencode-data-home');
 }
 
 /**
- * Sync API keys from Openwork's secure storage to OpenCode CLI's auth.json
- * This allows OpenCode CLI to recognize DeepSeek and Z.AI providers
+ * Get the path to OpenCode CLI's auth.json (app-scoped)
+ * Uses app-scoped data directory to avoid conflicts with user's global OpenCode CLI auth.
+ * This allows the app to use API keys while the user's CLI continues using OAuth subscription.
+ */
+export function getOpenCodeAuthPath(): string {
+  const dataHome = getAppScopedDataHome();
+  return path.join(dataHome, 'opencode', 'auth.json');
+}
+
+/**
+ * Sync API keys from Openwork's secure storage to OpenCode CLI's auth.json (app-scoped)
+ * 
+ * This writes to the app-scoped auth.json to avoid conflicts with user's global OpenCode CLI.
+ * The app uses API keys while the user's CLI continues using their OAuth subscription.
+ * 
+ * Syncs: Anthropic (critical - avoids OAuth conflict), DeepSeek, Z.AI
  */
 export async function syncApiKeysToOpenCodeAuth(): Promise<void> {
   const { getAllApiKeys } = await import('../store/secureStorage');
@@ -1163,6 +1174,15 @@ export async function syncApiKeysToOpenCodeAuth(): Promise<void> {
 
   let updated = false;
 
+  // Sync Anthropic API key (critical - this overrides any OAuth token in app-scoped auth)
+  if (apiKeys.anthropic) {
+    if (!auth['anthropic'] || auth['anthropic'].key !== apiKeys.anthropic || auth['anthropic'].type !== 'api') {
+      auth['anthropic'] = { type: 'api', key: apiKeys.anthropic };
+      updated = true;
+      console.log('[OpenCode Auth] Synced Anthropic API key to app-scoped auth');
+    }
+  }
+
   // Sync DeepSeek API key
   if (apiKeys.deepseek) {
     if (!auth['deepseek'] || auth['deepseek'].key !== apiKeys.deepseek) {
@@ -1184,6 +1204,8 @@ export async function syncApiKeysToOpenCodeAuth(): Promise<void> {
   // Write updated auth.json
   if (updated) {
     fs.writeFileSync(authPath, JSON.stringify(auth, null, 2));
-    console.log('[OpenCode Auth] Updated auth.json at:', authPath);
+    console.log('[OpenCode Auth] Updated app-scoped auth.json at:', authPath);
+  } else {
+    console.log('[OpenCode Auth] App-scoped auth.json already up to date at:', authPath);
   }
 }
