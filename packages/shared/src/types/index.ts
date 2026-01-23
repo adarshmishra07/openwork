@@ -1,3 +1,4 @@
+export * from './attachment';
 export * from './auth';
 export * from './brand';
 export * from './errors';

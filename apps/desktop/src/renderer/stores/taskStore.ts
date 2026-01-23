@@ -9,6 +9,7 @@ import type {
   TaskMessage,
 } from '@brandwork/shared';
 import { getAccomplish } from '../lib/accomplish';
+import { showTaskErrorToast } from '../lib/toast';
 
 // Batch update event type for performance optimization
 interface TaskUpdateBatchEvent {
@@ -48,7 +49,7 @@ interface TaskState {
   // Actions
   startTask: (config: TaskConfig) => Promise<Task | null>;
   setSetupProgress: (taskId: string | null, message: string | null) => void;
-  sendFollowUp: (message: string) => Promise<void>;
+  sendFollowUp: (message: string, attachments?: Array<{ filename: string; contentType: string; url: string; size: number }>) => Promise<void>;
   cancelTask: () => Promise<void>;
   interruptTask: () => Promise<void>;
   setPermissionRequest: (request: PermissionRequest | null) => void;
@@ -121,10 +122,12 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       });
       return task;
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to start task';
       set({
-        error: err instanceof Error ? err.message : 'Failed to start task',
+        error: errorMsg,
         isLoading: false,
       });
+      showTaskErrorToast(errorMsg);
       void accomplish.logEvent({
         level: 'error',
         message: 'UI task start failed',
@@ -134,7 +137,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }
   },
 
-  sendFollowUp: async (message: string) => {
+  sendFollowUp: async (message: string, attachments?: Array<{ filename: string; contentType: string; url: string; size: number }>) => {
     const accomplish = getAccomplish();
     const { currentTask, startTask } = get();
     if (!currentTask) {
@@ -155,7 +158,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         message: 'UI follow-up: starting fresh task (no session from interrupted task)',
         context: { taskId: currentTask.id },
       });
-      await startTask({ prompt: message });
+      await startTask({ prompt: message, attachments });
       return;
     }
 
@@ -169,10 +172,15 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       return;
     }
 
+    // Format display content with attachment filenames if present
+    const displayContent = attachments && attachments.length > 0
+      ? `${attachments.map(a => `[${a.filename}]`).join(' ')}\n\n${message}`
+      : message;
+
     const userMessage: TaskMessage = {
       id: createMessageId(),
       type: 'user',
-      content: message,
+      content: displayContent,
       timestamp: new Date().toISOString(),
     };
 
@@ -198,9 +206,9 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       void accomplish.logEvent({
         level: 'info',
         message: 'UI follow-up sent',
-        context: { taskId: currentTask.id, message },
+        context: { taskId: currentTask.id, message, attachmentCount: attachments?.length || 0 },
       });
-      const task = await accomplish.resumeSession(sessionId, message, currentTask.id);
+      const task = await accomplish.resumeSession(sessionId, message, currentTask.id, attachments);
 
       // Update status based on response (could be 'running' or 'queued')
       set((state) => ({
@@ -213,8 +221,9 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         ),
       }));
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to send message';
       set((state) => ({
-        error: err instanceof Error ? err.message : 'Failed to send message',
+        error: errorMsg,
         isLoading: false,
         currentTask: state.currentTask
           ? { ...state.currentTask, status: 'failed' }
@@ -223,6 +232,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
           t.id === taskId ? { ...t, status: 'failed' as TaskStatus } : t
         ),
       }));
+      showTaskErrorToast(errorMsg);
       void accomplish.logEvent({
         level: 'error',
         message: 'UI follow-up failed',
@@ -332,6 +342,11 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       // Handle error events
       if (event.type === 'error') {
         newStatus = 'failed';
+
+        // Show toast for task errors
+        if (event.error) {
+          showTaskErrorToast(event.error);
+        }
 
         // Update currentTask if viewing this task
         if (isCurrentTask && state.currentTask) {

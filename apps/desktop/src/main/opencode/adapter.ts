@@ -577,10 +577,37 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     const activeModel = getActiveProviderModel();
     const selectedModel = activeModel || getSelectedModel();
 
+    // Build the prompt - enhance with attachment context if present
+    let prompt = config.prompt;
+    if (config.attachments && config.attachments.length > 0) {
+      const attachmentContext = config.attachments.map((att) => {
+        // Determine file type for context
+        const isImage = att.contentType.startsWith('image/');
+        const isPdf = att.contentType === 'application/pdf';
+        const isJson = att.contentType === 'application/json';
+        const isText = att.contentType.startsWith('text/');
+        
+        let typeLabel = 'File';
+        if (isImage) typeLabel = 'Image';
+        else if (isPdf) typeLabel = 'PDF';
+        else if (isJson) typeLabel = 'JSON';
+        else if (isText) typeLabel = 'Text file';
+        
+        return `- ${typeLabel}: ${att.filename} (${att.url})`;
+      }).join('\n');
+
+      prompt = `User's attached files (publicly accessible S3 URLs):
+${attachmentContext}
+
+User's request: ${config.prompt}`;
+      
+      console.log('[OpenCode Adapter] Enhanced prompt with attachments:', prompt.substring(0, 200) + '...');
+    }
+
     // OpenCode CLI uses: opencode run "message" --format json
     const args = [
       'run',
-      config.prompt,
+      prompt,
       '--format', 'json',
     ];
 

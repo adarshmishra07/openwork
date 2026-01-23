@@ -93,3 +93,21 @@ package:
     - '!tests/**'
     - '!*.md'
     - '!.env*'
+
+# NOTE: S3 Lifecycle Policy for auto-deletion
+# The following folders should have 7-day auto-delete lifecycle rules:
+# - chat-attachments/    (user-uploaded files for chat)
+# - generated-images/    (AI-generated images)
+#
+# To set this up in AWS Console:
+# 1. Go to S3 > future-me-ai > Management > Lifecycle rules
+# 2. Create rule for prefix "chat-attachments/" with 7-day expiration
+# 3. Create rule for prefix "generated-images/" with 7-day expiration
+#
+# Or via AWS CLI:
+# aws s3api put-bucket-lifecycle-configuration --bucket future-me-ai --lifecycle-configuration '{
+#   "Rules": [
+#     {"ID": "DeleteChatAttachments", "Prefix": "chat-attachments/", "Status": "Enabled", "Expiration": {"Days": 7}},
+#     {"ID": "DeleteGeneratedImages", "Prefix": "generated-images/", "Status": "Enabled", "Expiration": {"Days": 7}}
+#   ]
+# }'

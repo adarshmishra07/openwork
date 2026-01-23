@@ -6,8 +6,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTaskStore } from '../stores/taskStore';
 import { getAccomplish } from '../lib/accomplish';
 import { springs } from '../lib/animations';
-import type { TaskMessage, TodoItem } from '@brandwork/shared';
-import { hasAnyReadyProvider } from '@brandwork/shared';
+import type { TaskMessage, TodoItem, FileAttachment } from '@brandwork/shared';
+import { hasAnyReadyProvider, getAcceptedFileTypes } from '@brandwork/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -25,6 +25,8 @@ import { CollapsibleThinking } from '../components/chat/CollapsibleThinking';
 import { CollapsibleToolCall } from '../components/chat/CollapsibleToolCall';
 import { ProgressIndicator } from '../components/chat/ProgressIndicator';
 import { TodoList } from '../components/chat/TodoList';
+import { AttachmentButton, AttachmentList, AttachmentDropzone } from '../components/attachments';
+import { useAttachmentStore } from '../stores/attachmentStore';
 
 // Debug log entry type
 interface DebugLogEntry {
@@ -257,7 +259,27 @@ export default function ExecutionPage() {
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [pendingFollowUp, setPendingFollowUp] = useState<string | null>(null);
+  const [pendingAttachments, setPendingAttachments] = useState<FileAttachment[]>([]);
   const [isIntermediateExpanded, setIsIntermediateExpanded] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Generate a local task ID for attachment uploads (reused when sending follow-up)
+  const [localTaskId, setLocalTaskId] = useState<string>(() => 
+    `task_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+  );
+
+  // Attachment store
+  const {
+    pendingAttachments: attachments,
+    addFiles,
+    addPastedImage,
+    removeAttachment,
+    clearAttachments,
+    retryUpload,
+    getCompletedAttachments,
+    hasUploadsInProgress,
+    allUploadsComplete,
+  } = useAttachmentStore();
 
   const {
     currentTask,
@@ -405,39 +427,117 @@ export default function ExecutionPage() {
     }
   }, [canFollowUp]);
 
+  // Handle file selection from button click
+  const handleAttachClick = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  // Handle files from file input
+  const handleFileInputChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      // Errors are shown via toast in attachmentStore
+      await addFiles(files, localTaskId);
+    }
+    // Reset input so same file can be selected again
+    e.target.value = '';
+  }, [addFiles, localTaskId]);
+
+  // Handle files from drag and drop
+  const handleDrop = useCallback(async (files: File[]) => {
+    // Errors are shown via toast in attachmentStore
+    await addFiles(files, localTaskId);
+  }, [addFiles, localTaskId]);
+
+  // Handle paste (for images)
+  const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
+    const items = Array.from(e.clipboardData.items);
+    
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          // Errors are shown via toast in attachmentStore
+          await addPastedImage(file, localTaskId);
+          return;
+        }
+      }
+    }
+  }, [addPastedImage, localTaskId]);
+
+  // Handle retry
+  const handleRetry = useCallback((attachmentId: string) => {
+    retryUpload(attachmentId, localTaskId);
+  }, [retryUpload, localTaskId]);
+
   const handleFollowUp = async () => {
-    if (!followUp.trim()) return;
+    // Don't submit if uploads are in progress
+    if (hasUploadsInProgress()) {
+      return;
+    }
+    
+    const completedAttachments = getCompletedAttachments();
+    
+    // Need either text or attachments
+    if (!followUp.trim() && completedAttachments.length === 0) return;
 
     // Check if any provider is ready before sending (skip in E2E mode)
     const isE2EMode = await accomplish.isE2EMode();
     if (!isE2EMode) {
       const settings = await accomplish.getProviderSettings();
       if (!hasAnyReadyProvider(settings)) {
-        // Store the pending message and open settings dialog
+        // Store the pending message and attachments, open settings dialog
         setPendingFollowUp(followUp);
+        setPendingAttachments(completedAttachments);
         setShowSettingsDialog(true);
         return;
       }
     }
 
-    await sendFollowUp(followUp);
+    // Convert FileAttachment to the format expected by sendFollowUp
+    const attachmentsForApi = completedAttachments
+      .filter(a => a.url)
+      .map(a => ({
+        filename: a.filename,
+        contentType: a.contentType,
+        url: a.url!,
+        size: a.size,
+      }));
+
+    await sendFollowUp(followUp, attachmentsForApi.length > 0 ? attachmentsForApi : undefined);
     setFollowUp('');
+    clearAttachments();
+    // Generate new local task ID for next follow-up
+    setLocalTaskId(`task_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`);
   };
 
   const handleSettingsDialogClose = (open: boolean) => {
     setShowSettingsDialog(open);
     if (!open) {
       setPendingFollowUp(null);
+      setPendingAttachments([]);
     }
   };
 
   const handleApiKeySaved = async () => {
     // Provider is now ready - close dialog and send the pending message
     setShowSettingsDialog(false);
-    if (pendingFollowUp) {
-      await sendFollowUp(pendingFollowUp);
+    if (pendingFollowUp || pendingAttachments.length > 0) {
+      const attachmentsForApi = pendingAttachments
+        .filter(a => a.url)
+        .map(a => ({
+          filename: a.filename,
+          contentType: a.contentType,
+          url: a.url!,
+          size: a.size,
+        }));
+      
+      await sendFollowUp(pendingFollowUp || '', attachmentsForApi.length > 0 ? attachmentsForApi : undefined);
       setFollowUp('');
       setPendingFollowUp(null);
+      setPendingAttachments([]);
+      clearAttachments();
     }
   };
 
@@ -1172,54 +1272,88 @@ export default function ExecutionPage() {
 
       {/* Persistent Input Bar */}
       {!permissionRequest && (
-        <div className="flex-shrink-0 border-t border-border bg-card/50 px-6 py-4">
-          <div className="max-w-4xl mx-auto flex gap-3">
-            <Input
-              ref={followUpInputRef}
-              value={followUp}
-              onChange={(e) => setFollowUp(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  if (currentTask.status !== 'running') {
-                    handleFollowUp();
-                  }
-                }
-              }}
-              placeholder={
-                currentTask.status === 'running'
-                  ? "Agent is working... (Stop to send new message)"
-                  : currentTask.status === 'failed'
-                    ? "Try again or give new instructions..."
-                    : "Send a follow-up..."
-              }
-              disabled={currentTask.status === 'running' || isLoading}
-              className="flex-1"
+        <AttachmentDropzone onDrop={handleDrop} disabled={currentTask.status === 'running' || isLoading}>
+          <div className="flex-shrink-0 border-t border-border bg-card/50 px-6 py-4">
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={getAcceptedFileTypes()}
+              onChange={handleFileInputChange}
+              className="hidden"
             />
             
-            {currentTask.status === 'running' ? (
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={interruptTask}
-                title="Stop agent (Ctrl+C)"
-                className="shrink-0 hover:bg-destructive/10 hover:text-destructive hover:border-destructive"
-                data-testid="execution-stop-button"
-              >
-                <Square className="h-4 w-4 fill-current" />
-              </Button>
-            ) : (
-              <Button
-                onClick={handleFollowUp}
-                disabled={!followUp.trim() || isLoading}
-                variant="outline"
-              >
-                <CornerDownLeft className="h-4 w-4 mr-1.5" />
-                Send
-              </Button>
-            )}
+            <div className="max-w-4xl mx-auto space-y-3">
+              {/* Attachment previews */}
+              {attachments.length > 0 && (
+                <AttachmentList
+                  attachments={attachments}
+                  onRemove={removeAttachment}
+                  onRetry={handleRetry}
+                />
+              )}
+              
+              <div className="flex gap-3">
+                {/* Attachment button */}
+                <AttachmentButton
+                  onClick={handleAttachClick}
+                  disabled={currentTask.status === 'running' || isLoading}
+                  hasAttachments={attachments.length > 0}
+                  attachmentCount={attachments.length}
+                />
+                
+                <Input
+                  ref={followUpInputRef}
+                  value={followUp}
+                  onChange={(e) => setFollowUp(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (currentTask.status !== 'running' && !hasUploadsInProgress()) {
+                        handleFollowUp();
+                      }
+                    }
+                  }}
+                  onPaste={handlePaste}
+                  placeholder={
+                    currentTask.status === 'running'
+                      ? "Agent is working... (Stop to send new message)"
+                      : hasUploadsInProgress()
+                        ? "Uploading files..."
+                        : currentTask.status === 'failed'
+                          ? "Try again or give new instructions..."
+                          : "Send a follow-up..."
+                  }
+                  disabled={currentTask.status === 'running' || isLoading}
+                  className="flex-1"
+                />
+                
+                {currentTask.status === 'running' ? (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={interruptTask}
+                    title="Stop agent (Ctrl+C)"
+                    className="shrink-0 hover:bg-destructive/10 hover:text-destructive hover:border-destructive"
+                    data-testid="execution-stop-button"
+                  >
+                    <Square className="h-4 w-4 fill-current" />
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleFollowUp}
+                    disabled={(!followUp.trim() && getCompletedAttachments().length === 0) || isLoading || hasUploadsInProgress()}
+                    variant="outline"
+                  >
+                    <CornerDownLeft className="h-4 w-4 mr-1.5" />
+                    Send
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
+        </AttachmentDropzone>
       )}
 
 

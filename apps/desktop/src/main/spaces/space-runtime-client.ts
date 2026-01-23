@@ -273,3 +273,142 @@ export async function uploadBrandAsset(
     };
   }
 }
+
+// ============================================
+// Chat Attachment Upload
+// ============================================
+
+/**
+ * Chat attachment upload input
+ */
+export interface ChatAttachmentUploadInput {
+  taskId: string;
+  filename: string;
+  contentType: string;
+  base64Data: string;
+}
+
+/**
+ * Chat attachment upload result
+ */
+export interface ChatAttachmentUploadResult {
+  success: boolean;
+  url?: string;
+  fileId?: string;
+  error?: string;
+}
+
+/**
+ * Upload a chat attachment to S3
+ * Files are stored in: chat-attachments/{taskId}/{filename}
+ * Files auto-delete after 7 days via S3 lifecycle policy
+ * 
+ * @param input - Attachment upload details
+ * @returns The public S3 URL and file ID
+ */
+export async function uploadChatAttachment(
+  input: ChatAttachmentUploadInput
+): Promise<ChatAttachmentUploadResult> {
+  console.log(`[SpaceRuntime] Uploading chat attachment: ${input.filename} for task ${input.taskId}`);
+  
+  try {
+    const response = await fetch(`${config.baseUrl}/upload-chat-attachment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        task_id: input.taskId,
+        filename: input.filename,
+        content_type: input.contentType,
+        base64_data: input.base64Data,
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Upload failed: ${response.status} - ${errorText}`);
+    }
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      console.log(`[SpaceRuntime] Chat attachment uploaded: ${result.url}`);
+      return { success: true, url: result.url, fileId: result.file_id };
+    } else {
+      throw new Error(result.error || 'Upload failed');
+    }
+  } catch (error) {
+    console.error(`[SpaceRuntime] Chat attachment upload failed:`, error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
+// ============================================
+// Generated Image Upload
+// ============================================
+
+/**
+ * Generated image upload input
+ */
+export interface GeneratedImageUploadInput {
+  taskId: string;
+  filename: string;
+  base64Data: string;
+}
+
+/**
+ * Generated image upload result
+ */
+export interface GeneratedImageUploadResult {
+  success: boolean;
+  url?: string;
+  error?: string;
+}
+
+/**
+ * Upload an AI-generated image to S3 for persistence
+ * Files are stored in: generated-images/{taskId}/{filename}
+ * Files auto-delete after 7 days via S3 lifecycle policy
+ * 
+ * @param input - Generated image upload details
+ * @returns The public S3 URL
+ */
+export async function uploadGeneratedImage(
+  input: GeneratedImageUploadInput
+): Promise<GeneratedImageUploadResult> {
+  console.log(`[SpaceRuntime] Uploading generated image: ${input.filename} for task ${input.taskId}`);
+  
+  try {
+    const response = await fetch(`${config.baseUrl}/upload-generated-image`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        task_id: input.taskId,
+        filename: input.filename,
+        base64_data: input.base64Data,
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Upload failed: ${response.status} - ${errorText}`);
+    }
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      console.log(`[SpaceRuntime] Generated image uploaded: ${result.url}`);
+      return { success: true, url: result.url };
+    } else {
+      throw new Error(result.error || 'Upload failed');
+    }
+  } catch (error) {
+    console.error(`[SpaceRuntime] Generated image upload failed:`, error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}

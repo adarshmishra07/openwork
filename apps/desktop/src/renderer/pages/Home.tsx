@@ -9,7 +9,7 @@ import SettingsDialog from '../components/layout/SettingsDialog';
 import { useTaskStore } from '../stores/taskStore';
 import { getAccomplish } from '../lib/accomplish';
 import { springs } from '../lib/animations';
-import { hasAnyReadyProvider, BrandProfile } from '@brandwork/shared';
+import { hasAnyReadyProvider, BrandProfile, FileAttachment } from '@brandwork/shared';
 
 // Import use case images for proper bundling in production
 import aiImageWizardImg from '/assets/usecases/ai-image-wizard.webp';
@@ -120,18 +120,41 @@ export default function HomePage() {
     };
   }, [addTaskUpdate, setPermissionRequest, accomplish]);
 
-  const executeTask = useCallback(async () => {
-    if (!prompt.trim() || isLoading) return;
+  // Store pending attachments for use in executeTask
+  const [pendingAttachments, setPendingAttachments] = useState<FileAttachment[]>([]);
+
+  const executeTask = useCallback(async (attachments?: FileAttachment[]) => {
+    if (!prompt.trim() && (!attachments || attachments.length === 0)) return;
+    if (isLoading) return;
 
     const taskId = `task_${Date.now()}`;
-    const task = await startTask({ prompt: prompt.trim(), taskId });
+    
+    // Convert FileAttachment to TaskConfig.attachments format
+    const taskAttachments = attachments?.filter(a => a.url).map(a => ({
+      filename: a.filename,
+      contentType: a.contentType,
+      url: a.url!,
+      size: a.size,
+    }));
+
+    const task = await startTask({ 
+      prompt: prompt.trim(), 
+      taskId,
+      attachments: taskAttachments,
+    });
     if (task) {
       navigate(`/execution/${task.id}`);
     }
   }, [prompt, isLoading, startTask, navigate]);
 
-  const handleSubmit = async () => {
-    if (!prompt.trim() || isLoading) return;
+  const handleSubmit = async (attachments?: FileAttachment[]) => {
+    if (!prompt.trim() && (!attachments || attachments.length === 0)) return;
+    if (isLoading) return;
+
+    // Store attachments for potential retry after settings dialog
+    if (attachments) {
+      setPendingAttachments(attachments);
+    }
 
     // Check if any provider is ready before sending (skip in E2E mode)
     const isE2EMode = await accomplish.isE2EMode();
@@ -143,7 +166,8 @@ export default function HomePage() {
       }
     }
 
-    await executeTask();
+    await executeTask(attachments);
+    setPendingAttachments([]);
   };
 
   const handleSettingsDialogChange = (open: boolean) => {
@@ -163,8 +187,9 @@ export default function HomePage() {
   const handleApiKeySaved = async () => {
     // API key was saved - close dialog and execute the task
     setShowSettingsDialog(false);
-    if (prompt.trim()) {
-      await executeTask();
+    if (prompt.trim() || pendingAttachments.length > 0) {
+      await executeTask(pendingAttachments.length > 0 ? pendingAttachments : undefined);
+      setPendingAttachments([]);
     }
   };
 

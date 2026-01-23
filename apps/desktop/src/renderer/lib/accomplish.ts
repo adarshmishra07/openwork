@@ -46,7 +46,7 @@ interface AccomplishAPI {
   respondToPermission(response: PermissionResponse): Promise<void>;
 
   // Session management
-  resumeSession(sessionId: string, prompt: string, taskId?: string): Promise<Task>;
+  resumeSession(sessionId: string, prompt: string, taskId?: string, attachments?: Array<{ filename: string; contentType: string; url: string; size: number }>): Promise<Task>;
 
   // Settings
   getApiKeys(): Promise<ApiKeyConfig[]>;
@@ -183,6 +183,39 @@ interface AccomplishAPI {
 
   // Logging
   logEvent(payload: { level?: string; message: string; context?: Record<string, unknown> }): Promise<unknown>;
+
+  // Chat Attachment Upload
+  uploadChatAttachment(
+    taskId: string,
+    filePath: string
+  ): Promise<{
+    success: boolean;
+    url?: string;
+    fileId?: string;
+    error?: string;
+  }>;
+
+  uploadChatAttachmentBase64(
+    taskId: string,
+    filename: string,
+    contentType: string,
+    base64Data: string
+  ): Promise<{
+    success: boolean;
+    url?: string;
+    fileId?: string;
+    error?: string;
+  }>;
+
+  // Generated Image Upload
+  uploadGeneratedImage(
+    taskId: string,
+    localPath: string
+  ): Promise<{
+    success: boolean;
+    url?: string;
+    error?: string;
+  }>;
 }
 
 interface AccomplishShell {

@@ -80,6 +80,36 @@ class BrandAssetResponse(BaseModel):
     error: Optional[str] = None
 
 
+class ChatAttachmentUpload(BaseModel):
+    """Input for chat attachment upload."""
+    task_id: str
+    filename: str
+    content_type: str
+    base64_data: str
+
+
+class ChatAttachmentResponse(BaseModel):
+    """Response from chat attachment upload."""
+    success: bool
+    url: Optional[str] = None
+    file_id: Optional[str] = None
+    error: Optional[str] = None
+
+
+class GeneratedImageUpload(BaseModel):
+    """Input for generated image upload."""
+    task_id: str
+    filename: str
+    base64_data: str
+
+
+class GeneratedImageResponse(BaseModel):
+    """Response from generated image upload."""
+    success: bool
+    url: Optional[str] = None
+    error: Optional[str] = None
+
+
 class SpaceOutput(BaseModel):
     """Output from space execution."""
     success: bool
@@ -661,6 +691,98 @@ async def upload_brand_asset(body: BrandAssetUpload):
         return BrandAssetResponse(
             success=False,
             error=f"Failed to upload asset: {str(e)}"
+        )
+
+
+# === Chat Attachment Upload ===
+
+@app.post("/upload-chat-attachment", response_model=ChatAttachmentResponse)
+async def upload_chat_attachment(body: ChatAttachmentUpload):
+    """
+    Upload a file attached to a chat message to S3.
+    
+    Files are stored in: chat-attachments/{task_id}/{filename}
+    Files are automatically deleted after 7 days via S3 lifecycle policy.
+    
+    Args:
+        body: ChatAttachmentUpload with task_id, filename, content_type, base64_data
+    
+    Returns:
+        ChatAttachmentResponse with the public S3 URL and file_id
+    """
+    try:
+        # Decode base64 data
+        file_bytes = base64.b64decode(body.base64_data)
+        
+        # Upload to S3 with task-specific path
+        # Path: chat-attachments/{task_id}/{filename}
+        folder = f"chat-attachments/{body.task_id}"
+        url = await upload_to_s3(
+            filename=body.filename,
+            file_bytes=file_bytes,
+            content_type=body.content_type,
+            folder=folder
+        )
+        
+        # Generate a file_id for reference
+        file_id = f"{body.task_id}_{body.filename}"
+        
+        return ChatAttachmentResponse(success=True, url=url, file_id=file_id)
+        
+    except Exception as e:
+        return ChatAttachmentResponse(
+            success=False,
+            error=f"Failed to upload attachment: {str(e)}"
+        )
+
+
+# === Generated Image Upload ===
+
+@app.post("/upload-generated-image", response_model=GeneratedImageResponse)
+async def upload_generated_image(body: GeneratedImageUpload):
+    """
+    Upload an AI-generated image to S3 for persistence.
+    
+    Files are stored in: generated-images/{task_id}/{filename}
+    Files are automatically deleted after 7 days via S3 lifecycle policy.
+    
+    Args:
+        body: GeneratedImageUpload with task_id, filename, base64_data
+    
+    Returns:
+        GeneratedImageResponse with the public S3 URL
+    """
+    try:
+        # Decode base64 data
+        file_bytes = base64.b64decode(body.base64_data)
+        
+        # Determine content type from filename
+        ext = body.filename.lower().split('.')[-1] if '.' in body.filename else 'png'
+        content_type_map = {
+            'png': 'image/png',
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'gif': 'image/gif',
+            'webp': 'image/webp',
+        }
+        content_type = content_type_map.get(ext, 'image/png')
+        
+        # Upload to S3 with task-specific path
+        # Path: generated-images/{task_id}/{filename}
+        folder = f"generated-images/{body.task_id}"
+        url = await upload_to_s3(
+            filename=body.filename,
+            file_bytes=file_bytes,
+            content_type=content_type,
+            folder=folder
+        )
+        
+        return GeneratedImageResponse(success=True, url=url)
+        
+    except Exception as e:
+        return GeneratedImageResponse(
+            success=False,
+            error=f"Failed to upload generated image: {str(e)}"
         )
 
 

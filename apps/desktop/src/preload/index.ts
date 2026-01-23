@@ -40,8 +40,8 @@ const accomplishAPI = {
     ipcRenderer.invoke('permission:respond', response),
 
   // Session management
-  resumeSession: (sessionId: string, prompt: string, taskId?: string): Promise<unknown> =>
-    ipcRenderer.invoke('session:resume', sessionId, prompt, taskId),
+  resumeSession: (sessionId: string, prompt: string, taskId?: string, attachments?: Array<{ filename: string; contentType: string; url: string; size: number }>): Promise<unknown> =>
+    ipcRenderer.invoke('session:resume', sessionId, prompt, taskId, attachments),
 
   // Settings
   getApiKeys: (): Promise<unknown[]> => ipcRenderer.invoke('settings:api-keys'),
@@ -378,6 +378,44 @@ const accomplishAPI = {
     url?: string;
     error?: string;
   }> => ipcRenderer.invoke('brand:upload-asset', brandId, assetType, filename, contentType, imageBase64),
+
+  // ============================================
+  // Chat Attachment Upload API
+  // ============================================
+
+  // Upload a chat attachment from file path
+  uploadChatAttachment: (
+    taskId: string,
+    filePath: string
+  ): Promise<{
+    success: boolean;
+    url?: string;
+    fileId?: string;
+    error?: string;
+  }> => ipcRenderer.invoke('attachment:upload', taskId, filePath),
+
+  // Upload a chat attachment from base64 data
+  uploadChatAttachmentBase64: (
+    taskId: string,
+    filename: string,
+    contentType: string,
+    base64Data: string
+  ): Promise<{
+    success: boolean;
+    url?: string;
+    fileId?: string;
+    error?: string;
+  }> => ipcRenderer.invoke('attachment:upload-base64', taskId, filename, contentType, base64Data),
+
+  // Upload a generated image to S3 for persistence
+  uploadGeneratedImage: (
+    taskId: string,
+    localPath: string
+  ): Promise<{
+    success: boolean;
+    url?: string;
+    error?: string;
+  }> => ipcRenderer.invoke('generated-image:upload', taskId, localPath),
 };
 
 // Expose the API to the renderer

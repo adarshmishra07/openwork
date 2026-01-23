@@ -27,8 +27,19 @@ export interface TaskConfig {
   outputSchema?: object;
   /** Session ID for resuming */
   sessionId?: string;
-  /** File paths to attach to the message */
+  /** File paths to attach to the message (legacy, for local files) */
   files?: string[];
+  /** S3-uploaded file attachments with URLs */
+  attachments?: Array<{
+    /** Original filename */
+    filename: string;
+    /** MIME type */
+    contentType: string;
+    /** S3 URL */
+    url: string;
+    /** File size in bytes */
+    size: number;
+  }>;
 }
 
 export interface Task {

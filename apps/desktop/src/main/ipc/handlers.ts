@@ -92,6 +92,9 @@ import {
   executeMockTaskFlow,
   detectScenarioFromPrompt,
 } from '../test-utils/mock-task-flow';
+import { uploadGeneratedImage } from '../spaces/space-runtime-client';
+import * as fs from 'fs';
+import * as path from 'path';
 
 const MAX_TEXT_LENGTH = 8000;
 const ALLOWED_API_KEY_PROVIDERS = new Set(['anthropic', 'openai', 'openrouter', 'google', 'xai', 'deepseek', 'zai', 'custom', 'bedrock', 'litellm']);
@@ -361,8 +364,19 @@ export function registerIPCHandlers(): void {
         
         console.log('[IPC handlers] taskMessage created:', taskMessage.type, taskMessage.content?.substring(0, 50));
 
-        // Queue message for batching instead of immediate send
-        queueMessage(taskId, taskMessage, forwardToRenderer, addTaskMessage);
+        // Process generated images asynchronously, then queue the message
+        // This uploads local /tmp/*.png files to S3 and replaces paths with URLs
+        (async () => {
+          try {
+            if (taskMessage.content) {
+              taskMessage.content = await processGeneratedImages(taskMessage.content, taskId);
+            }
+          } catch (error) {
+            console.error('[IPC handlers] Error processing generated images:', error);
+          }
+          // Queue message for batching (even if image processing failed)
+          queueMessage(taskId, taskMessage, forwardToRenderer, addTaskMessage);
+        })();
       },
 
       onProgress: (progress: { stage: string; message?: string }) => {
@@ -446,11 +460,20 @@ export function registerIPCHandlers(): void {
     // Start the task via TaskManager (creates isolated adapter or queues if busy)
     const task = await taskManager.startTask(taskId, validatedConfig, callbacks);
 
+    // Build the display prompt (for UI) - may include attachment info
+    let displayPrompt = validatedConfig.prompt;
+    if (validatedConfig.attachments && validatedConfig.attachments.length > 0) {
+      const attachmentSummary = validatedConfig.attachments
+        .map((a) => `[${a.filename}]`)
+        .join(' ');
+      displayPrompt = `${attachmentSummary}\n\n${validatedConfig.prompt}`;
+    }
+
     // Add initial user message with the prompt to the chat
     const initialUserMessage: TaskMessage = {
       id: createMessageId(),
       type: 'user',
-      content: validatedConfig.prompt,
+      content: displayPrompt,
       timestamp: new Date().toISOString(),
     };
     task.messages = [initialUserMessage];
@@ -571,7 +594,7 @@ export function registerIPCHandlers(): void {
   });
 
   // Session: Resume (continue conversation)
-  handle('session:resume', async (event: IpcMainInvokeEvent, sessionId: string, prompt: string, existingTaskId?: string) => {
+  handle('session:resume', async (event: IpcMainInvokeEvent, sessionId: string, prompt: string, existingTaskId?: string, attachments?: Array<{ filename: string; contentType: string; url: string; size: number }>) => {
     const window = assertTrustedWindow(BrowserWindow.fromWebContents(event.sender));
     const sender = event.sender;
     const validatedSessionId = sanitizeString(sessionId, 'sessionId', 128);
@@ -591,10 +614,15 @@ export function registerIPCHandlers(): void {
 
     // Persist the user's follow-up message to task history
     if (validatedExistingTaskId) {
+      // Format display prompt with attachment filenames if present
+      const displayPrompt = attachments && attachments.length > 0
+        ? `${attachments.map(a => `[${a.filename}]`).join(' ')}\n\n${validatedPrompt}`
+        : validatedPrompt;
+      
       const userMessage: TaskMessage = {
         id: createMessageId(),
         type: 'user',
-        content: validatedPrompt,
+        content: displayPrompt,
         timestamp: new Date().toISOString(),
       };
       addTaskMessage(validatedExistingTaskId, userMessage);
@@ -613,8 +641,19 @@ export function registerIPCHandlers(): void {
         const taskMessage = toTaskMessage(message);
         if (!taskMessage) return;
 
-        // Queue message for batching instead of immediate send
-        queueMessage(taskId, taskMessage, forwardToRenderer, addTaskMessage);
+        // Process generated images asynchronously, then queue the message
+        // This uploads local /tmp/*.png files to S3 and replaces paths with URLs
+        (async () => {
+          try {
+            if (taskMessage.content) {
+              taskMessage.content = await processGeneratedImages(taskMessage.content, taskId);
+            }
+          } catch (error) {
+            console.error('[IPC handlers] Error processing generated images:', error);
+          }
+          // Queue message for batching (even if image processing failed)
+          queueMessage(taskId, taskMessage, forwardToRenderer, addTaskMessage);
+        })();
       },
 
       onProgress: (progress: { stage: string; message?: string }) => {
@@ -700,6 +739,7 @@ export function registerIPCHandlers(): void {
       prompt: validatedPrompt,
       sessionId: validatedSessionId,
       taskId,
+      attachments,
     }, callbacks);
 
     // Update task status in history (whether running or queued)
@@ -1930,6 +1970,112 @@ export function registerIPCHandlers(): void {
     });
   });
 
+  // ============================================
+  // Chat Attachment Upload Handlers
+  // ============================================
+
+  // Attachment: Upload chat attachment to S3 (from file path)
+  handle('attachment:upload', async (
+    _event: IpcMainInvokeEvent,
+    taskId: string,
+    filePath: string
+  ) => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const { uploadChatAttachment } = await import('../spaces/space-runtime-client');
+    
+    try {
+      const buffer = fs.readFileSync(filePath);
+      const base64Data = buffer.toString('base64');
+      const filename = path.basename(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+      
+      // Determine MIME type
+      const mimeTypes: Record<string, string> = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.svg': 'image/svg+xml',
+        '.pdf': 'application/pdf',
+        '.json': 'application/json',
+        '.md': 'text/markdown',
+        '.txt': 'text/plain',
+        '.csv': 'text/csv',
+      };
+      const contentType = mimeTypes[ext] || 'application/octet-stream';
+      
+      return uploadChatAttachment({
+        taskId,
+        filename,
+        contentType,
+        base64Data,
+      });
+    } catch (error) {
+      console.error('[Attachment] Failed to upload file:', error);
+      return {
+        success: false,
+        error: `Failed to upload file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
+  });
+
+  // Attachment: Upload chat attachment to S3 (from base64 data)
+  handle('attachment:upload-base64', async (
+    _event: IpcMainInvokeEvent,
+    taskId: string,
+    filename: string,
+    contentType: string,
+    base64Data: string
+  ) => {
+    const { uploadChatAttachment } = await import('../spaces/space-runtime-client');
+    
+    try {
+      return uploadChatAttachment({
+        taskId,
+        filename,
+        contentType,
+        base64Data,
+      });
+    } catch (error) {
+      console.error('[Attachment] Failed to upload base64 data:', error);
+      return {
+        success: false,
+        error: `Failed to upload: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
+  });
+
+  // Attachment: Upload generated image to S3 for persistence
+  handle('generated-image:upload', async (
+    _event: IpcMainInvokeEvent,
+    taskId: string,
+    localPath: string
+  ) => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const { uploadGeneratedImage } = await import('../spaces/space-runtime-client');
+    
+    try {
+      const buffer = fs.readFileSync(localPath);
+      const base64Data = buffer.toString('base64');
+      const filename = path.basename(localPath);
+      
+      return uploadGeneratedImage({
+        taskId,
+        filename,
+        base64Data,
+      });
+    } catch (error) {
+      console.error('[GeneratedImage] Failed to upload:', error);
+      return {
+        success: false,
+        error: `Failed to upload generated image: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
+  });
+
 }
 
 function createTaskId(): string {
@@ -2035,6 +2181,65 @@ function sanitizeToolOutput(text: string, isError: boolean): string {
   }
 
   return result.trim();
+}
+
+/**
+ * Regex to detect local file paths for generated images in /tmp/
+ * Matches patterns like: /tmp/generated_20240122_143052.png
+ */
+const LOCAL_IMAGE_PATH_REGEX = /\/tmp\/[^\s"'<>]+\.(png|jpg|jpeg|gif|webp)/gi;
+
+/**
+ * Process message content to upload local generated images to S3
+ * Returns the content with local paths replaced by S3 URLs
+ */
+async function processGeneratedImages(content: string, taskId: string): Promise<string> {
+  // Find all local image paths in the content
+  const matches = content.match(LOCAL_IMAGE_PATH_REGEX);
+  if (!matches || matches.length === 0) {
+    return content;
+  }
+
+  // Dedupe matches (same path might appear multiple times)
+  const uniquePaths = [...new Set(matches)];
+  
+  let processedContent = content;
+  
+  for (const localPath of uniquePaths) {
+    try {
+      // Check if file exists
+      if (!fs.existsSync(localPath)) {
+        console.log(`[IPC handlers] Generated image not found: ${localPath}`);
+        continue;
+      }
+
+      // Read file and convert to base64
+      const fileBuffer = fs.readFileSync(localPath);
+      const base64Data = fileBuffer.toString('base64');
+      const filename = path.basename(localPath);
+
+      console.log(`[IPC handlers] Uploading generated image: ${localPath}`);
+
+      // Upload to S3
+      const result = await uploadGeneratedImage({
+        taskId,
+        filename,
+        base64Data,
+      });
+
+      if (result.success && result.url) {
+        // Replace local path with S3 URL in content
+        processedContent = processedContent.split(localPath).join(result.url);
+        console.log(`[IPC handlers] Replaced ${localPath} with ${result.url}`);
+      } else {
+        console.warn(`[IPC handlers] Failed to upload generated image: ${result.error}`);
+      }
+    } catch (error) {
+      console.error(`[IPC handlers] Error processing generated image ${localPath}:`, error);
+    }
+  }
+
+  return processedContent;
 }
 
 function toTaskMessage(message: OpenCodeMessage): TaskMessage | null {

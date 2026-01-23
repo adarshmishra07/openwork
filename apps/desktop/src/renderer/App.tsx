@@ -17,6 +17,7 @@ import HistoryPage from './pages/History';
 import Sidebar from './components/layout/Sidebar';
 import { TaskLauncher } from './components/TaskLauncher';
 import { BrandOnboarding } from './components/onboarding/BrandOnboarding';
+import { Toaster } from './components/ui/sonner';
 import { useTaskStore } from './stores/taskStore';
 import { Loader2, AlertTriangle } from 'lucide-react';
 
@@ -191,6 +192,7 @@ export default function App() {
         </AnimatePresence>
       </main>
       <TaskLauncher />
+      <Toaster />
     </div>
   );
 }
