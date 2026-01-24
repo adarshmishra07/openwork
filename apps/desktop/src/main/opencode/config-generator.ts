@@ -406,6 +406,8 @@ style transfer, background removal, and banner creation. The tools are self-docu
 IMPORTANT: Before using Gemini or browser for image tasks, first call load_skill("brandwork-spaces") 
 to check if a specialized space tool exists for the task. Space tools produce higher quality results.
 
+**ALWAYS call space_list_all first before selecting any space tool.** This ensures you pick the right tool for the task.
+
 Space tools take 60-90 seconds. Always tell the user what you're doing before calling.
 </skill>
 
