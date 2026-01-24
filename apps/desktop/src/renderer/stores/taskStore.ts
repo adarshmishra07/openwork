@@ -172,16 +172,20 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       return;
     }
 
-    // Format display content with attachment filenames if present
-    const displayContent = attachments && attachments.length > 0
-      ? `${attachments.map(a => `[${a.filename}]`).join(' ')}\n\n${message}`
-      : message;
+    // Convert attachments to TaskAttachment format for rendering
+    const messageAttachments = attachments?.map(a => ({
+      type: 'file' as const,
+      data: a.url,
+      filename: a.filename,
+      contentType: a.contentType,
+    }));
 
     const userMessage: TaskMessage = {
       id: createMessageId(),
       type: 'user',
-      content: displayContent,
+      content: message,
       timestamp: new Date().toISOString(),
+      attachments: messageAttachments,
     };
 
     // Optimistically add user message and set status to running

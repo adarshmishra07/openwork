@@ -162,6 +162,34 @@ export const SPACE_REGISTRY: SpaceRegistry = {
       estimatedDuration: "60-120s",
       apiProviders: ["openai", "gemini"],
       usesBrandMemory: true
+    },
+    {
+      id: "multiproduct-tryon",
+      name: "Multi-Product Try-On",
+      description: "Generate authentic editorial magazine photographs (GQ/Vogue style) featuring a model wearing multiple product items simultaneously. Creates film photography aesthetic with intelligent integration of custom descriptions and reference images.",
+      category: "images",
+      keywords: [
+        "try on", "tryon", "model wearing", "put on model", "fashion editorial",
+        "editorial photo", "magazine style", "GQ style", "Vogue style", "lifestyle shot",
+        "model photoshoot", "wear products", "outfit photo", "multiple products",
+        "styled look", "fashion shoot", "lookbook"
+      ],
+      patterns: [
+        "try.*on", "put.*on.*model", "model.*wearing", "wear.*product",
+        "editorial.*photo", "magazine.*style", "fashion.*photo", "lifestyle.*shot",
+        "lookbook", "styled.*model"
+      ],
+      inputs: [
+        { name: "product_images", type: "image[]", required: true, description: "Product images to be worn by the model (at least 1 required)" },
+        { name: "reference_images", type: "image[]", required: false, description: "Reference images for style/setting (highest priority for replication)" },
+        { name: "custom_description", type: "string", required: false, description: "Custom creative direction (model type, setting, mood, etc.)" },
+        { name: "aspect_ratio", type: "string", required: false, description: "Aspect ratio (1:1, 2:3, 3:2, 3:4, 4:3, 16:9, 9:16)", default: "3:4" },
+        { name: "output_format", type: "string", required: false, description: "Output format (jpeg, png)", default: "png" },
+        { name: "num_variations", type: "number", required: false, description: "Number of editorial variations to generate (1-15)", default: 4 }
+      ],
+      outputs: ["image"],
+      estimatedDuration: "60-120s",
+      apiProviders: ["gemini"]
     }
   ]
 };

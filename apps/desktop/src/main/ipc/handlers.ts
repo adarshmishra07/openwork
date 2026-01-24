@@ -260,6 +260,10 @@ function validateTaskConfig(config: TaskConfig): TaskConfig {
   if (config.outputSchema && typeof config.outputSchema === 'object') {
     validated.outputSchema = config.outputSchema;
   }
+  // Pass through attachments (already validated during upload)
+  if (Array.isArray(config.attachments) && config.attachments.length > 0) {
+    validated.attachments = config.attachments;
+  }
 
   return validated;
 }
@@ -460,21 +464,21 @@ export function registerIPCHandlers(): void {
     // Start the task via TaskManager (creates isolated adapter or queues if busy)
     const task = await taskManager.startTask(taskId, validatedConfig, callbacks);
 
-    // Build the display prompt (for UI) - may include attachment info
-    let displayPrompt = validatedConfig.prompt;
-    if (validatedConfig.attachments && validatedConfig.attachments.length > 0) {
-      const attachmentSummary = validatedConfig.attachments
-        .map((a) => `[${a.filename}]`)
-        .join(' ');
-      displayPrompt = `${attachmentSummary}\n\n${validatedConfig.prompt}`;
-    }
+    // Convert attachments to TaskAttachment format for rendering
+    const messageAttachments = validatedConfig.attachments?.map(a => ({
+      type: 'file' as const,
+      data: a.url,
+      filename: a.filename,
+      contentType: a.contentType,
+    }));
 
     // Add initial user message with the prompt to the chat
     const initialUserMessage: TaskMessage = {
       id: createMessageId(),
       type: 'user',
-      content: displayPrompt,
+      content: validatedConfig.prompt,
       timestamp: new Date().toISOString(),
+      attachments: messageAttachments,
     };
     task.messages = [initialUserMessage];
 
@@ -614,16 +618,20 @@ export function registerIPCHandlers(): void {
 
     // Persist the user's follow-up message to task history
     if (validatedExistingTaskId) {
-      // Format display prompt with attachment filenames if present
-      const displayPrompt = attachments && attachments.length > 0
-        ? `${attachments.map(a => `[${a.filename}]`).join(' ')}\n\n${validatedPrompt}`
-        : validatedPrompt;
+      // Convert attachments to TaskAttachment format for rendering
+      const messageAttachments = attachments?.map(a => ({
+        type: 'file' as const,
+        data: a.url,
+        filename: a.filename,
+        contentType: a.contentType,
+      }));
       
       const userMessage: TaskMessage = {
         id: createMessageId(),
         type: 'user',
-        content: displayPrompt,
+        content: validatedPrompt,
         timestamp: new Date().toISOString(),
+        attachments: messageAttachments,
       };
       addTaskMessage(validatedExistingTaskId, userMessage);
     }

@@ -59,9 +59,13 @@ export interface Task {
 }
 
 export interface TaskAttachment {
-  type: 'screenshot' | 'json';
-  data: string; // base64 for images, JSON string for data
+  type: 'screenshot' | 'json' | 'file';
+  data: string; // base64 for images, JSON string for data, or URL for files
   label?: string; // e.g., "Screenshot after clicking Submit"
+  /** MIME type for file attachments */
+  contentType?: string;
+  /** Original filename for file attachments */
+  filename?: string;
 }
 
 export interface TaskMessage {

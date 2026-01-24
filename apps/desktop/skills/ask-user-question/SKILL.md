@@ -16,11 +16,16 @@ You MUST call this tool to display a modal in the UI.
 
 ## When to Use
 
-- Clarifying questions before starting ambiguous tasks
-- Asking user preferences (e.g., "How would you like files organized?")
-- Confirming actions before executing (especially destructive/irreversible ones)
+- Clarifying questions **BEFORE** starting ambiguous tasks
+- Asking user preferences when multiple valid approaches exist
+- Confirming **BEFORE** destructive/irreversible actions (deletion, sending emails, etc.)
 - Getting approval for sensitive actions (financial, messaging, deletion, etc.)
-- Any situation where you need user input to proceed
+
+## When NOT to Use
+
+- **After completing a task** - Don't ask "Does this look good?" after generating an image. Just show the result and let the user respond naturally.
+- **For simple follow-ups** - If you've completed the task, just present the result. The user can type follow-up requests if needed.
+- **To offer next steps** - Don't present "What would you like to do next?" options. Let the user decide.
 
 ## Parameters
 

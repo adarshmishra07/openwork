@@ -1,8 +1,12 @@
 /**
  * Skill Loader MCP Server
  *
- * Provides tools to list and load marketing skills on-demand.
+ * Provides tools to list and load skills on-demand.
  * Skills are loaded only when needed to save context window space.
+ *
+ * Scans two locations for SKILL.md files:
+ * 1. skills/*/SKILL.md - Top-level skills (e.g., brandwork-spaces)
+ * 2. skills/marketing-skills/*/SKILL.md - Marketing skills
  *
  * Tools:
  * - list_skills: Returns all available skills with names and descriptions
@@ -18,8 +22,23 @@ import {
 import fs from 'fs';
 import path from 'path';
 
-// Get skills path from environment or use default
-const SKILLS_PATH = process.env.MARKETING_SKILLS_PATH || path.join(process.cwd(), 'skills', 'marketing-skills');
+// Base skills path - parent directory containing all skills
+const SKILLS_BASE_PATH = process.env.SKILLS_PATH || path.join(process.cwd(), 'skills');
+// Marketing skills subdirectory (backward compatibility)
+const MARKETING_SKILLS_PATH = process.env.MARKETING_SKILLS_PATH || path.join(SKILLS_BASE_PATH, 'marketing-skills');
+
+// Directories to skip when scanning top-level skills (these are MCP servers, not loadable skills)
+const SKIP_DIRECTORIES = new Set([
+  'marketing-skills',  // Scanned separately
+  'dev-browser',       // MCP server
+  'dev-browser-mcp',   // MCP server
+  'file-permission',   // MCP server
+  'ask-user-question', // MCP server
+  'skill-loader',      // This server itself
+  'shopify',           // MCP server
+  'space-runtime',     // MCP server
+  'safe-file-deletion' // Utility, not a skill
+]);
 
 interface SkillMetadata {
   name: string;
@@ -50,24 +69,24 @@ function parseFrontmatter(content: string): { name: string; description: string 
 }
 
 /**
- * Scan the marketing-skills directory and build skill index
+ * Scan a directory for SKILL.md files and add to skills array
  */
-function loadSkillsIndex(): SkillMetadata[] {
-  if (skillsCache) return skillsCache;
-
-  const skills: SkillMetadata[] = [];
-
-  if (!fs.existsSync(SKILLS_PATH)) {
-    console.error(`[skill-loader] Skills path not found: ${SKILLS_PATH}`);
-    return skills;
+function scanDirectoryForSkills(
+  dirPath: string, 
+  skills: SkillMetadata[], 
+  skipDirs: Set<string> = new Set()
+): void {
+  if (!fs.existsSync(dirPath)) {
+    return;
   }
 
-  const entries = fs.readdirSync(SKILLS_PATH, { withFileTypes: true });
+  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
+    if (skipDirs.has(entry.name)) continue;
 
-    const skillPath = path.join(SKILLS_PATH, entry.name, 'SKILL.md');
+    const skillPath = path.join(dirPath, entry.name, 'SKILL.md');
     if (!fs.existsSync(skillPath)) continue;
 
     try {
@@ -84,7 +103,7 @@ function loadSkillsIndex(): SkillMetadata[] {
         // Fallback: use directory name as skill name
         skills.push({
           name: entry.name,
-          description: `Marketing skill: ${entry.name}`,
+          description: `Skill: ${entry.name}`,
           path: skillPath,
         });
       }
@@ -92,12 +111,27 @@ function loadSkillsIndex(): SkillMetadata[] {
       console.error(`[skill-loader] Failed to read skill: ${entry.name}`, error);
     }
   }
+}
+
+/**
+ * Build skill index by scanning multiple directories
+ */
+function loadSkillsIndex(): SkillMetadata[] {
+  if (skillsCache) return skillsCache;
+
+  const skills: SkillMetadata[] = [];
+
+  // 1. Scan top-level skills directory (e.g., skills/brandwork-spaces/SKILL.md)
+  scanDirectoryForSkills(SKILLS_BASE_PATH, skills, SKIP_DIRECTORIES);
+  
+  // 2. Scan marketing-skills subdirectory (e.g., skills/marketing-skills/copywriting/SKILL.md)
+  scanDirectoryForSkills(MARKETING_SKILLS_PATH, skills);
 
   // Sort by name for consistent ordering
   skills.sort((a, b) => a.name.localeCompare(b.name));
   skillsCache = skills;
 
-  console.error(`[skill-loader] Loaded ${skills.length} skills from ${SKILLS_PATH}`);
+  console.error(`[skill-loader] Loaded ${skills.length} skills from ${SKILLS_BASE_PATH}`);
   return skills;
 }
 
@@ -106,16 +140,24 @@ function loadSkillsIndex(): SkillMetadata[] {
  */
 function loadSkillContent(skillName: string): string | null {
   const skills = loadSkillsIndex();
+  const normalizedName = skillName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+  
   const skill = skills.find(
     (s) => s.name.toLowerCase() === skillName.toLowerCase() ||
-           s.name.toLowerCase().replace(/[^a-z0-9]/g, '-') === skillName.toLowerCase()
+           s.name.toLowerCase().replace(/[^a-z0-9]/g, '-') === normalizedName
   );
 
   if (!skill) {
-    // Try matching by directory name
-    const dirPath = path.join(SKILLS_PATH, skillName, 'SKILL.md');
-    if (fs.existsSync(dirPath)) {
-      return fs.readFileSync(dirPath, 'utf-8');
+    // Try matching by directory name in both locations
+    const possiblePaths = [
+      path.join(SKILLS_BASE_PATH, skillName, 'SKILL.md'),
+      path.join(MARKETING_SKILLS_PATH, skillName, 'SKILL.md'),
+    ];
+    
+    for (const dirPath of possiblePaths) {
+      if (fs.existsSync(dirPath)) {
+        return fs.readFileSync(dirPath, 'utf-8');
+      }
     }
     return null;
   }
@@ -143,7 +185,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: 'list_skills',
         description:
-          'List all available marketing skills with their names and descriptions. Use this to see what skills are available before loading one.',
+          'List all available skills with their names and descriptions. Includes marketing skills (copywriting, SEO, CRO, etc.) and workflow skills (brandwork-spaces for image tasks).',
         inputSchema: {
           type: 'object',
           properties: {},
@@ -153,14 +195,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: 'load_skill',
         description:
-          'Load the full content of a specific marketing skill. Use this when you need detailed instructions for a marketing task like copywriting, SEO audit, pricing strategy, etc.',
+          'Load the full content of a specific skill to get detailed guidance, frameworks, and templates. Use for marketing tasks (copywriting, SEO, pricing) or workflow guidance (brandwork-spaces for space tool selection).',
         inputSchema: {
           type: 'object',
           properties: {
             skill_name: {
               type: 'string',
               description:
-                'The name of the skill to load (e.g., "copywriting", "seo-audit", "pricing-strategy")',
+                'The name of the skill to load (e.g., "copywriting", "brandwork-spaces", "seo-audit", "pricing-strategy")',
             },
           },
           required: ['skill_name'],
@@ -182,7 +224,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         content: [
           {
             type: 'text',
-            text: 'No marketing skills found. Please ensure the marketing-skills folder is properly set up.',
+            text: 'No skills found. Please ensure the skills folder is properly set up.',
           },
         ],
       };
@@ -197,7 +239,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       content: [
         {
           type: 'text',
-          text: `# Available Marketing Skills (${skills.length})\n\n${skillList}\n\nUse \`load_skill\` with the skill name to get detailed instructions.`,
+          text: `# Available Skills (${skills.length})\n\n${skillList}\n\nUse \`load_skill\` with the skill name to get detailed instructions.`,
         },
       ],
     };

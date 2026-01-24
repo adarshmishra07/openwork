@@ -419,6 +419,37 @@ Same image: https://example.com/image.png`;
       });
     });
 
+    describe('should handle URLs wrapped in backticks', () => {
+      it('extracts URL from single backticks', () => {
+        const text = 'Image saved to: `https://example.com/image.png`';
+        const result = extractMediaUrls(text);
+        expect(result).toHaveLength(1);
+        expect(result[0].url).toBe('https://example.com/image.png');
+      });
+
+      it('extracts S3 URL from backticks', () => {
+        const text = 'Image saved to: `https://future-me-ai.s3.ap-south-1.amazonaws.com/generated-images/task_123/image.png`';
+        const result = extractMediaUrls(text);
+        expect(result).toHaveLength(1);
+        expect(result[0].url).toBe('https://future-me-ai.s3.ap-south-1.amazonaws.com/generated-images/task_123/image.png');
+        expect(result[0].type).toBe(MediaType.IMAGE);
+      });
+
+      it('extracts URL from triple backticks code block', () => {
+        const text = '```\nhttps://example.com/photo.jpg\n```';
+        const result = extractMediaUrls(text);
+        expect(result).toHaveLength(1);
+        expect(result[0].url).toBe('https://example.com/photo.jpg');
+      });
+
+      it('handles URL with trailing backtick and other punctuation', () => {
+        const text = 'See the image at `https://example.com/image.png`.';
+        const result = extractMediaUrls(text);
+        expect(result).toHaveLength(1);
+        expect(result[0].url).toBe('https://example.com/image.png');
+      });
+    });
+
     describe('should extract local file paths', () => {
       it('extracts local image path from markdown syntax', () => {
         const text = 'Here is the screenshot: ![Preview](/Users/adarsh/Desktop/screenshot.png)';

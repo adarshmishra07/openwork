@@ -222,7 +222,7 @@ export function extractMediaUrls(text: string): ExtractedMedia[] {
   // Helper to add a media item
   const addMedia = (path: string, isLocal: boolean) => {
     // Clean up path - remove trailing punctuation that might have been captured
-    let cleanPath = path.replace(/[,;:!?]+$/, '');
+    let cleanPath = path.replace(/[,;:!?`'"]+$/, '');
     
     // Remove trailing ) or ] if not balanced (common in markdown)
     if (cleanPath.endsWith(')') && !cleanPath.includes('(')) {
@@ -231,16 +231,35 @@ export function extractMediaUrls(text: string): ExtractedMedia[] {
     if (cleanPath.endsWith(']') && !cleanPath.includes('[')) {
       cleanPath = cleanPath.slice(0, -1);
     }
+    // Remove trailing backticks (common in markdown code formatting)
+    cleanPath = cleanPath.replace(/`+$/, '');
 
-    // Normalize local paths to file:// URL for consistent deduplication
-    const normalizedUrl = isLocal ? normalizeLocalPath(cleanPath) : cleanPath;
+    // For remote URLs, encode spaces and other special characters in the path
+    // This handles S3 URLs with spaces in filenames
+    let normalizedUrl: string;
+    if (isLocal) {
+      normalizedUrl = normalizeLocalPath(cleanPath);
+    } else {
+      // URL-encode spaces in the path portion of remote URLs
+      try {
+        const urlObj = new URL(cleanPath);
+        // Encode spaces in pathname (but preserve already-encoded characters)
+        urlObj.pathname = urlObj.pathname.split('/').map(segment => 
+          encodeURIComponent(decodeURIComponent(segment))
+        ).join('/');
+        normalizedUrl = urlObj.toString();
+      } catch {
+        // If URL parsing fails, just encode spaces directly
+        normalizedUrl = cleanPath.replace(/ /g, '%20');
+      }
+    }
 
     // Skip if already seen (use normalized URL for deduplication)
     if (seenUrls.has(normalizedUrl)) {
       return;
     }
 
-    // Determine media type
+    // Determine media type (use original path for extension detection)
     const mediaType = getMediaType(cleanPath);
     if (mediaType) {
       seenUrls.add(normalizedUrl);
@@ -253,7 +272,34 @@ export function extractMediaUrls(text: string): ExtractedMedia[] {
   };
 
   // 1. Extract remote URLs (http:// and https://)
-  const urlRegex = /https?:\/\/[^\s\)\]]+/gi;
+  // Handle URLs that may contain spaces (common in S3 URLs with descriptive filenames)
+  // Strategy: First try to match URLs ending with image/video/pdf extensions (may contain spaces)
+  // Then fall back to standard URL matching for other URLs
+  
+  // Pattern for URLs with media extensions (allow spaces before the extension)
+  // Matches: https://...amazonaws.com/path/file name with spaces.jpg
+  const mediaUrlRegex = /https?:\/\/[^\s\)\]\>`'"]*?[^\s\)\]\>`'"\/]+\.(?:png|jpg|jpeg|gif|webp|svg|bmp|avif|mp4|webm|mov|pdf)(?:\?[^\s\)\]\>`'"]*)?/gi;
+  const mediaUrlMatches = text.match(mediaUrlRegex);
+  if (mediaUrlMatches) {
+    for (const url of mediaUrlMatches) {
+      addMedia(url, false);
+    }
+  }
+  
+  // Also try a more aggressive pattern for S3/cloud storage URLs with spaces
+  // Match from https:// to .jpg/.png etc, allowing spaces in the path
+  const s3UrlRegex = /https?:\/\/[a-zA-Z0-9\-_.]+\.(?:amazonaws\.com|s3\.[a-z0-9\-]+\.amazonaws\.com|storage\.googleapis\.com|blob\.core\.windows\.net)[^\n\r]*?\.(?:png|jpg|jpeg|gif|webp|mp4|pdf)/gi;
+  const s3Matches = text.match(s3UrlRegex);
+  if (s3Matches) {
+    for (const url of s3Matches) {
+      // Clean up any trailing characters that aren't part of the URL
+      const cleanUrl = url.replace(/[,;:!?\s]+$/, '');
+      addMedia(cleanUrl, false);
+    }
+  }
+
+  // Standard URL pattern (no spaces) for other URLs
+  const urlRegex = /https?:\/\/[^\s\)\]\>`'"]+/gi;
   const urlMatches = text.match(urlRegex);
   if (urlMatches) {
     for (const url of urlMatches) {
@@ -296,6 +342,9 @@ export function extractMediaUrls(text: string): ExtractedMedia[] {
   // Match patterns like: output.png, model_on_beach.png, generated_image.jpg
   // Look for "saved to: filename.ext" or "> filename.ext" patterns
   // Also match markdown images with relative paths: ![alt](filename.png)
+  // 
+  // IMPORTANT: We need to avoid matching filenames that are part of URLs.
+  // URLs with spaces can get truncated by the URL regex, leaving orphaned filenames.
   const relativePathPatterns = [
     // "saved to: filename.png" or "saved to filename.png"
     /saved to:?\s*["']?([a-zA-Z0-9_\-]+\.[a-z0-9]+)["']?/gi,
@@ -303,20 +352,43 @@ export function extractMediaUrls(text: string): ExtractedMedia[] {
     /> ["']?([a-zA-Z0-9_\-]+\.[a-z0-9]+)["']?(?:\s|$)/gi,
     // Markdown image with relative path: ![alt](filename.png)
     /!\[[^\]]*\]\(([a-zA-Z0-9_\-]+\.[a-z0-9]+)\)/gi,
-    // Standalone relative filename mentioned in text (be more conservative)
-    /(?:^|\s)([a-zA-Z0-9_\-]+\.(?:png|jpg|jpeg|gif|webp|mp4|pdf))(?:\s|$|[,.])/gi,
   ];
+
+  // Helper to check if a match position is within a URL in the original text
+  const isWithinUrl = (matchIndex: number): boolean => {
+    // Find all URLs in the text
+    const urlPattern = /https?:\/\/[^\s]+/gi;
+    let urlMatch;
+    while ((urlMatch = urlPattern.exec(text)) !== null) {
+      const urlStart = urlMatch.index;
+      const urlEnd = urlStart + urlMatch[0].length;
+      // Check if the match index falls within this URL's range
+      // (extend range a bit to catch filenames at the end of truncated URLs)
+      if (matchIndex >= urlStart && matchIndex < urlEnd + 50) {
+        return true;
+      }
+    }
+    return false;
+  };
 
   for (const regex of relativePathPatterns) {
     regex.lastIndex = 0; // Reset regex state
     while ((match = regex.exec(text)) !== null) {
       const relativePath = match[1];
+      // Skip if this match appears to be within or near a URL
+      if (isWithinUrl(match.index)) {
+        continue;
+      }
       // Convert relative path to /tmp/ path as best guess for working directory
       // This is a fallback - the agent should ideally use absolute paths
       const assumedAbsolutePath = `/tmp/${relativePath}`;
       addMedia(assumedAbsolutePath, true);
     }
   }
+
+  // NOTE: We removed the standalone relative filename pattern (e.g., "1_abc123.jpg")
+  // as it was too aggressive and matched filenames within truncated URLs.
+  // If needed, the agent should use absolute paths or "saved to:" patterns.
 
   return results;
 }

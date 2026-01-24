@@ -476,7 +476,9 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     // Load all API keys
     const apiKeys = await getAllApiKeys();
 
-    if (apiKeys.anthropic) {
+    // When using subscription mode, skip setting Anthropic key (OpenCode CLI uses OAuth)
+    // But still set other API keys for tools/spaces that need them (e.g., Gemini for image gen)
+    if (apiKeys.anthropic && !useSubscription) {
       env.ANTHROPIC_API_KEY = apiKeys.anthropic;
       console.log('[OpenCode CLI] Using Anthropic API key from settings');
     }

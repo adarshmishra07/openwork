@@ -1140,9 +1140,38 @@ export default function ExecutionPage() {
                     {/* Question type UI with options */}
                     {permissionRequest.type === 'question' && (
                       <>
-                        <p className="text-sm text-foreground mb-4">
-                          {permissionRequest.question}
-                        </p>
+                        {(() => {
+                          // Extract image URLs from question text and render them
+                          const imageUrlRegex = /(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp)(?:\?[^\s]*)?)/gi;
+                          const questionText = permissionRequest.question || '';
+                          const imageUrls = questionText.match(imageUrlRegex) || [];
+                          const textWithoutImages = questionText.replace(imageUrlRegex, '').trim();
+                          
+                          return (
+                            <div className="mb-4">
+                              {/* Render extracted images */}
+                              {imageUrls.length > 0 && (
+                                <div className="flex flex-wrap gap-2 mb-3">
+                                  {imageUrls.map((url, idx) => (
+                                    <img
+                                      key={idx}
+                                      src={url}
+                                      alt={`Image ${idx + 1}`}
+                                      className="max-w-full max-h-[200px] rounded-lg object-contain border border-border"
+                                      onError={(e) => {
+                                        (e.target as HTMLImageElement).style.display = 'none';
+                                      }}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                              {/* Render remaining text */}
+                              {textWithoutImages && (
+                                <p className="text-sm text-foreground">{textWithoutImages}</p>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {/* Options list */}
                         {!showCustomInput && permissionRequest.options && permissionRequest.options.length > 0 && (
@@ -1670,14 +1699,46 @@ const MessageBubble = memo(function MessageBubble({
           </div>
         )}
         {isUser ? (
-          <p
-            className={cn(
-              'text-sm whitespace-pre-wrap break-words',
-              'text-primary-foreground'
+          <div className="space-y-2">
+            {/* Render file attachments as image previews or file badges */}
+            {message.attachments && message.attachments.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {message.attachments.map((attachment, idx) => {
+                  const isImage = attachment.contentType?.startsWith('image/');
+                  if (isImage) {
+                    return (
+                      <img
+                        key={idx}
+                        src={attachment.data}
+                        alt={attachment.filename || 'Attached image'}
+                        className="max-w-[200px] max-h-[150px] rounded-lg object-cover border border-primary-foreground/20"
+                      />
+                    );
+                  }
+                  // Non-image files show as badges
+                  return (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-1.5 px-2 py-1 bg-primary-foreground/10 rounded text-xs"
+                    >
+                      <FileText className="h-3 w-3" />
+                      <span className="truncate max-w-[150px]">{attachment.filename}</span>
+                    </div>
+                  );
+                })}
+              </div>
             )}
-          >
-            {message.content}
-          </p>
+            {message.content && (
+              <p
+                className={cn(
+                  'text-sm whitespace-pre-wrap break-words',
+                  'text-primary-foreground'
+                )}
+              >
+                {message.content}
+              </p>
+            )}
+          </div>
         ) : isAssistant && shouldStream && !streamComplete ? (
           <StreamingText
             text={message.content}

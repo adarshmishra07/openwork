@@ -150,7 +150,9 @@ async def generate_image(
                     
                     # Upload to S3
                     unique_id = uuid.uuid4().hex[:8]
-                    filename = f"{tag}_{unique_id}.{ext}"
+                    # Replace spaces with underscores in tag to avoid URL issues
+                    safe_tag = tag.replace(" ", "_")
+                    filename = f"{safe_tag}_{unique_id}.{ext}"
                     s3_url = await upload_to_s3(filename, image_data)
                     
                     return {
