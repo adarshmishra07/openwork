@@ -10,7 +10,7 @@ import { getAccomplish } from '@/lib/accomplish';
 import { cn } from '@/lib/utils';
 import { springs } from '@/lib/animations';
 import TaskLauncherItem from './TaskLauncherItem';
-import { hasAnyReadyProvider } from '@brandwork/shared';
+import { hasAnyReadyProvider } from '@shopos/shared';
 
 export default function TaskLauncher() {
   const navigate = useNavigate();

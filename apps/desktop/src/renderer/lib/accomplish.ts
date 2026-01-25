@@ -21,7 +21,7 @@ import type {
   ConnectedProvider,
   BrandProfile,
   BrandMemory,
-} from '@brandwork/shared';
+} from '@shopos/shared';
 
 // Define the API interface
 interface AccomplishAPI {

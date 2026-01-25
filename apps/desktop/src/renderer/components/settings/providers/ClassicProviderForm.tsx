@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { getAccomplish } from '@/lib/accomplish';
 import { settingsVariants, settingsTransitions } from '@/lib/animations';
-import type { ProviderId, ConnectedProvider, ApiKeyCredentials } from '@brandwork/shared';
-import { PROVIDER_META, DEFAULT_PROVIDERS, getDefaultModelForProvider } from '@brandwork/shared';
+import type { ProviderId, ConnectedProvider, ApiKeyCredentials } from '@shopos/shared';
+import { PROVIDER_META, DEFAULT_PROVIDERS, getDefaultModelForProvider } from '@shopos/shared';
 import {
   ModelSelector,
   ConnectButton,

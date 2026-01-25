@@ -3,7 +3,7 @@
  */
 
 import { SpaceDefinition } from './space-registry';
-import type { BrandMemory } from '@brandwork/shared';
+import type { BrandMemory } from '@shopos/shared';
 
 export interface SpaceExecutionInput {
   [key: string]: unknown;

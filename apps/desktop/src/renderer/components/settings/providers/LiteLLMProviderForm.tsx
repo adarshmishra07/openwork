@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import type { ConnectedProvider, LiteLLMCredentials } from '@brandwork/shared';
+import type { ConnectedProvider, LiteLLMCredentials } from '@shopos/shared';
 import {
   ModelSelector,
   ConnectButton,

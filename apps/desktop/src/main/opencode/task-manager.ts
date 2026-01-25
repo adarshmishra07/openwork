@@ -31,7 +31,7 @@ import {
   type TaskStatus,
   type OpenCodeMessage,
   type PermissionRequest,
-} from '@brandwork/shared';
+} from '@shopos/shared';
 
 // Feature flag for SDK adapter - can be enabled via:
 // 1. UI Settings toggle (stored in appSettings)
@@ -189,7 +189,7 @@ async function installPlaywrightChromium(
   });
 }
 
-// DEV_BROWSER_PORT imported from @brandwork/shared
+// DEV_BROWSER_PORT imported from @shopos/shared
 
 /**
  * Check if the dev-browser server is running and ready

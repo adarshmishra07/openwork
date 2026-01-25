@@ -1,6 +1,6 @@
 'use client';
 
-import type { Task } from '@brandwork/shared';
+import type { Task } from '@shopos/shared';
 import { cn } from '@/lib/utils';
 import { Loader2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 

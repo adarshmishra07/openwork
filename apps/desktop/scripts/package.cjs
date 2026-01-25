@@ -10,14 +10,14 @@ const fs = require('fs');
 const path = require('path');
 
 const nodeModulesPath = path.join(__dirname, '..', 'node_modules');
-const accomplishPath = path.join(nodeModulesPath, '@accomplish');
+const shoposPath = path.join(nodeModulesPath, '@shopos');
 
 // Save symlink target for restoration
 let symlinkTarget = null;
-const sharedPath = path.join(accomplishPath, 'shared');
+const sharedPath = path.join(shoposPath, 'shared');
 
 try {
-  // Check if @brandwork/shared symlink exists
+  // Check if @shopos/shared symlink exists
   if (fs.existsSync(sharedPath)) {
     const stats = fs.lstatSync(sharedPath);
     if (stats.isSymbolicLink()) {
@@ -25,9 +25,9 @@ try {
       console.log('Temporarily removing workspace symlink:', sharedPath);
       fs.unlinkSync(sharedPath);
 
-      // Remove empty @accomplish directory if it exists
+      // Remove empty @shopos directory if it exists
       try {
-        fs.rmdirSync(accomplishPath);
+        fs.rmdirSync(shoposPath);
       } catch {
         // Directory not empty or doesn't exist, ignore
       }
@@ -47,9 +47,9 @@ try {
   if (symlinkTarget) {
     console.log('Restoring workspace symlink');
 
-    // Recreate @accomplish directory if needed
-    if (!fs.existsSync(accomplishPath)) {
-      fs.mkdirSync(accomplishPath, { recursive: true });
+    // Recreate @shopos directory if needed
+    if (!fs.existsSync(shoposPath)) {
+      fs.mkdirSync(shoposPath, { recursive: true });
     }
 
     fs.symlinkSync(symlinkTarget, sharedPath);

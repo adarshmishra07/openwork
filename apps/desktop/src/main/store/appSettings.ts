@@ -1,5 +1,5 @@
 import Store from 'electron-store';
-import type { SelectedModel, OllamaConfig, LiteLLMConfig } from '@brandwork/shared';
+import type { SelectedModel, OllamaConfig, LiteLLMConfig } from '@shopos/shared';
 
 /**
  * App settings schema

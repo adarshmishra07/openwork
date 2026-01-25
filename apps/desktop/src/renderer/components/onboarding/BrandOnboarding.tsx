@@ -45,7 +45,7 @@ import type {
   BrandMemory,
   BrandColor,
   BrandTagline
-} from '@brandwork/shared';
+} from '@shopos/shared';
 
 interface BrandOnboardingProps {
   onComplete: (brandProfile: BrandProfile) => void;

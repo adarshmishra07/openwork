@@ -7,6 +7,7 @@ import { registerIPCHandlers } from './ipc/handlers';
 import { flushPendingTasks } from './store/taskHistory';
 import { disposeTaskManager } from './opencode/task-manager';
 import { checkAndCleanupFreshInstall } from './store/freshInstallCleanup';
+import { initializeSubscriptionProviderIfNeeded } from './store/providerSettings';
 
 // Handle EPIPE errors globally - these happen when stdout/stderr pipe is broken
 // This is common in Electron dev mode and shouldn't crash the app
@@ -269,6 +270,17 @@ if (!gotTheLock) {
     // Register IPC handlers before creating window
     registerIPCHandlers();
     console.log('[Main] IPC handlers registered');
+
+    // Auto-configure Anthropic provider if OpenCode subscription is available
+    // This must happen after fresh install cleanup but before window creation
+    try {
+      const didInitSubscription = initializeSubscriptionProviderIfNeeded();
+      if (didInitSubscription) {
+        console.log('[Main] Auto-configured Anthropic provider from OpenCode subscription');
+      }
+    } catch (err) {
+      console.error('[Main] Failed to initialize subscription provider:', err);
+    }
 
     createWindow();
 

@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { isRunningInElectron, getAccomplish } from './lib/accomplish';
 import { springs, variants } from './lib/animations';
 import { analytics } from './lib/analytics';
-import type { BrandProfile } from '@brandwork/shared';
+import type { BrandProfile } from '@shopos/shared';
 
 // Pages
 import HomePage from './pages/Home';
@@ -54,7 +54,7 @@ export default function App() {
     const checkStatus = async () => {
       // Check if running in Electron
       if (!isRunningInElectron()) {
-        setErrorMessage('This application must be run inside the BrandWork desktop app.');
+        setErrorMessage('This application must be run inside the ShopOS desktop app.');
         setStatus('error');
         return;
       }

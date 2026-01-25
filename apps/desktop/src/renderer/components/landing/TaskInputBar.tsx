@@ -6,8 +6,8 @@ import { analytics } from '../../lib/analytics';
 import { ArrowUp, Loader2, Store, Check } from 'lucide-react';
 import { AttachmentButton, AttachmentList, AttachmentDropzone } from '../attachments';
 import { useAttachmentStore } from '../../stores/attachmentStore';
-import type { FileAttachment } from '@brandwork/shared';
-import { getAcceptedFileTypes, isSupportedFileType } from '@brandwork/shared';
+import type { FileAttachment } from '@shopos/shared';
+import { getAcceptedFileTypes, isSupportedFileType } from '@shopos/shared';
 
 interface TaskInputBarProps {
   value: string;

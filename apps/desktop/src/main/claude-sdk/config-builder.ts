@@ -17,7 +17,7 @@ import { getActiveProviderModel } from '../store/providerSettings';
 import { getSelectedModel } from '../store/appSettings';
 import { getBundledNodePaths } from '../utils/bundled-node';
 import type { McpServerConfig, McpServerStdio, McpServerHttp } from './types';
-import { DEV_BROWSER_PORT } from '@brandwork/shared';
+import { DEV_BROWSER_PORT } from '@shopos/shared';
 
 // Space Runtime URL - defaults to Lambda endpoint
 const SPACE_RUNTIME_URL = process.env.SPACE_RUNTIME_URL || 'https://mp3a5rmdpmpqphordszcahy5bm0okvjt.lambda-url.ap-south-1.on.aws';

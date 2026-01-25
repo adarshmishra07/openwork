@@ -1,11 +1,11 @@
 ---
-name: brandwork-spaces
-description: Guide for using BrandWork Space tools (space_*) for e-commerce image tasks like product swaps, style transfer, and background removal.
+name: shopos-spaces
+description: Guide for using ShopOS Space tools (space_*) for e-commerce image tasks like product swaps, style transfer, and background removal.
 ---
 
-# BrandWork Spaces
+# ShopOS Spaces
 
-BrandWork Spaces are specialized AI workflows for e-commerce image tasks. All space tools are prefixed with `space_` and available via MCP.
+ShopOS Spaces are specialized AI workflows for e-commerce image tasks. All space tools are prefixed with `space_` and available via MCP.
 
 ## Available Spaces
 

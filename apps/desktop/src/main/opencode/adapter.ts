@@ -23,7 +23,7 @@ import type {
   TaskResult,
   OpenCodeMessage,
   PermissionRequest,
-} from '@brandwork/shared';
+} from '@shopos/shared';
 
 /**
  * Error thrown when OpenCode CLI is not available
@@ -170,7 +170,10 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
 
     // Sync API keys to OpenCode CLI's auth.json (for DeepSeek, Z.AI support)
     // Skip if using subscription mode - we want to use global auth as-is
-    const useSubscription = process.env.USE_OPENCODE_SUBSCRIPTION === '1';
+    // In packaged builds, default to using OpenCode subscription
+    const useSubscription = app.isPackaged 
+      ? process.env.USE_OPENCODE_SUBSCRIPTION !== '0'  // Default ON in production
+      : process.env.USE_OPENCODE_SUBSCRIPTION === '1'; // Default OFF in dev
     if (!useSubscription) {
       await syncApiKeysToOpenCodeAuth();
     } else {
@@ -433,8 +436,11 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     };
 
     // Check if user wants to use their OpenCode subscription instead of API keys
-    // Set USE_OPENCODE_SUBSCRIPTION=1 to use global auth (OAuth subscription)
-    const useSubscription = process.env.USE_OPENCODE_SUBSCRIPTION === '1';
+    // In packaged builds, default to using OpenCode subscription (users with subscription can use it)
+    // Set USE_OPENCODE_SUBSCRIPTION=0 to explicitly disable and use API keys instead
+    const useSubscription = app.isPackaged 
+      ? process.env.USE_OPENCODE_SUBSCRIPTION !== '0'  // Default ON in production
+      : process.env.USE_OPENCODE_SUBSCRIPTION === '1'; // Default OFF in dev
     
     if (useSubscription) {
       // Use global OpenCode auth (user's subscription)
@@ -720,7 +726,7 @@ User's request: ${config.prompt}`;
 
       // Tool use event - combined tool call and result from OpenCode CLI
       case 'tool_use':
-        const toolUseMessage = message as import('@brandwork/shared').OpenCodeToolUseMessage;
+        const toolUseMessage = message as import('@shopos/shared').OpenCodeToolUseMessage;
         const toolUseName = toolUseMessage.part.tool || 'unknown';
         const toolUseInput = toolUseMessage.part.state?.input;
         const toolUseOutput = toolUseMessage.part.state?.output || '';
@@ -742,7 +748,7 @@ User's request: ${config.prompt}`;
               type: 'text',
               text: toolDescription,
             },
-          } as import('@brandwork/shared').OpenCodeTextMessage;
+          } as import('@shopos/shared').OpenCodeTextMessage;
           this.emit('message', syntheticTextMessage);
         }
 

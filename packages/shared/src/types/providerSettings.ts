@@ -70,12 +70,21 @@ export interface LiteLLMCredentials {
   keyPrefix?: string;
 }
 
+/**
+ * Subscription credentials - used when authenticated via OpenCode subscription (OAuth)
+ * No API key needed - authentication handled by OpenCode CLI's global auth
+ */
+export interface SubscriptionCredentials {
+  type: 'subscription';
+}
+
 export type ProviderCredentials =
   | ApiKeyCredentials
   | BedrockProviderCredentials
   | OllamaCredentials
   | OpenRouterCredentials
-  | LiteLLMCredentials;
+  | LiteLLMCredentials
+  | SubscriptionCredentials;
 
 export interface ConnectedProvider {
   providerId: ProviderId;

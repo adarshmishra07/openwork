@@ -1,5 +1,5 @@
 import { AttachmentPreview } from './AttachmentPreview';
-import type { FileAttachment } from '@brandwork/shared';
+import type { FileAttachment } from '@shopos/shared';
 
 interface AttachmentListProps {
   attachments: FileAttachment[];

@@ -54,7 +54,7 @@ import {
   getProviderDebugMode,
   hasReadyProvider,
 } from '../store/providerSettings';
-import type { ProviderId, ConnectedProvider, BedrockCredentials } from '@brandwork/shared';
+import type { ProviderId, ConnectedProvider, BedrockCredentials } from '@shopos/shared';
 import { getDesktopConfig } from '../config';
 import {
   startPermissionApiServer,
@@ -75,8 +75,8 @@ import type {
   SelectedModel,
   OllamaConfig,
   LiteLLMConfig,
-} from '@brandwork/shared';
-import { DEFAULT_PROVIDERS } from '@brandwork/shared';
+} from '@shopos/shared';
+import { DEFAULT_PROVIDERS } from '@shopos/shared';
 import {
   normalizeIpcError,
   permissionResponseSchema,
@@ -1672,7 +1672,7 @@ export function registerIPCHandlers(): void {
   // Brand: Save brand profile
   handle('brand:save', async (_event: IpcMainInvokeEvent, profile: unknown) => {
     const { saveBrandProfile } = await import('../store/brandMemory');
-    saveBrandProfile(profile as import('@brandwork/shared').BrandProfile);
+    saveBrandProfile(profile as import('@shopos/shared').BrandProfile);
     return { success: true };
   });
 
@@ -1697,7 +1697,7 @@ export function registerIPCHandlers(): void {
   // Brand: Update brand profile
   handle('brand:update', async (_event: IpcMainInvokeEvent, id: string, updates: unknown) => {
     const { updateBrandProfile } = await import('../store/brandMemory');
-    updateBrandProfile(id, updates as Partial<import('@brandwork/shared').BrandProfile>);
+    updateBrandProfile(id, updates as Partial<import('@shopos/shared').BrandProfile>);
     return { success: true };
   });
 
@@ -1737,7 +1737,7 @@ export function registerIPCHandlers(): void {
   // Brand: Import brand memory data
   handle('brand:import-memory', async (_event: IpcMainInvokeEvent, brandId: string, memoryData: unknown) => {
     const { importBrandMemory } = await import('../store/brandMemory');
-    return importBrandMemory(brandId, memoryData as import('@brandwork/shared').BrandMemory);
+    return importBrandMemory(brandId, memoryData as import('@shopos/shared').BrandMemory);
   });
 
   // Brand: Get brand memory
@@ -2280,7 +2280,7 @@ function toTaskMessage(message: OpenCodeMessage): TaskMessage | null {
 
   // Handle tool_use messages (combined tool call + result)
   if (message.type === 'tool_use') {
-    const toolUseMsg = message as import('@brandwork/shared').OpenCodeToolUseMessage;
+    const toolUseMsg = message as import('@shopos/shared').OpenCodeToolUseMessage;
     const toolName = toolUseMsg.part.tool || 'unknown';
     const toolInput = toolUseMsg.part.state?.input;
     const toolOutput = toolUseMsg.part.state?.output || '';

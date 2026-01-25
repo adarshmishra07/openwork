@@ -1,6 +1,6 @@
 // apps/desktop/src/renderer/components/settings/shared/ConnectionStatus.tsx
 
-import type { ConnectionStatus as ConnectionStatusType } from '@brandwork/shared';
+import type { ConnectionStatus as ConnectionStatusType } from '@shopos/shared';
 
 interface ConnectionStatusProps {
   status: ConnectionStatusType;

@@ -1,9 +1,9 @@
 {
-  "name": "@brandwork/desktop",
+  "name": "@shopos/desktop",
   "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "BrandWork - AI work companion for e-commerce brands",
+  "description": "ShopOS - AI operating system for e-commerce brands",
   "main": "dist-electron/main/index.js",
   "scripts": {
     "postinstall": "electron-rebuild && npm --prefix skills/dev-browser install && npm --prefix skills/dev-browser-mcp install && npm --prefix skills/file-permission install && npm --prefix skills/ask-user-question install && npm --prefix skills/skill-loader install",
@@ -42,7 +42,7 @@
     "@anthropic-ai/claude-agent-sdk": "^0.2.15",
     "@aws-sdk/client-bedrock": "^3.971.0",
     "@aws-sdk/credential-providers": "^3.971.0",
-    "@brandwork/shared": "workspace:*",
+    "@shopos/shared": "workspace:*",
     "@fal-ai/client": "^1.8.3",
     "@radix-ui/react-avatar": "^1.1.2",
     "@radix-ui/react-dialog": "^1.1.4",
@@ -99,8 +99,8 @@
     "vitest": "^4.0.17"
   },
   "build": {
-    "appId": "com.shopos.brandwork",
-    "productName": "BrandWork",
+    "appId": "com.shopos.desktop",
+    "productName": "ShopOS",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "directories": {
       "output": "release",
@@ -117,7 +117,7 @@
       "node_modules/json-schema-typed/**",
       "node_modules/atomically/**",
       "node_modules/debounce-fn/**",
-      "!node_modules/@brandwork/**",
+      "!node_modules/@shopos/**",
       "!node_modules/opencode-darwin-*/**",
       "!node_modules/opencode-linux-*/**"
     ],
@@ -154,7 +154,7 @@
     "publish": {
       "provider": "github",
       "owner": "shopos",
-      "repo": "brandwork"
+      "repo": "shopos"
     },
     "mac": {
       "category": "public.app-category.productivity",
@@ -193,7 +193,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "BrandWork"
+      "shortcutName": "ShopOS"
     }
   }
 }

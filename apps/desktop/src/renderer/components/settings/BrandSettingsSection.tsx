@@ -22,7 +22,7 @@ import {
   Edit2
 } from 'lucide-react';
 import { getAccomplish } from '@/lib/accomplish';
-import type { BrandProfile, BrandVoiceTemplate, BrandColor } from '@brandwork/shared';
+import type { BrandProfile, BrandVoiceTemplate, BrandColor } from '@shopos/shared';
 
 // Max file size: 4MB (Lambda has 6MB limit, base64 adds ~33% overhead)
 const MAX_FILE_SIZE_MB = 4;

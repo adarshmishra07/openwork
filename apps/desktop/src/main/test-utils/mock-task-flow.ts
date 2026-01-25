@@ -3,7 +3,7 @@
  * Simulates IPC events without spawning real PTY processes.
  */
 import { BrowserWindow } from 'electron';
-import type { Task, TaskMessage, TaskStatus } from '@brandwork/shared';
+import type { Task, TaskMessage, TaskStatus } from '@shopos/shared';
 import { updateTaskStatus } from '../store/taskHistory';
 
 // ============================================================================

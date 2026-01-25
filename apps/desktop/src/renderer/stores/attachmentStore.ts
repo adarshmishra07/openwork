@@ -1,11 +1,11 @@
 import { create } from 'zustand';
-import type { FileAttachment } from '@brandwork/shared';
+import type { FileAttachment } from '@shopos/shared';
 import { 
   validateFile, 
   generateAttachmentId, 
   isImageType,
   isSupportedFileType,
-} from '@brandwork/shared';
+} from '@shopos/shared';
 import { getAccomplish } from '../lib/accomplish';
 import { showUploadErrorToast, showValidationErrorToast } from '../lib/toast';
 

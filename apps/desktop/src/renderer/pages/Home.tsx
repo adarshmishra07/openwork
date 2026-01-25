@@ -9,7 +9,7 @@ import SettingsDialog from '../components/layout/SettingsDialog';
 import { useTaskStore } from '../stores/taskStore';
 import { getAccomplish } from '../lib/accomplish';
 import { springs } from '../lib/animations';
-import { hasAnyReadyProvider, BrandProfile, FileAttachment } from '@brandwork/shared';
+import { hasAnyReadyProvider, BrandProfile, FileAttachment } from '@shopos/shared';
 
 // Import use case images for proper bundling in production
 import aiImageWizardImg from '/assets/usecases/ai-image-wizard.webp';

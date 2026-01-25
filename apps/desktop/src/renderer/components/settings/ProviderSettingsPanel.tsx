@@ -1,8 +1,8 @@
 // apps/desktop/src/renderer/components/settings/ProviderSettingsPanel.tsx
 
 import { AnimatePresence, motion } from 'framer-motion';
-import type { ProviderId, ConnectedProvider } from '@brandwork/shared';
-import { PROVIDER_META } from '@brandwork/shared';
+import type { ProviderId, ConnectedProvider } from '@shopos/shared';
+import { PROVIDER_META } from '@shopos/shared';
 import {
   ClassicProviderForm,
   BedrockProviderForm,

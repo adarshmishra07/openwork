@@ -8,7 +8,7 @@
 
 import http from 'http';
 import type { BrowserWindow } from 'electron';
-import type { PermissionRequest, FileOperation } from '@brandwork/shared';
+import type { PermissionRequest, FileOperation } from '@shopos/shared';
 
 export const PERMISSION_API_PORT = 9226;
 export const QUESTION_API_PORT = 9227;

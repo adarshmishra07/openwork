@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import type { OpenCodeMessage } from '@brandwork/shared';
+import type { OpenCodeMessage } from '@shopos/shared';
 
 export interface StreamParserEvents {
   message: [OpenCodeMessage];

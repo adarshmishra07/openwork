@@ -7,7 +7,7 @@ import type {
   PermissionRequest,
   PermissionResponse,
   TaskMessage,
-} from '@brandwork/shared';
+} from '@shopos/shared';
 import { getAccomplish } from '../lib/accomplish';
 import { showTaskErrorToast } from '../lib/toast';
 

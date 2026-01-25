@@ -10,8 +10,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Trash2, Store, CheckCircle2, XCircle, Loader2, Building2 } from 'lucide-react';
-import type { ApiKeyConfig, SelectedModel, ProviderId as SharedProviderId } from '@brandwork/shared';
-import { DEFAULT_PROVIDERS, DEFAULT_MODELS } from '@brandwork/shared';
+import type { ApiKeyConfig, SelectedModel, ProviderId as SharedProviderId } from '@shopos/shared';
+import { DEFAULT_PROVIDERS, DEFAULT_MODELS } from '@shopos/shared';
 import logoImage from '/assets/logo.png';
 import { BrandSettingsSection } from '@/components/settings/BrandSettingsSection';
 

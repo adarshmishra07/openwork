@@ -1,5 +1,5 @@
 import Store from 'electron-store';
-import type { Task, TaskMessage, TaskStatus } from '@brandwork/shared';
+import type { Task, TaskMessage, TaskStatus } from '@shopos/shared';
 
 /**
  * Key asset tracked during task execution for context preservation on resume

@@ -1,7 +1,7 @@
 import { X, FileText, FileJson, FileType, AlertCircle, RefreshCw, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { FileAttachment, FileCategory } from '@brandwork/shared';
-import { getFileCategory, formatFileSize } from '@brandwork/shared';
+import type { FileAttachment, FileCategory } from '@shopos/shared';
+import { getFileCategory, formatFileSize } from '@shopos/shared';
 
 interface AttachmentPreviewProps {
   attachment: FileAttachment;

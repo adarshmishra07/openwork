@@ -1,8 +1,8 @@
 // apps/desktop/src/renderer/components/settings/ProviderCard.tsx
 
 import { memo, useCallback } from 'react';
-import type { ProviderId, ConnectedProvider } from '@brandwork/shared';
-import { PROVIDER_META, isProviderReady } from '@brandwork/shared';
+import type { ProviderId, ConnectedProvider } from '@shopos/shared';
+import { PROVIDER_META, isProviderReady } from '@shopos/shared';
 import { AnimatePresence, motion } from 'framer-motion';
 import { settingsVariants, settingsTransitions } from '@/lib/animations';
 

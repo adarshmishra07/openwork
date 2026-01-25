@@ -29,9 +29,6 @@ importers:
       '@aws-sdk/credential-providers':
         specifier: ^3.971.0
         version: 3.971.0
-      '@brandwork/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       '@fal-ai/client':
         specifier: ^1.8.3
         version: 1.8.3
@@ -62,6 +59,9 @@ importers:
       '@radix-ui/react-tooltip':
         specifier: ^1.1.6
         version: 1.2.8(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      '@shopos/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       better-sqlite3:
         specifier: ^12.6.2
         version: 12.6.2

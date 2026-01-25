@@ -7,7 +7,7 @@ import { getOllamaConfig, getLiteLLMConfig } from '../store/appSettings';
 import { getApiKey, getShopifyCredentials } from '../store/secureStorage';
 import { generateBrandContext } from '../store/brandMemory';
 import { getProviderSettings, getActiveProviderModel, getConnectedProviderIds } from '../store/providerSettings';
-import type { BedrockCredentials, ProviderId } from '@brandwork/shared';
+import type { BedrockCredentials, ProviderId } from '@shopos/shared';
 
 /**
  * Agent name used by Accomplish
@@ -399,14 +399,12 @@ User: "Set all jackets to 10% off"
 </examples>
 </skill>
 
-<skill name="brandwork-spaces">
-You have BrandWork Space tools (space_*) for e-commerce image tasks like product placement,
+<skill name="shopos-spaces">
+You have ShopOS Space tools (space_*) for e-commerce image tasks like product placement,
 style transfer, background removal, and banner creation. The tools are self-documented via MCP.
 
-IMPORTANT: Before using Gemini or browser for image tasks, first call load_skill("brandwork-spaces") 
+IMPORTANT: Before using Gemini or browser for image tasks, first call load_skill("shopos-spaces") 
 to check if a specialized space tool exists for the task. Space tools produce higher quality results.
-
-**ALWAYS call space_list_all first before selecting any space tool.** This ensures you pick the right tool for the task.
 
 Space tools take 60-90 seconds. Always tell the user what you're doing before calling.
 </skill>

@@ -9,7 +9,7 @@ import Database from 'better-sqlite3';
 import { app } from 'electron';
 import path from 'path';
 import fs from 'fs';
-import type { BrandProfile, BrandVoice, BrandStyle, BrandRules, BrandMemory } from '@brandwork/shared';
+import type { BrandProfile, BrandVoice, BrandStyle, BrandRules, BrandMemory } from '@shopos/shared';
 
 // Safe console.log that doesn't crash on EPIPE errors
 function safeLog(...args: unknown[]): void {

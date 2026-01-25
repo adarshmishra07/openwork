@@ -20,7 +20,7 @@ import type {
   NormalizedEvent,
   PermissionContext,
 } from './types';
-import type { TaskConfig, Task, PermissionRequest } from '@brandwork/shared';
+import type { TaskConfig, Task, PermissionRequest } from '@shopos/shared';
 
 /**
  * ClaudeAgentAdapter - Uses Claude Agent SDK for task execution

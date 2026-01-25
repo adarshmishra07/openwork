@@ -11,7 +11,7 @@ import { memo } from 'react';
 import { motion } from 'framer-motion';
 import { Square, CheckSquare, XSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { TodoItem } from '@brandwork/shared';
+import type { TodoItem } from '@shopos/shared';
 import { springs } from '../../lib/animations';
 
 interface TodoListProps {
