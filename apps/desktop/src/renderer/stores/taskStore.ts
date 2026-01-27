@@ -185,9 +185,19 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }
 
     const sessionId = currentTask.result?.sessionId || currentTask.sessionId;
+    
+    console.log(`[TaskStore:sendFollowUp] Checking session:`, {
+      taskId: currentTask.id,
+      sessionId,
+      resultSessionId: currentTask.result?.sessionId,
+      taskSessionId: currentTask.sessionId,
+      taskStatus: currentTask.status,
+      hasResult: !!currentTask.result,
+    });
 
     // If no session but task was interrupted, start a fresh task with the new message
     if (!sessionId && currentTask.status === 'interrupted') {
+      console.log(`[TaskStore:sendFollowUp] No session, interrupted task - starting fresh`);
       void accomplish.logEvent({
         level: 'info',
         message: 'UI follow-up: starting fresh task (no session from interrupted task)',
@@ -198,6 +208,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }
 
     if (!sessionId) {
+      console.log(`[TaskStore:sendFollowUp] No session found - aborting`);
       set({ error: 'No session to continue - please start a new task' });
       void accomplish.logEvent({
         level: 'warn',
@@ -206,6 +217,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       });
       return;
     }
+    
+    console.log(`[TaskStore:sendFollowUp] Resuming session ${sessionId} with message: "${message.substring(0, 30)}..."`)
 
     // Convert attachments to TaskAttachment format for rendering
     const messageAttachments = attachments?.map(a => ({
@@ -357,6 +370,13 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
       // Handle complete events
       if (event.type === 'complete' && event.result) {
+        console.log(`[TaskStore:onTaskUpdate] Task complete event:`, {
+          taskId: event.taskId,
+          resultStatus: event.result.status,
+          resultSessionId: event.result.sessionId,
+          currentTaskSessionId: state.currentTask?.sessionId,
+        });
+        
         // Map result status to task status
         if (event.result.status === 'success') {
           newStatus = 'completed';
@@ -368,13 +388,15 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
         // Update currentTask if viewing this task
         if (isCurrentTask && state.currentTask) {
+          const newSessionId = event.result.sessionId || state.currentTask.sessionId;
+          console.log(`[TaskStore:onTaskUpdate] Setting sessionId on task: ${newSessionId}`);
           updatedCurrentTask = {
             ...state.currentTask,
             status: newStatus,
             result: event.result,
             // Don't set completedAt for interrupted tasks - they can continue
             completedAt: newStatus === 'interrupted' ? undefined : new Date().toISOString(),
-            sessionId: event.result.sessionId || state.currentTask.sessionId,
+            sessionId: newSessionId,
           };
         }
       }
@@ -564,6 +586,100 @@ if (typeof window !== 'undefined' && window.accomplish) {
       } else {
         useTaskStore.getState().setSetupProgress(event.taskId, event.message);
       }
+    }
+  });
+
+  // Subscribe to real-time text streaming (from server adapter SSE)
+  // This provides true streaming - text arrives as model generates it
+  window.accomplish.onTaskTextDelta?.((event: { taskId: string; text: string }) => {
+    console.log(`[TaskStore:onTaskTextDelta] Received:`, {
+      taskId: event.taskId,
+      textLength: event.text.length,
+      textPreview: event.text.substring(0, 30),
+    });
+    
+    const state = useTaskStore.getState();
+    if (!state.currentTask || state.currentTask.id !== event.taskId) {
+      console.log(`[TaskStore:onTaskTextDelta] Skipping - no matching task`, {
+        hasCurrentTask: !!state.currentTask,
+        currentTaskId: state.currentTask?.id,
+        eventTaskId: event.taskId,
+      });
+      return;
+    }
+
+    const messages = [...state.currentTask.messages];
+    const lastMsg = messages[messages.length - 1];
+    
+    console.log(`[TaskStore:onTaskTextDelta] Processing:`, {
+      messageCount: messages.length,
+      lastMsgType: lastMsg?.type,
+      lastMsgIsStreaming: lastMsg?.isStreaming,
+      lastMsgContentLength: lastMsg?.content?.length,
+    });
+
+    // Check if we should append to existing streaming message
+    if (lastMsg?.type === 'assistant' && lastMsg.isStreaming) {
+      // Append text to existing streaming message
+      const newContent = (lastMsg.content || '') + event.text;
+      console.log(`[TaskStore:onTaskTextDelta] Appending to existing streaming message:`, {
+        oldLength: lastMsg.content?.length || 0,
+        appendLength: event.text.length,
+        newLength: newContent.length,
+      });
+      messages[messages.length - 1] = {
+        ...lastMsg,
+        content: newContent,
+      };
+    } else {
+      // Create new streaming message
+      console.log(`[TaskStore:onTaskTextDelta] Creating new streaming message`);
+      messages.push({
+        id: `msg_stream_${Date.now()}`,
+        type: 'assistant',
+        content: event.text,
+        timestamp: new Date().toISOString(),
+        isStreaming: true,
+      });
+    }
+
+    useTaskStore.setState({
+      currentTask: {
+        ...state.currentTask,
+        messages,
+      },
+      isLoading: false,
+    });
+  });
+  
+  // Subscribe to stream complete events
+  window.accomplish.onTaskStreamComplete?.((event: { taskId: string }) => {
+    console.log(`[TaskStore:onTaskStreamComplete] Received:`, { taskId: event.taskId });
+    
+    const state = useTaskStore.getState();
+    if (!state.currentTask || state.currentTask.id !== event.taskId) {
+      return;
+    }
+
+    const messages = [...state.currentTask.messages];
+    const lastMsg = messages[messages.length - 1];
+    
+    // Mark the streaming message as complete
+    if (lastMsg?.type === 'assistant' && lastMsg.isStreaming) {
+      console.log(`[TaskStore:onTaskStreamComplete] Marking message as complete:`, {
+        contentLength: lastMsg.content?.length,
+      });
+      messages[messages.length - 1] = {
+        ...lastMsg,
+        isStreaming: false,
+      };
+      
+      useTaskStore.setState({
+        currentTask: {
+          ...state.currentTask,
+          messages,
+        },
+      });
     }
   });
 

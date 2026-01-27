@@ -1010,6 +1010,7 @@ interface AgentConfig {
   description?: string;
   prompt?: string;
   mode?: 'primary' | 'subagent' | 'all';
+  model?: string;  // Model to use for this agent (provider/model format)
 }
 
 interface McpServerConfig {
@@ -1096,13 +1097,74 @@ type ProviderConfig = OllamaProviderConfig | KimiProviderConfig | OpenRouterProv
 
 interface OpenCodeConfig {
   $schema?: string;
-  model?: string;
+  model?: string;  // Top-level default model (provider/model format)
   default_agent?: string;
   enabled_providers?: string[];
   permission?: string | Record<string, string | Record<string, string>>;
   agent?: Record<string, AgentConfig>;
   mcp?: Record<string, McpServerConfig>;
   provider?: Record<string, ProviderConfig>;
+}
+
+/**
+ * Map our internal model ID to OpenCode's model ID format
+ * Our format: "provider/model-name" (e.g., "google/gemini-2.0-flash")
+ * OpenCode npm format: "provider/model-name" (e.g., "google/gemini-2.0-flash")
+ */
+function mapToOpenCodeModelId(provider: string, modelId: string): string | undefined {
+  // Strip provider prefix if present to get just the model name
+  const modelName = modelId.includes('/') ? modelId.split('/').pop()! : modelId;
+  
+  // Map based on provider - OpenCode npm uses "provider/model" format
+  switch (provider) {
+    case 'google':
+      // Google/Gemini models: google/gemini-2.0-flash, google/gemini-2.5-flash, etc.
+      // Handle preview/experimental model names
+      if (modelName.includes('gemini-3-flash-preview')) {
+        return 'google/gemini-2.5-flash'; // Map preview to stable equivalent
+      }
+      return `google/${modelName}`;
+      
+    case 'anthropic':
+      // Anthropic models: anthropic/claude-3.5-sonnet, anthropic/claude-4-sonnet, etc.
+      return `anthropic/${modelName}`;
+      
+    case 'openai':
+      // OpenAI models: openai/gpt-4o, openai/gpt-4.1, openai/o1, etc.
+      return `openai/${modelName}`;
+      
+    case 'xai':
+      // xAI/Grok models
+      return `xai/${modelName}`;
+      
+    case 'deepseek':
+      // DeepSeek models
+      return `deepseek/${modelName}`;
+      
+    case 'openrouter':
+      // OpenRouter models already have the format
+      return `openrouter/${modelName}`;
+      
+    case 'ollama':
+      // Ollama models are handled separately via custom provider config
+      return undefined;
+      
+    case 'litellm':
+      // LiteLLM models are handled separately
+      return undefined;
+      
+    case 'kimi':
+      // Kimi models - use kimi provider
+      return `kimi/${modelName}`;
+      
+    case 'zai':
+      // Z.AI models are handled via custom provider config
+      return `zai-coding-plan/${modelName}`;
+      
+    default:
+      // For unknown providers, try provider/model format
+      return `${provider}/${modelName}`;
+  }
 }
 
 /**
@@ -1410,9 +1472,19 @@ NEVER use placeholder domains like "yourstore.myshopify.com" - always use the ac
     console.log('[OpenCode Config] Z.AI Coding Plan provider configured with models:', Object.keys(zaiModels));
   }
 
+  // Get the active model and map to OpenCode format
+  const openCodeModelId = activeModel ? mapToOpenCodeModelId(activeModel.provider, activeModel.model) : undefined;
+  if (openCodeModelId) {
+    console.log(`[OpenCode Config] Using model: ${openCodeModelId} (from ${activeModel?.provider}/${activeModel?.model})`);
+  } else if (activeModel) {
+    console.log(`[OpenCode Config] Model ${activeModel.model} will use custom provider config`);
+  }
+
   const config: OpenCodeConfig = {
     $schema: 'https://opencode.ai/config.json',
     default_agent: ACCOMPLISH_AGENT_NAME,
+    // Set the default model at the top level (npm opencode-ai format)
+    model: openCodeModelId,
     // Enable all supported providers - providers auto-configure when API keys are set via env vars
     enabled_providers: enabledProviders,
     // Auto-allow all tool permissions - the system prompt instructs the agent to use
@@ -1425,6 +1497,8 @@ NEVER use placeholder domains like "yourstore.myshopify.com" - always use the ac
         description: 'Browser automation assistant using dev-browser',
         prompt: systemPrompt,
         mode: 'primary',
+        // Also set model in the agent config for clarity
+        model: openCodeModelId,
       },
     },
     // MCP servers for additional tools

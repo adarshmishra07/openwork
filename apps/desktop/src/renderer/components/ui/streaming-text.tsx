@@ -1,6 +1,11 @@
 /**
- * StreamingText - A component that reveals text character-by-character
- * for a more engaging, "typing" effect during AI responses.
+ * StreamingText - A component that displays streaming text with a cursor indicator.
+ * 
+ * This component supports two modes:
+ * 1. Real streaming: Text arrives incrementally via SSE, just display with cursor
+ * 2. Fake streaming (legacy): Animate character-by-character for pre-loaded text
+ * 
+ * The `isStreaming` prop from the message takes precedence when set.
  */
 
 import { useState, useEffect, useRef } from 'react';
@@ -8,11 +13,13 @@ import { cn } from '@/lib/utils';
 
 interface StreamingTextProps {
   text: string;
-  /** Characters per second reveal rate (default: 80) */
+  /** Characters per second reveal rate for fake streaming (default: 80) */
   speed?: number;
-  /** Whether streaming is complete (shows full text immediately) */
+  /** Whether streaming animation is complete (legacy: shows full text immediately) */
   isComplete?: boolean;
-  /** Callback when streaming finishes */
+  /** Whether this message is being streamed in real-time (takes precedence over isComplete) */
+  isStreaming?: boolean;
+  /** Callback when streaming finishes (legacy) */
   onComplete?: () => void;
   /** Additional className for the container */
   className?: string;
@@ -24,12 +31,17 @@ export function StreamingText({
   text,
   speed = 80,
   isComplete = false,
+  isStreaming,
   onComplete,
   className,
   children,
 }: StreamingTextProps) {
+  // If isStreaming is explicitly set, use real streaming mode (no animation)
+  // Otherwise fall back to legacy animated mode
+  const useRealStreamingMode = isStreaming !== undefined;
+  
   const [displayedLength, setDisplayedLength] = useState(isComplete ? text.length : 0);
-  const [isStreaming, setIsStreaming] = useState(!isComplete);
+  const [isAnimating, setIsAnimating] = useState(!isComplete);
   const rafRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
   const textRef = useRef(text);
@@ -38,7 +50,7 @@ export function StreamingText({
   useEffect(() => {
     // If new text is longer, continue streaming from current position
     if (text.length > textRef.current.length && !isComplete) {
-      setIsStreaming(true);
+      setIsAnimating(true);
     }
     textRef.current = text;
   }, [text, isComplete]);
@@ -47,13 +59,19 @@ export function StreamingText({
   useEffect(() => {
     if (isComplete) {
       setDisplayedLength(text.length);
-      setIsStreaming(false);
+      setIsAnimating(false);
     }
   }, [isComplete, text.length]);
 
-  // Animation loop
+  // Animation loop for legacy fake streaming mode
   useEffect(() => {
-    if (!isStreaming || isComplete) return;
+    // Skip animation in real streaming mode
+    if (useRealStreamingMode) {
+      setDisplayedLength(text.length);
+      return;
+    }
+    
+    if (!isAnimating || isComplete) return;
 
     const charsPerMs = speed / 1000;
 
@@ -77,7 +95,7 @@ export function StreamingText({
         const currentLength = displayedLength + charsToAdd;
         if (currentLength >= textRef.current.length) {
           queueMicrotask(() => {
-            setIsStreaming(false);
+            setIsAnimating(false);
             onComplete?.();
           });
         }
@@ -95,14 +113,18 @@ export function StreamingText({
         cancelAnimationFrame(rafRef.current);
       }
     };
-  }, [isStreaming, isComplete, speed, onComplete, displayedLength]);
+  }, [isAnimating, isComplete, speed, onComplete, displayedLength, useRealStreamingMode, text.length]);
 
-  const displayedText = text.slice(0, displayedLength);
+  // Determine what text to display and whether to show cursor
+  const displayedText = useRealStreamingMode ? text : text.slice(0, displayedLength);
+  const showCursor = useRealStreamingMode 
+    ? isStreaming 
+    : (isAnimating && displayedLength < text.length);
 
   return (
     <div className={className}>
       {children(displayedText)}
-      {isStreaming && displayedLength < text.length && (
+      {showCursor && (
         <span className="inline-block w-2 h-4 bg-foreground/60 animate-pulse ml-0.5 align-text-bottom" />
       )}
     </div>
@@ -110,18 +132,30 @@ export function StreamingText({
 }
 
 /**
- * Hook to track whether a message should be streamed
- * (only the latest assistant message while task is running)
+ * Hook to track whether a message should show streaming indicator.
+ * 
+ * With real streaming (message.isStreaming), we use that directly.
+ * For legacy mode, we track based on whether it's the latest assistant message during a running task.
  */
 export function useStreamingState(
   messageId: string,
   isLatestAssistantMessage: boolean,
-  isTaskRunning: boolean
+  isTaskRunning: boolean,
+  messageIsStreaming?: boolean
 ) {
   const [hasFinishedStreaming, setHasFinishedStreaming] = useState(false);
   const wasStreamingRef = useRef(false);
 
-  // Determine if this message should stream
+  // With real streaming, use the message's isStreaming flag directly
+  if (messageIsStreaming !== undefined) {
+    return {
+      shouldStream: messageIsStreaming,
+      isComplete: !messageIsStreaming,
+      onComplete: () => {}, // No-op for real streaming
+    };
+  }
+
+  // Legacy mode: determine if this message should stream based on position and task state
   const shouldStream = isLatestAssistantMessage && isTaskRunning && !hasFinishedStreaming;
 
   // Track when streaming completes

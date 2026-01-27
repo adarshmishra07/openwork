@@ -5,7 +5,8 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { registerIPCHandlers } from './ipc/handlers';
 import { flushPendingTasks } from './store/taskHistory';
-import { disposeTaskManager } from './opencode/task-manager';
+import { disposeTaskManager, initializeTaskManager } from './opencode/task-manager';
+import { disposeServerAdapter } from './opencode/server-adapter';
 import { checkAndCleanupFreshInstall } from './store/freshInstallCleanup';
 import { initializeSubscriptionProviderIfNeeded } from './store/providerSettings';
 
@@ -282,6 +283,15 @@ if (!gotTheLock) {
       console.error('[Main] Failed to initialize subscription provider:', err);
     }
 
+    // Initialize OpenCode server adapter for real-time streaming
+    // This starts the `opencode serve` process in the background
+    try {
+      await initializeTaskManager();
+      console.log('[Main] OpenCode server adapter initialized');
+    } catch (err) {
+      console.error('[Main] Failed to initialize OpenCode server adapter (will use PTY fallback):', err);
+    }
+
     createWindow();
 
     app.on('activate', () => {
@@ -306,6 +316,8 @@ app.on('before-quit', () => {
   flushPendingTasks();
   // Dispose all active tasks and cleanup PTY processes
   disposeTaskManager();
+  // Dispose the OpenCode server adapter (kills the `opencode serve` process)
+  disposeServerAdapter();
 });
 
 // Handle custom protocol (accomplish://)

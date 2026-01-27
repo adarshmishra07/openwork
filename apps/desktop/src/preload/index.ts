@@ -197,6 +197,18 @@ const accomplishAPI = {
     ipcRenderer.on('task:update:batch', listener);
     return () => ipcRenderer.removeListener('task:update:batch', listener);
   },
+  // Real-time text streaming (from server adapter SSE)
+  onTaskTextDelta: (callback: (event: { taskId: string; text: string }) => void) => {
+    const listener = (_: unknown, event: { taskId: string; text: string }) => callback(event);
+    ipcRenderer.on('task:text-delta', listener);
+    return () => ipcRenderer.removeListener('task:text-delta', listener);
+  },
+  // Stream complete - marks streaming message as done
+  onTaskStreamComplete: (callback: (event: { taskId: string }) => void) => {
+    const listener = (_: unknown, event: { taskId: string }) => callback(event);
+    ipcRenderer.on('task:stream-complete', listener);
+    return () => ipcRenderer.removeListener('task:stream-complete', listener);
+  },
   onPermissionRequest: (callback: (request: unknown) => void) => {
     const listener = (_: unknown, request: unknown) => callback(request);
     ipcRenderer.on('permission:request', listener);

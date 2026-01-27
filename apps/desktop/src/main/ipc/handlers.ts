@@ -8,6 +8,7 @@ import {
 import {
   getTaskManager,
   disposeTaskManager,
+  isServerModeActive,
   type TaskCallbacks,
 } from '../opencode/task-manager';
 import {
@@ -387,6 +388,26 @@ export function registerIPCHandlers(): void {
         })();
       },
 
+      // Real-time text streaming (from server adapter)
+      onTextDelta: (text: string) => {
+        console.log(`[IPC:onTextDelta] Forwarding to renderer:`, {
+          taskId,
+          textLength: text.length,
+          textPreview: text.substring(0, 30),
+        });
+        // Forward text delta to renderer for real-time display
+        forwardToRenderer('task:text-delta', {
+          taskId,
+          text,
+        });
+      },
+
+      // Streaming complete - mark the current streaming message as done
+      onStreamComplete: () => {
+        console.log(`[IPC:onStreamComplete] Forwarding to renderer:`, { taskId });
+        forwardToRenderer('task:stream-complete', { taskId });
+      },
+
       onProgress: (progress: { stage: string; message?: string }) => {
         forwardToRenderer('task:progress', {
           taskId,
@@ -467,6 +488,15 @@ export function registerIPCHandlers(): void {
 
     // Start the task via TaskManager (creates isolated adapter or queues if busy)
     const task = await taskManager.startTask(taskId, validatedConfig, callbacks);
+
+    // Log streaming mode to debug panel
+    const streamingMode = isServerModeActive() ? 'Server (Real Streaming)' : 'PTY (Fake Streaming)';
+    forwardToRenderer('debug:log', {
+      taskId,
+      timestamp: new Date().toISOString(),
+      type: 'info',
+      message: `Streaming Mode: ${streamingMode}`,
+    });
 
     // Convert attachments to TaskAttachment format for rendering
     const messageAttachments = validatedConfig.attachments?.map(a => ({
@@ -757,6 +787,26 @@ export function registerIPCHandlers(): void {
           // Queue message for batching (even if image processing failed)
           queueMessage(taskId, taskMessage, forwardToRenderer, addTaskMessage);
         })();
+      },
+
+      // Real-time text streaming (from server adapter)
+      onTextDelta: (text: string) => {
+        console.log(`[IPC:session:resume:onTextDelta] Forwarding to renderer:`, {
+          taskId,
+          textLength: text.length,
+          textPreview: text.substring(0, 30),
+        });
+        // Forward text delta to renderer for real-time display
+        forwardToRenderer('task:text-delta', {
+          taskId,
+          text,
+        });
+      },
+
+      // Streaming complete - mark the current streaming message as done
+      onStreamComplete: () => {
+        console.log(`[IPC:session:resume:onStreamComplete] Forwarding to renderer:`, { taskId });
+        forwardToRenderer('task:stream-complete', { taskId });
       },
 
       onProgress: (progress: { stage: string; message?: string }) => {

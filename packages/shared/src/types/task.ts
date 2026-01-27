@@ -87,6 +87,8 @@ export interface TaskMessage {
   isFinal?: boolean;
   /** Image references from previous messages (e.g., when user selects image [C] to reference) */
   imageReferences?: Array<{ label: string; url: string }>;
+  /** Whether this message is currently being streamed (real-time text updates) */
+  isStreaming?: boolean;
 }
 
 export interface TaskResult {

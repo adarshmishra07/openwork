@@ -6,19 +6,22 @@
  * isolated state and event handling.
  * 
  * Supports two adapters:
- * - OpenCodeAdapter (PTY-based, legacy) - stable, uses CLI
- * - ClaudeAgentAdapter (SDK-based) - new, direct SDK integration
+ * - OpenCodeServerAdapter (HTTP/SSE-based) - primary, real-time streaming
+ * - OpenCodeAdapter (PTY-based) - fallback, legacy
  * 
- * Use USE_CLAUDE_SDK=true environment variable to enable the new adapter.
+ * The server adapter is preferred because it provides true real-time
+ * text streaming via SSE, rather than batched text messages.
  */
 
 import { OpenCodeAdapter, isOpenCodeCliInstalled, OpenCodeCliNotFoundError } from './adapter';
-import { ClaudeAgentAdapter, createClaudeAgentAdapter } from '../claude-sdk/adapter';
-import type { NormalizedEvent } from '../claude-sdk/types';
+import { 
+  OpenCodeServerAdapter, 
+  getServerAdapter, 
+  isServerAdapterRunning,
+  disposeServerAdapter,
+} from './server-adapter';
 import { getSkillsPath } from './config-generator';
 import { getNpxPath, getBundledNodePaths } from '../utils/bundled-node';
-import { getActiveProviderModel } from '../store/providerSettings';
-import { getSelectedModel, getUseClaudeSdk } from '../store/appSettings';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -32,47 +35,6 @@ import {
   type OpenCodeMessage,
   type PermissionRequest,
 } from '@shopos/shared';
-
-// Feature flag for SDK adapter - can be enabled via:
-// 1. UI Settings toggle (stored in appSettings)
-// 2. Environment variable USE_CLAUDE_SDK=true (for dev/testing)
-const USE_CLAUDE_SDK_ENV = process.env.USE_CLAUDE_SDK === 'true';
-
-/**
- * Determine if we should use the Claude SDK adapter
- * Only use SDK for Anthropic models - other providers need OpenCode CLI
- */
-function shouldUseSdkAdapter(): boolean {
-  // Check settings first, then env var as fallback
-  const sdkEnabledInSettings = getUseClaudeSdk();
-  const sdkEnabled = sdkEnabledInSettings || USE_CLAUDE_SDK_ENV;
-  
-  if (!sdkEnabled) {
-    return false;
-  }
-  
-  // Check current provider - SDK only works with Anthropic
-  // Prefer selectedModel from app-settings (user's explicit choice)
-  const appSelectedModel = getSelectedModel();
-  const providerModel = getActiveProviderModel();
-  const selectedModel = appSelectedModel || providerModel;
-  
-  if (!selectedModel?.provider) {
-    // Default to SDK if no provider set (will use default Anthropic)
-    return true;
-  }
-  
-  // SDK only supports Anthropic models
-  const sdkSupportedProviders = ['anthropic'];
-  const useSdk = sdkSupportedProviders.includes(selectedModel.provider);
-  
-  console.log(`[TaskManager] Provider: ${selectedModel.provider}, Model: ${selectedModel.model}, SDK enabled: ${sdkEnabled}, Use SDK: ${useSdk}`);
-  
-  return useSdk;
-}
-
-// Adapter type union
-type AgentAdapter = OpenCodeAdapter | ClaudeAgentAdapter;
 
 /**
  * Check if system Chrome is installed
@@ -311,6 +273,8 @@ async function ensureDevBrowserServer(
  */
 export interface TaskCallbacks {
   onMessage: (message: OpenCodeMessage) => void;
+  onTextDelta?: (text: string) => void;  // Real-time text streaming (incremental)
+  onStreamComplete?: () => void;  // Called when streaming message is complete
   onProgress: (progress: { stage: string; message?: string }) => void;
   onPermissionRequest: (request: PermissionRequest) => void;
   onComplete: (result: TaskResult) => void;
@@ -324,11 +288,12 @@ export interface TaskCallbacks {
  */
 interface ManagedTask {
   taskId: string;
-  adapter: AgentAdapter;
+  sessionId?: string;  // For server adapter
+  adapter?: OpenCodeAdapter;  // For PTY fallback
   callbacks: TaskCallbacks;
   cleanup: () => void;
   createdAt: Date;
-  usingSdk: boolean; // Track which adapter is being used
+  usingServer: boolean; // Track which mode is being used
 }
 
 /**
@@ -352,15 +317,187 @@ const DEFAULT_MAX_CONCURRENT_TASKS = 4;
  * TaskManager manages OpenCode CLI task executions with parallel execution
  *
  * Multiple tasks can run concurrently up to maxConcurrentTasks.
- * Each task gets its own isolated PTY process and browser pages (prefixed with task ID).
+ * Each task gets its own isolated session (server mode) or PTY process (fallback).
  */
 export class TaskManager {
   private activeTasks: Map<string, ManagedTask> = new Map();
   private taskQueue: QueuedTask[] = [];
   private maxConcurrentTasks: number;
+  private serverAdapter: OpenCodeServerAdapter | null = null;
+  private useServerMode: boolean = true;
+  private serverInitialized: boolean = false;
+  private serverInitPromise: Promise<void> | null = null;
 
   constructor(options?: { maxConcurrentTasks?: number }) {
     this.maxConcurrentTasks = options?.maxConcurrentTasks ?? DEFAULT_MAX_CONCURRENT_TASKS;
+  }
+
+  /**
+   * Check if server mode (real streaming) is active
+   */
+  isUsingServerMode(): boolean {
+    return this.useServerMode && this.serverAdapter?.isRunning() === true;
+  }
+
+  /**
+   * Initialize the server adapter (called on first task or app startup)
+   */
+  async initializeServer(): Promise<void> {
+    if (this.serverInitialized) return;
+    
+    // Prevent concurrent initialization
+    if (this.serverInitPromise) {
+      return this.serverInitPromise;
+    }
+
+    this.serverInitPromise = this._doInitializeServer();
+    return this.serverInitPromise;
+  }
+
+  private async _doInitializeServer(): Promise<void> {
+    try {
+      console.log('[TaskManager] Initializing server adapter...');
+      this.serverAdapter = getServerAdapter();
+      await this.serverAdapter.start();
+      this.setupServerEventHandlers();
+      this.serverInitialized = true;
+      this.useServerMode = true;
+      console.log('[TaskManager] Server adapter initialized successfully');
+    } catch (error) {
+      console.warn('[TaskManager] Server adapter failed to start, will use PTY fallback:', error);
+      this.useServerMode = false;
+      this.serverInitialized = true; // Mark as initialized even on failure to prevent retries
+    }
+  }
+
+  /**
+   * Setup event handlers for the server adapter
+   */
+  private setupServerEventHandlers(): void {
+    if (!this.serverAdapter) return;
+
+    // Real-time text streaming
+    this.serverAdapter.on('text-delta', ({ sessionId, text }) => {
+      const taskId = this.serverAdapter?.getTaskIdForSession(sessionId);
+      console.log(`[TaskManager:EVENT] text-delta received:`, {
+        sessionId,
+        taskId,
+        textLength: text.length,
+        textPreview: text.substring(0, 30),
+      });
+      if (!taskId) {
+        console.log(`[TaskManager:EVENT] No taskId for session ${sessionId}, skipping`);
+        return;
+      }
+
+      const managedTask = this.activeTasks.get(taskId);
+      if (managedTask?.callbacks.onTextDelta) {
+        console.log(`[TaskManager:EVENT] Forwarding text-delta to callback`);
+        managedTask.callbacks.onTextDelta(text);
+      } else {
+        console.log(`[TaskManager:EVENT] No onTextDelta callback for task ${taskId}`);
+      }
+    });
+
+    // Stream complete - mark streaming message as done
+    this.serverAdapter.on('stream-complete', ({ sessionId }) => {
+      const taskId = this.serverAdapter?.getTaskIdForSession(sessionId);
+      console.log(`[TaskManager:EVENT] stream-complete received:`, { sessionId, taskId });
+      if (!taskId) return;
+
+      const managedTask = this.activeTasks.get(taskId);
+      if (managedTask?.callbacks.onStreamComplete) {
+        console.log(`[TaskManager:EVENT] Forwarding stream-complete to callback`);
+        managedTask.callbacks.onStreamComplete();
+      }
+    });
+
+    // Tool messages (not text - text is handled by text-delta/stream-complete)
+    this.serverAdapter.on('message', (message) => {
+      const sessionId = (message as any).sessionID || (message as any).part?.sessionID;
+      const taskId = sessionId ? this.serverAdapter?.getTaskIdForSession(sessionId) : undefined;
+      console.log(`[TaskManager:EVENT] message received:`, {
+        sessionId,
+        taskId,
+        messageType: message.type,
+      });
+      if (!taskId) return;
+
+      // Only forward non-text messages (tools)
+      // Text messages are handled by text-delta for real streaming
+      if (message.type === 'text') {
+        console.log(`[TaskManager:EVENT] Skipping text message (handled by text-delta)`);
+        return;
+      }
+
+      const managedTask = this.activeTasks.get(taskId);
+      if (managedTask) {
+        console.log(`[TaskManager:EVENT] Forwarding message to callback`);
+        managedTask.callbacks.onMessage(message);
+      }
+    });
+
+    // Tool usage
+    this.serverAdapter.on('tool-use', ({ sessionId, tool, input }) => {
+      const taskId = this.serverAdapter?.getTaskIdForSession(sessionId);
+      if (!taskId) return;
+
+      const managedTask = this.activeTasks.get(taskId);
+      if (managedTask) {
+        managedTask.callbacks.onProgress({
+          stage: 'tool-use',
+          message: `Using ${tool}`,
+        });
+      }
+    });
+
+    // Session status
+    this.serverAdapter.on('session-status', ({ sessionId, status, message }) => {
+      const taskId = this.serverAdapter?.getTaskIdForSession(sessionId);
+      if (!taskId) return;
+
+      const managedTask = this.activeTasks.get(taskId);
+      if (managedTask) {
+        managedTask.callbacks.onProgress({
+          stage: status,
+          message: message || status,
+        });
+      }
+    });
+
+    // Completion
+    this.serverAdapter.on('complete', ({ sessionId, result }) => {
+      const taskId = this.serverAdapter?.getTaskIdForSession(sessionId);
+      if (!taskId) return;
+
+      const managedTask = this.activeTasks.get(taskId);
+      if (managedTask) {
+        managedTask.callbacks.onComplete(result);
+        this.cleanupTask(taskId);
+        this.processQueue();
+      }
+    });
+
+    // Errors
+    this.serverAdapter.on('error', ({ sessionId, error }) => {
+      const taskId = this.serverAdapter?.getTaskIdForSession(sessionId);
+      if (!taskId) return;
+
+      const managedTask = this.activeTasks.get(taskId);
+      if (managedTask) {
+        managedTask.callbacks.onError(new Error(error));
+        this.cleanupTask(taskId);
+        this.processQueue();
+      }
+    });
+
+    // Debug
+    this.serverAdapter.on('debug', (log) => {
+      // Forward to all active tasks (server-level debug)
+      for (const task of this.activeTasks.values()) {
+        task.callbacks.onDebug?.(log);
+      }
+    });
   }
 
   /**
@@ -377,6 +514,9 @@ export class TaskManager {
     if (!cliInstalled) {
       throw new OpenCodeCliNotFoundError();
     }
+
+    // Initialize server if not already done
+    await this.initializeServer();
 
     // Check if task already exists (either running or queued)
     if (this.activeTasks.has(taskId) || this.taskQueue.some(q => q.taskId === taskId)) {
@@ -430,42 +570,95 @@ export class TaskManager {
 
   /**
    * Execute a task immediately (internal)
-   * Supports both PTY-based (OpenCodeAdapter) and SDK-based (ClaudeAgentAdapter)
+   * Uses server adapter (preferred) or PTY adapter (fallback)
    */
   private async executeTask(
     taskId: string,
     config: TaskConfig,
     callbacks: TaskCallbacks
   ): Promise<Task> {
-    // Determine which adapter to use (SDK only works with Anthropic)
-    const usingSdk = shouldUseSdkAdapter();
-    
-    // Create adapter instance based on feature flag
-    const adapter: AgentAdapter = usingSdk 
-      ? createClaudeAgentAdapter(taskId)
-      : new OpenCodeAdapter(taskId);
+    const usingServer = this.useServerMode && this.serverAdapter?.isRunning();
 
-    console.log(`[TaskManager] Using ${usingSdk ? 'Claude SDK' : 'PTY'} adapter for task ${taskId}`);
+    console.log(`[TaskManager] Using ${usingServer ? 'Server' : 'PTY'} mode for task ${taskId}`);
 
-    // Wire up event listeners - different for SDK vs PTY adapter
-    // Using 'any' type here because the two adapters emit different event types
-    // and TypeScript can't unify them properly
-    let onMessage: (message: any) => void;
-    
-    if (usingSdk) {
-      // SDK adapter emits NormalizedEvent, transform to OpenCodeMessage
-      onMessage = (event: NormalizedEvent) => {
-        const message = this.normalizedEventToOpenCodeMessage(event);
-        if (message) {
-          callbacks.onMessage(message);
-        }
-      };
+    // Create task object immediately so UI can navigate
+    const task: Task = {
+      id: taskId,
+      prompt: config.prompt,
+      status: 'running',
+      messages: [],
+      createdAt: new Date().toISOString(),
+    };
+
+    if (usingServer) {
+      // Server mode - use HTTP/SSE
+      return this.executeTaskWithServer(taskId, config, callbacks, task);
     } else {
-      // PTY adapter emits OpenCodeMessage directly
-      onMessage = (message: OpenCodeMessage) => {
-        callbacks.onMessage(message);
-      };
+      // PTY fallback
+      return this.executeTaskWithPty(taskId, config, callbacks, task);
     }
+  }
+
+  /**
+   * Execute task using server adapter (HTTP/SSE mode)
+   */
+  private async executeTaskWithServer(
+    taskId: string,
+    config: TaskConfig,
+    callbacks: TaskCallbacks,
+    task: Task
+  ): Promise<Task> {
+    // Create managed task entry
+    const managedTask: ManagedTask = {
+      taskId,
+      callbacks,
+      cleanup: () => {
+        // Server adapter cleanup is handled by session cleanup
+      },
+      createdAt: new Date(),
+      usingServer: true,
+    };
+    this.activeTasks.set(taskId, managedTask);
+
+    console.log(`[TaskManager] Executing task ${taskId} with server. Active tasks: ${this.activeTasks.size}`);
+
+    // Start session asynchronously (browser will be started lazily when needed by tools)
+    (async () => {
+      try {
+        // NOTE: Don't call ensureDevBrowserServer() here anymore!
+        // The browser will be started lazily when the agent actually uses browser tools.
+        // This prevents Chrome from opening for simple text-only tasks like "hi there".
+        
+        // Create session and send initial message
+        const sessionId = await this.serverAdapter!.createSession(taskId, config);
+        managedTask.sessionId = sessionId;
+
+        console.log(`[TaskManager] Task ${taskId} session created: ${sessionId}`);
+      } catch (error) {
+        callbacks.onError(error instanceof Error ? error : new Error(String(error)));
+        this.cleanupTask(taskId);
+        this.processQueue();
+      }
+    })();
+
+    return task;
+  }
+
+  /**
+   * Execute task using PTY adapter (fallback mode)
+   */
+  private async executeTaskWithPty(
+    taskId: string,
+    config: TaskConfig,
+    callbacks: TaskCallbacks,
+    task: Task
+  ): Promise<Task> {
+    const adapter = new OpenCodeAdapter(taskId);
+
+    // Wire up event listeners
+    const onMessage = (message: OpenCodeMessage) => {
+      callbacks.onMessage(message);
+    };
 
     const onProgress = (progress: { stage: string; message?: string }) => {
       callbacks.onProgress(progress);
@@ -477,14 +670,12 @@ export class TaskManager {
 
     const onComplete = (result: TaskResult) => {
       callbacks.onComplete(result);
-      // Auto-cleanup on completion and process queue
       this.cleanupTask(taskId);
       this.processQueue();
     };
 
     const onError = (error: Error) => {
       callbacks.onError(error);
-      // Auto-cleanup on error and process queue
       this.cleanupTask(taskId);
       this.processQueue();
     };
@@ -494,18 +685,18 @@ export class TaskManager {
     };
 
     // Attach listeners
-    adapter.on('message', onMessage as any);
+    adapter.on('message', onMessage);
     adapter.on('progress', onProgress);
-    adapter.on('permission-request', onPermissionRequest as any);
+    adapter.on('permission-request', onPermissionRequest);
     adapter.on('complete', onComplete);
     adapter.on('error', onError);
     adapter.on('debug', onDebug);
 
     // Create cleanup function
     const cleanup = () => {
-      adapter.off('message', onMessage as any);
+      adapter.off('message', onMessage);
       adapter.off('progress', onProgress);
-      adapter.off('permission-request', onPermissionRequest as any);
+      adapter.off('permission-request', onPermissionRequest);
       adapter.off('complete', onComplete);
       adapter.off('error', onError);
       adapter.off('debug', onDebug);
@@ -519,33 +710,19 @@ export class TaskManager {
       callbacks,
       cleanup,
       createdAt: new Date(),
-      usingSdk,
+      usingServer: false,
     };
     this.activeTasks.set(taskId, managedTask);
 
-    console.log(`[TaskManager] Executing task ${taskId}. Active tasks: ${this.activeTasks.size}`);
+    console.log(`[TaskManager] Executing task ${taskId} with PTY. Active tasks: ${this.activeTasks.size}`);
 
-    // Create task object immediately so UI can navigate
-    const task: Task = {
-      id: taskId,
-      prompt: config.prompt,
-      status: 'running',
-      messages: [],
-      createdAt: new Date().toISOString(),
-    };
-
-    // Start browser setup and agent asynchronously
-    // This allows the UI to navigate immediately while setup happens
+    // Start agent asynchronously (browser will be started lazily when needed by tools)
     (async () => {
       try {
-        // Ensure browser is available (may download Playwright if needed)
-        // SDK adapter handles browser via MCP servers, but still good to pre-warm
-        await ensureDevBrowserServer(callbacks.onProgress);
-
-        // Now start the agent
+        // NOTE: Don't call ensureDevBrowserServer() here anymore!
+        // The browser will be started lazily when the agent actually uses browser tools.
         await adapter.startTask({ ...config, taskId });
       } catch (error) {
-        // Cleanup on failure and process queue
         callbacks.onError(error instanceof Error ? error : new Error(String(error)));
         this.cleanupTask(taskId);
         this.processQueue();
@@ -553,88 +730,6 @@ export class TaskManager {
     })();
 
     return task;
-  }
-
-  /**
-   * Convert SDK NormalizedEvent to OpenCodeMessage format
-   * This maintains backwards compatibility with the existing UI
-   */
-  private normalizedEventToOpenCodeMessage(event: NormalizedEvent): OpenCodeMessage | null {
-    const baseId = `sdk_${Date.now()}`;
-    const sessionId = event.sessionId || '';
-    
-    switch (event.type) {
-      case 'text':
-      case 'text_delta':
-        return {
-          type: 'text',
-          part: {
-            id: baseId,
-            sessionID: sessionId,
-            messageID: baseId,
-            type: 'text',
-            text: event.content || '',
-          },
-        };
-      
-      case 'thinking':
-        // Thinking content is sent as regular text.
-        // The UI will detect this as thinking when followed by a tool call message
-        return {
-          type: 'text',
-          part: {
-            id: baseId,
-            sessionID: sessionId,
-            messageID: baseId,
-            type: 'text',
-            text: event.content || '',
-          },
-        };
-      
-      case 'tool_use_start':
-        return {
-          type: 'tool_use',
-          part: {
-            id: event.toolCallId || baseId,
-            sessionID: sessionId,
-            messageID: baseId,
-            type: 'tool',
-            tool: event.toolName || 'unknown',
-            state: {
-              status: 'running',
-              input: event.toolInput,
-            },
-          },
-        };
-      
-      case 'tool_use_result':
-        return {
-          type: 'tool_result',
-          part: {
-            id: baseId,
-            sessionID: sessionId,
-            messageID: baseId,
-            type: 'tool-result',
-            toolCallID: event.toolCallId || baseId,
-            output: event.toolResult || '',
-            isError: event.isError,
-          },
-        };
-      
-      case 'error':
-        return {
-          type: 'error',
-          error: event.error || 'Unknown error',
-        };
-      
-      case 'session_init':
-      case 'done':
-        // These don't need to be forwarded as messages
-        return null;
-      
-      default:
-        return null;
-    }
   }
 
   /**
@@ -684,10 +779,13 @@ export class TaskManager {
     console.log(`[TaskManager] Cancelling running task ${taskId}`);
 
     try {
-      await managedTask.adapter.cancelTask();
+      if (managedTask.usingServer && managedTask.sessionId) {
+        await this.serverAdapter?.interruptSession(managedTask.sessionId);
+      } else if (managedTask.adapter) {
+        await managedTask.adapter.cancelTask();
+      }
     } finally {
       this.cleanupTask(taskId);
-      // Process queue after cancellation
       this.processQueue();
     }
   }
@@ -705,7 +803,12 @@ export class TaskManager {
     }
 
     console.log(`[TaskManager] Interrupting task ${taskId}`);
-    await managedTask.adapter.interruptTask();
+    
+    if (managedTask.usingServer && managedTask.sessionId) {
+      await this.serverAdapter?.interruptSession(managedTask.sessionId);
+    } else if (managedTask.adapter) {
+      await managedTask.adapter.interruptTask();
+    }
   }
 
   /**
@@ -761,7 +864,12 @@ export class TaskManager {
       throw new Error(`Task ${taskId} not found or not active`);
     }
 
-    await managedTask.adapter.sendResponse(response);
+    if (managedTask.usingServer && managedTask.sessionId) {
+      // For server mode, send as a follow-up message
+      await this.serverAdapter?.continueSession(managedTask.sessionId, response);
+    } else if (managedTask.adapter) {
+      await managedTask.adapter.sendResponse(response);
+    }
   }
 
   /**
@@ -769,7 +877,10 @@ export class TaskManager {
    */
   getSessionId(taskId: string): string | null {
     const managedTask = this.activeTasks.get(taskId);
-    return managedTask?.adapter.getSessionId() ?? null;
+    if (managedTask?.usingServer) {
+      return managedTask.sessionId || null;
+    }
+    return managedTask?.adapter?.getSessionId() ?? null;
   }
 
   /**
@@ -819,7 +930,7 @@ export class TaskManager {
    * Dispose all tasks and cleanup resources
    * Called on app quit
    */
-  dispose(): void {
+  async dispose(): Promise<void> {
     console.log(`[TaskManager] Disposing all tasks (${this.activeTasks.size} active, ${this.taskQueue.length} queued)`);
 
     // Clear the queue
@@ -834,6 +945,17 @@ export class TaskManager {
     }
 
     this.activeTasks.clear();
+
+    // Stop the server adapter
+    if (this.serverAdapter) {
+      try {
+        await this.serverAdapter.stop();
+      } catch (error) {
+        console.error('[TaskManager] Error stopping server adapter:', error);
+      }
+      this.serverAdapter = null;
+    }
+
     console.log('[TaskManager] All tasks disposed');
   }
 }
@@ -855,9 +977,28 @@ export function getTaskManager(): TaskManager {
  * Dispose the global TaskManager instance
  * Called on app quit
  */
-export function disposeTaskManager(): void {
+export async function disposeTaskManager(): Promise<void> {
   if (taskManagerInstance) {
-    taskManagerInstance.dispose();
+    await taskManagerInstance.dispose();
     taskManagerInstance = null;
   }
+  
+  // Also dispose the server adapter singleton
+  await disposeServerAdapter();
+}
+
+/**
+ * Initialize the server adapter (can be called on app startup)
+ */
+export async function initializeTaskManager(): Promise<void> {
+  const manager = getTaskManager();
+  await manager.initializeServer();
+}
+
+/**
+ * Check if server mode (real streaming) is active
+ */
+export function isServerModeActive(): boolean {
+  if (!taskManagerInstance) return false;
+  return taskManagerInstance.isUsingServerMode();
 }

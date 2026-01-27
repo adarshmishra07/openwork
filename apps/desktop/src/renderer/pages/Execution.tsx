@@ -1630,6 +1630,7 @@ const MessageBubble = memo(function MessageBubble({
             text={message.content}
             speed={120}
             isComplete={streamComplete}
+            isStreaming={message.isStreaming}
             onComplete={() => setStreamComplete(true)}
           >
             {(streamedText) => (
