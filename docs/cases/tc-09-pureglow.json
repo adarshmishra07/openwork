@@ -1,0 +1,86 @@
+{
+  "name": "PureGlow",
+  "overview": "Artisanal candle brand creating hand-poured soy candles inspired by Nordic hygge. Each candle is crafted in small batches using natural ingredients, designed to transform any space into a cozy sanctuary of warmth and tranquility.",
+  "industry": "Home Fragrance",
+  "targetAudience": "Women aged 28-45 who value self-care, creating cozy home environments, and artisanal products. Likely interested in wellness, interior design, and Scandinavian lifestyle concepts.",
+  "tagline": {
+    "text": "Light your sanctuary",
+    "tones": ["elegant", "minimal", "luxury"]
+  },
+  "logo": {
+    "urls": ["https://images.unsplash.com/photo-1602607434298-8d3f20f5c5e5?w=200"],
+    "colors": ["#D4A574", "#F5E6D3", "#3D3D3D"]
+  },
+  "palette": {
+    "primary": [
+      { "hex": "#D4A574", "label": "Honey Glow" },
+      { "hex": "#E8D5C4", "label": "Warm Blush" }
+    ],
+    "secondary": [
+      { "hex": "#F5E6D3", "label": "Cream" },
+      { "hex": "#3D3D3D", "label": "Charcoal" }
+    ],
+    "other": [
+      { "hex": "#C9B99A", "label": "Oat" },
+      { "hex": "#8B7355", "label": "Amber" }
+    ]
+  },
+  "fonts": [
+    {
+      "family": "Playfair Display",
+      "weight": "400",
+      "color": "#3D3D3D"
+    }
+  ],
+  "voice": {
+    "template": "luxury",
+    "tone": "Warm, poetic, and intimate. We speak like a cherished friend sharing secrets to a cozy evening at home.",
+    "personality": ["sophisticated", "caring", "authentic", "trustworthy"],
+    "vocabulary": {
+      "preferred": ["hand-poured", "artisanal", "sanctuary", "hygge", "cozy", "ritual", "warmth", "tranquil", "amber glow", "nest"],
+      "avoided": ["cheap", "synthetic", "artificial", "strong", "overpowering", "budget", "basic", "generic"]
+    },
+    "examples": [
+      "As the first flame catches, watch the room transform. Notes of cedar and vanilla unfurl slowly, wrapping your evening in warmth.",
+      "Hand-poured in small batches, each candle holds 60 hours of hygge—enough to carry you through countless cozy evenings."
+    ]
+  },
+  "rules": {
+    "doStatements": [
+      "Always describe scents using layered, sensory language",
+      "Reference the hand-crafted, small-batch nature of products",
+      "Connect candles to moments, rituals, and emotions",
+      "Use Scandinavian concepts like hygge authentically"
+    ],
+    "dontStatements": [
+      "Never use clinical fragrance terminology",
+      "Avoid comparing to mass-market candle brands",
+      "Don't use aggressive marketing language",
+      "Never describe scents as simply 'strong' or 'light'"
+    ]
+  },
+  "site_images": [
+    "https://images.unsplash.com/photo-1602607434298-8d3f20f5c5e5?w=800",
+    "https://images.unsplash.com/photo-1603006905003-be475563bc59?w=800",
+    "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?w=800"
+  ],
+  "characters": [],
+  "scenes": [
+    {
+      "url": "https://images.unsplash.com/photo-1603006905003-be475563bc59?w=800",
+      "metadata": {
+        "name": "Cozy Evening",
+        "description": "Warm living room with lit candles, soft blankets, and books",
+        "type": "home"
+      }
+    },
+    {
+      "url": "https://images.unsplash.com/photo-1602607434298-8d3f20f5c5e5?w=800",
+      "metadata": {
+        "name": "Candle Workshop",
+        "description": "Artisan workspace with candle-making supplies, natural lighting",
+        "type": "studio"
+      }
+    }
+  ]
+}

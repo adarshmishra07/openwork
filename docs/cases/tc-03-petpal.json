@@ -1,0 +1,95 @@
+{
+  "name": "PetPal",
+  "overview": "Fun, premium dog accessories brand for devoted pet parents who treat their fur babies like family. We create stylish, durable products that make every walk an adventure and every moment with your pup Instagram-worthy.",
+  "industry": "Pet Supplies",
+  "targetAudience": "Millennial dog owners aged 28-40 who consider their dogs family members. Active on social media, willing to spend on quality products, often refers to themselves as 'dog mom' or 'dog dad'.",
+  "tagline": {
+    "text": "Because they're family",
+    "tones": ["playful", "modern", "casual"]
+  },
+  "logo": {
+    "urls": ["https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=200"],
+    "colors": ["#FF8C42", "#4ECDC4", "#2C3E50"]
+  },
+  "palette": {
+    "primary": [
+      { "hex": "#FF8C42", "label": "Pumpkin" },
+      { "hex": "#4ECDC4", "label": "Teal Pop" }
+    ],
+    "secondary": [
+      { "hex": "#2C3E50", "label": "Charcoal" },
+      { "hex": "#F7F7F7", "label": "Snow" }
+    ],
+    "other": [
+      { "hex": "#FFE66D", "label": "Sunshine" },
+      { "hex": "#95E1D3", "label": "Mint" }
+    ]
+  },
+  "fonts": [
+    {
+      "family": "Poppins",
+      "weight": "600",
+      "color": "#2C3E50"
+    }
+  ],
+  "voice": {
+    "template": "playful",
+    "tone": "Warm, playful, and enthusiastic. We speak dog-parent to dog-parent, with lots of love and a touch of humor.",
+    "personality": ["playful", "friendly", "caring", "authentic"],
+    "vocabulary": {
+      "preferred": ["pupper", "fur baby", "pawrent", "good boy/girl", "walkies", "zoomies", "snoot", "boop", "tail wags", "adventures"],
+      "avoided": ["owner", "it", "animal", "mutt", "cheap", "budget", "bargain"]
+    },
+    "examples": [
+      "Ready for walkies? Our adventure harness keeps your good boy secure while you both explore the world together!",
+      "Spoil your fur baby (they deserve it, obviously) with our ultra-cozy beds designed for maximum snooze comfort."
+    ]
+  },
+  "rules": {
+    "doStatements": [
+      "Always refer to pets with personality and emotion",
+      "Use playful dog-parent language naturally",
+      "Emphasize safety and durability in product descriptions",
+      "Include cute dog puns when appropriate"
+    ],
+    "dontStatements": [
+      "Never use 'owner' - always 'pet parent' or 'pawrent'",
+      "Don't refer to dogs as 'it' - use 'they' or he/she",
+      "Avoid clinical or veterinary language",
+      "Never suggest products are just for 'pets' - they're for family"
+    ]
+  },
+  "site_images": [
+    "https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=800",
+    "https://images.unsplash.com/photo-1544568100-847a948585b9?w=800",
+    "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?w=800"
+  ],
+  "characters": [
+    {
+      "url": "https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=800",
+      "metadata": {
+        "name": "Charlie",
+        "description": "Happy golden retriever, the brand mascot",
+        "appearance": "Golden retriever with bright eyes and happy expression"
+      }
+    }
+  ],
+  "scenes": [
+    {
+      "url": "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?w=800",
+      "metadata": {
+        "name": "Park Adventure",
+        "description": "Sunny park setting with dogs playing",
+        "type": "outdoor"
+      }
+    },
+    {
+      "url": "https://images.unsplash.com/photo-1601758228041-f3b2795255f1?w=800",
+      "metadata": {
+        "name": "Cozy Home",
+        "description": "Modern living room with dog bed and toys",
+        "type": "home"
+      }
+    }
+  ]
+}

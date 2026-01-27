@@ -109,6 +109,143 @@ async function shopifyFetch<T>(endpoint: string, options: RequestInit = {}): Pro
 }
 
 // ============================================================================
+// Permission Helper
+// ============================================================================
+
+const SHOPIFY_PERMISSION_API_URL = 'http://localhost:9228/shopify-permission';
+
+type ShopifyOperationType = 'create' | 'update' | 'delete';
+type ShopifyResourceType = 'product' | 'variant' | 'inventory';
+
+interface PermissionDetails {
+  title?: string;
+  price?: string;
+  productId?: number;
+  variantId?: number;
+  quantity?: number;
+  status?: string;
+}
+
+/**
+ * Request permission from the user before performing a Shopify write operation.
+ * Returns true if allowed, false if denied.
+ */
+async function requestPermission(
+  operation: ShopifyOperationType,
+  resource: ShopifyResourceType,
+  details: PermissionDetails
+): Promise<{ allowed: boolean; error?: string }> {
+  try {
+    const response = await fetch(SHOPIFY_PERMISSION_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ operation, resource, details }),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      console.error('[Shopify MCP] Permission API error:', errorData);
+      // If permission API is not available, deny for safety
+      return { allowed: false, error: errorData.error || 'Permission API unavailable' };
+    }
+    
+    const data = await response.json();
+    return { allowed: data.allowed === true };
+  } catch (error) {
+    // If permission API is not reachable, deny for safety
+    console.error('[Shopify MCP] Permission API unreachable:', error);
+    return { allowed: false, error: 'Permission API unreachable' };
+  }
+}
+
+/**
+ * Format operation label for user-friendly display
+ */
+function getOperationLabel(operation: ShopifyOperationType, resource: ShopifyResourceType): string {
+  const opLabels: Record<ShopifyOperationType, string> = {
+    create: 'creating',
+    update: 'updating', 
+    delete: 'deleting',
+  };
+  return `${opLabels[operation]} ${resource}`;
+}
+
+// ============================================================================
+// Currency Helper
+// ============================================================================
+
+// Map of currency codes to symbols
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  'INR': '₹',
+  'USD': '$',
+  'EUR': '€',
+  'GBP': '£',
+  'JPY': '¥',
+  'CAD': 'CA$',
+  'AUD': 'A$',
+  'CNY': '¥',
+  'KRW': '₩',
+  'SGD': 'S$',
+  'HKD': 'HK$',
+  'MXN': 'MX$',
+  'BRL': 'R$',
+  'RUB': '₽',
+  'CHF': 'CHF',
+  'SEK': 'kr',
+  'NOK': 'kr',
+  'DKK': 'kr',
+  'NZD': 'NZ$',
+  'ZAR': 'R',
+  'AED': 'د.إ',
+  'SAR': '﷼',
+  'THB': '฿',
+  'MYR': 'RM',
+  'PHP': '₱',
+  'IDR': 'Rp',
+  'VND': '₫',
+  'PLN': 'zł',
+  'TRY': '₺',
+  'ILS': '₪',
+  'COP': 'COL$',
+  'ARS': 'AR$',
+  'CLP': 'CLP$',
+  'PEN': 'S/',
+};
+
+/**
+ * Get currency symbol from currency code
+ */
+function getCurrencySymbol(currencyCode: string): string {
+  return CURRENCY_SYMBOLS[currencyCode.toUpperCase()] || currencyCode;
+}
+
+// Cached shop info (currency, etc.)
+let cachedShopInfo: { currency: string; currencySymbol: string; name: string } | null = null;
+
+/**
+ * Get and cache shop context (currency, name, etc.)
+ */
+async function getShopContext(): Promise<{ currency: string; currencySymbol: string; name: string }> {
+  if (cachedShopInfo) {
+    return cachedShopInfo;
+  }
+  
+  try {
+    const result = await shopifyFetch<{ shop: { currency: string; name: string } }>('/shop.json');
+    cachedShopInfo = {
+      currency: result.shop.currency,
+      currencySymbol: getCurrencySymbol(result.shop.currency),
+      name: result.shop.name,
+    };
+    return cachedShopInfo;
+  } catch (error) {
+    // Default to INR if we can't fetch shop info
+    console.error('[Shopify MCP] Failed to fetch shop info:', error);
+    return { currency: 'INR', currencySymbol: '₹', name: 'Shop' };
+  }
+}
+
+// ============================================================================
 // Tool Definitions
 // ============================================================================
 
@@ -416,9 +553,10 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
         if (args.vendor) params.set('vendor', String(args.vendor));
         
         const query = params.toString();
-        const result = await shopifyFetch<{ products: ShopifyProduct[] }>(
-          `/products.json${query ? `?${query}` : ''}`
-        );
+        const [result, shopContext] = await Promise.all([
+          shopifyFetch<{ products: ShopifyProduct[] }>(`/products.json${query ? `?${query}` : ''}`),
+          getShopContext(),
+        ]);
         
         // Simplify output for readability
         const simplified = result.products.map(p => ({
@@ -433,21 +571,34 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
           image: p.images[0]?.src,
         }));
         
-        return JSON.stringify({ products: simplified, count: simplified.length }, null, 2);
+        return JSON.stringify({ 
+          products: simplified, 
+          count: simplified.length,
+          currency: shopContext.currency,
+          currencySymbol: shopContext.currencySymbol,
+          note: `All prices are in ${shopContext.currency}. Use "${shopContext.currencySymbol}" symbol when displaying prices.`,
+        }, null, 2);
       }
 
       case 'shopify_get_product': {
-        const result = await shopifyFetch<{ product: ShopifyProduct }>(
-          `/products/${args.product_id}.json`
-        );
-        return JSON.stringify(result.product, null, 2);
+        const [result, shopContext] = await Promise.all([
+          shopifyFetch<{ product: ShopifyProduct }>(`/products/${args.product_id}.json`),
+          getShopContext(),
+        ]);
+        return JSON.stringify({
+          ...result.product,
+          currency: shopContext.currency,
+          currencySymbol: shopContext.currencySymbol,
+          note: `Prices are in ${shopContext.currency}. Use "${shopContext.currencySymbol}" symbol.`,
+        }, null, 2);
       }
 
       case 'shopify_search_products': {
         const limit = args.limit || 10;
-        const result = await shopifyFetch<{ products: ShopifyProduct[] }>(
-          `/products.json?title=${encodeURIComponent(String(args.query))}&limit=${limit}`
-        );
+        const [result, shopContext] = await Promise.all([
+          shopifyFetch<{ products: ShopifyProduct[] }>(`/products.json?title=${encodeURIComponent(String(args.query))}&limit=${limit}`),
+          getShopContext(),
+        ]);
         
         const simplified = result.products.map(p => ({
           id: p.id,
@@ -456,10 +607,29 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
           inventory: p.variants[0]?.inventory_quantity,
         }));
         
-        return JSON.stringify({ products: simplified, count: simplified.length }, null, 2);
+        return JSON.stringify({ 
+          products: simplified, 
+          count: simplified.length,
+          currency: shopContext.currency,
+          currencySymbol: shopContext.currencySymbol,
+        }, null, 2);
       }
 
       case 'shopify_create_product': {
+        // Request permission before creating product
+        const permissionResult = await requestPermission('create', 'product', {
+          title: String(args.title || ''),
+          price: args.price ? String(args.price) : undefined,
+          status: args.status ? String(args.status) : 'draft',
+        });
+        
+        if (!permissionResult.allowed) {
+          return JSON.stringify({
+            error: `User rejected ${getOperationLabel('create', 'product')}: "${args.title}"`,
+            denied: true,
+          }, null, 2);
+        }
+
         // Build product object
         const productData: Record<string, unknown> = {
           title: args.title,
@@ -509,6 +679,21 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
 
       case 'shopify_update_product': {
         const { product_id, ...updates } = args;
+        
+        // Request permission before updating product
+        const permissionResult = await requestPermission('update', 'product', {
+          productId: Number(product_id),
+          title: updates.title ? String(updates.title) : undefined,
+          status: updates.status ? String(updates.status) : undefined,
+        });
+        
+        if (!permissionResult.allowed) {
+          return JSON.stringify({
+            error: `User rejected ${getOperationLabel('update', 'product')}: ${updates.title || `ID ${product_id}`}`,
+            denied: true,
+          }, null, 2);
+        }
+
         const result = await shopifyFetch<{ product: ShopifyProduct }>(
           `/products/${product_id}.json`,
           {
@@ -520,6 +705,19 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
       }
 
       case 'shopify_update_variant_price': {
+        // Request permission before updating price
+        const permissionResult = await requestPermission('update', 'variant', {
+          variantId: Number(args.variant_id),
+          price: args.price ? String(args.price) : undefined,
+        });
+        
+        if (!permissionResult.allowed) {
+          return JSON.stringify({
+            error: `User rejected ${getOperationLabel('update', 'variant')} price to ${args.price}`,
+            denied: true,
+          }, null, 2);
+        }
+
         const result = await shopifyFetch<{ variant: ShopifyVariant }>(
           `/variants/${args.variant_id}.json`,
           {
@@ -576,6 +774,18 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
       }
 
       case 'shopify_set_inventory': {
+        // Request permission before setting inventory
+        const permissionResult = await requestPermission('update', 'inventory', {
+          quantity: Number(args.quantity),
+        });
+        
+        if (!permissionResult.allowed) {
+          return JSON.stringify({
+            error: `User rejected ${getOperationLabel('update', 'inventory')} to ${args.quantity}`,
+            denied: true,
+          }, null, 2);
+        }
+
         const result = await shopifyFetch<{ inventory_level: { available: number } }>(
           '/inventory_levels/set.json',
           {

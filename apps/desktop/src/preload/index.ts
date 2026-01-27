@@ -46,7 +46,7 @@ const accomplishAPI = {
   // Settings
   getApiKeys: (): Promise<unknown[]> => ipcRenderer.invoke('settings:api-keys'),
   addApiKey: (
-    provider: 'anthropic' | 'openai' | 'openrouter' | 'google' | 'xai' | 'deepseek' | 'zai' | 'custom' | 'bedrock' | 'litellm',
+    provider: 'anthropic' | 'openai' | 'openrouter' | 'google' | 'xai' | 'deepseek' | 'zai' | 'custom' | 'kimi' | 'litellm',
     key: string,
     label?: string
   ): Promise<unknown> =>
@@ -140,15 +140,9 @@ const accomplishAPI = {
   setLiteLLMConfig: (config: { baseUrl: string; enabled: boolean; lastValidated?: number; models?: Array<{ id: string; name: string; provider: string; contextLength: number }> } | null): Promise<void> =>
     ipcRenderer.invoke('litellm:set-config', config),
 
-  // Bedrock
-  validateBedrockCredentials: (credentials: string) =>
-    ipcRenderer.invoke('bedrock:validate', credentials),
-  saveBedrockCredentials: (credentials: string) =>
-    ipcRenderer.invoke('bedrock:save', credentials),
-  getBedrockCredentials: () =>
-    ipcRenderer.invoke('bedrock:get-credentials'),
-  fetchBedrockModels: (credentials: string): Promise<{ success: boolean; models: Array<{ id: string; name: string; provider: string }>; error?: string }> =>
-    ipcRenderer.invoke('bedrock:fetch-models', credentials),
+  // Kimi (Moonshot) API validation
+  validateKimiApiKey: (apiKey: string): Promise<{ valid: boolean; error?: string }> =>
+    ipcRenderer.invoke('kimi:validate', apiKey),
 
   // E2E Testing
   isE2EMode: (): Promise<boolean> =>
@@ -235,6 +229,12 @@ const accomplishAPI = {
     const listener = (_: unknown, data: { taskId: string; summary: string }) => callback(data);
     ipcRenderer.on('task:summary', listener);
     return () => ipcRenderer.removeListener('task:summary', listener);
+  },
+  // Late question response - user answered after MCP timeout, need to resume session
+  onQuestionLateResponse: (callback: (data: { taskId: string; sessionId: string; answer: string }) => void) => {
+    const listener = (_: unknown, data: { taskId: string; sessionId: string; answer: string }) => callback(data);
+    ipcRenderer.on('question:late-response', listener);
+    return () => ipcRenderer.removeListener('question:late-response', listener);
   },
 
   logEvent: (payload: { level?: string; message: string; context?: Record<string, unknown> }) =>

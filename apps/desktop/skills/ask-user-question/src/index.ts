@@ -17,6 +17,12 @@ import {
 const QUESTION_API_PORT = process.env.QUESTION_API_PORT || '9227';
 const QUESTION_API_URL = `http://localhost:${QUESTION_API_PORT}/question`;
 
+// Logging helper - uses stderr so it doesn't interfere with MCP stdio
+const log = (msg: string, data?: unknown) => {
+  const timestamp = new Date().toISOString();
+  console.error(`[AskUserQuestion MCP ${timestamp}] ${msg}`, data ? JSON.stringify(data, null, 2) : '');
+};
+
 interface QuestionOption {
   label: string;
   description?: string;
@@ -98,7 +104,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 
 // Handle tool calls
 server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToolResult> => {
+  log('>>> Tool call received', { toolName: request.params.name });
+  
   if (request.params.name !== 'AskUserQuestion') {
+    log('Unknown tool requested', { toolName: request.params.name });
     return {
       content: [{ type: 'text', text: `Error: Unknown tool: ${request.params.name}` }],
       isError: true,
@@ -107,9 +116,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToo
 
   const args = request.params.arguments as AskUserQuestionInput;
   const { questions } = args;
+  
+  log('AskUserQuestion called', { questionCount: questions?.length, firstQuestion: questions?.[0]?.question?.substring(0, 50) });
 
   // Validate required fields
   if (!questions || questions.length === 0) {
+    log('Validation failed: no questions');
     return {
       content: [{ type: 'text', text: 'Error: At least one question is required' }],
       isError: true,
@@ -118,6 +130,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToo
 
   const question = questions[0];
   if (!question.question) {
+    log('Validation failed: empty question text');
     return {
       content: [{ type: 'text', text: 'Error: Question text is required' }],
       isError: true,
@@ -125,20 +138,40 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToo
   }
 
   try {
+    log('>>> Sending HTTP request to Question API', { url: QUESTION_API_URL, question: question.question.substring(0, 50) });
+    
+    // Create abort controller with 5-minute timeout
+    // This matches the MCP config timeout, giving users plenty of time to respond.
+    // The agent will wait for the user's answer before continuing.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      log('>>> Timeout reached after 5 minutes - user did not respond');
+      controller.abort();
+    }, 300000); // 5 minutes - match MCP config timeout
+    
     // Call Electron main process HTTP endpoint
-    const response = await fetch(QUESTION_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        question: question.question,
-        header: question.header,
-        options: question.options,
-        multiSelect: question.multiSelect,
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(QUESTION_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: question.question,
+          header: question.header,
+          options: question.options,
+          multiSelect: question.multiSelect,
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    log('<<< HTTP response received', { status: response.status, ok: response.ok });
 
     if (!response.ok) {
       const errorText = await response.text();
+      log('HTTP error response', { status: response.status, errorText });
       return {
         content: [{ type: 'text', text: `Error: Question API returned ${response.status}: ${errorText}` }],
         isError: true,
@@ -151,8 +184,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToo
       customText?: string;
       denied?: boolean;
     };
+    
+    log('<<< Question API result', result);
 
     if (result.denied) {
+      log('User denied/skipped question');
       return {
         content: [{ type: 'text', text: 'User declined to answer the question.' }],
       };
@@ -160,22 +196,38 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToo
 
     // Format response for the agent
     if (result.selectedOptions && result.selectedOptions.length > 0) {
+      log('User selected options', { selectedOptions: result.selectedOptions });
       return {
         content: [{ type: 'text', text: `User selected: ${result.selectedOptions.join(', ')}` }],
       };
     }
 
     if (result.customText) {
+      log('User provided custom text', { customText: result.customText.substring(0, 50) });
       return {
         content: [{ type: 'text', text: `User responded: ${result.customText}` }],
       };
     }
 
+    log('No user response received');
     return {
       content: [{ type: 'text', text: 'User provided no response.' }],
     };
   } catch (error) {
+    // Handle abort/timeout - this means user didn't respond within 5 minutes
+    if (error instanceof Error && error.name === 'AbortError') {
+      log('>>> Question timed out after 5 minutes - user did not respond');
+      return {
+        content: [{ 
+          type: 'text', 
+          text: 'Question timed out - user did not respond within 5 minutes. Please proceed without this input or ask a simpler question.' 
+        }],
+        isError: true,  // This is now a true timeout failure
+      };
+    }
+    
     const errorMessage = error instanceof Error ? error.message : String(error);
+    log('!!! HTTP request failed', { error: errorMessage });
     return {
       content: [{ type: 'text', text: `Error: Failed to ask question: ${errorMessage}` }],
       isError: true,
@@ -185,9 +237,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToo
 
 // Start the MCP server
 async function main() {
+  log('=== Starting AskUserQuestion MCP Server ===');
+  log('Configuration', { QUESTION_API_PORT, QUESTION_API_URL });
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('AskUserQuestion MCP Server started');
+  log('=== AskUserQuestion MCP Server connected and ready ===');
 }
 
 main().catch((error) => {

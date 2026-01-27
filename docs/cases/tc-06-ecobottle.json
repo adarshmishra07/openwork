@@ -1,0 +1,86 @@
+{
+  "name": "EcoBottle",
+  "overview": "Sustainable reusable water bottle company on a mission to eliminate single-use plastic. We create beautifully designed, durable bottles that make choosing sustainability the easiest choice. Every purchase helps fund ocean cleanup initiatives.",
+  "industry": "Sustainable Goods",
+  "targetAudience": "Environmentally conscious consumers aged 22-40 who want to reduce their plastic footprint. Active outdoors, health-focused, values transparency and corporate responsibility.",
+  "tagline": {
+    "text": "Refill. Reuse. Restore.",
+    "tones": ["modern", "bold", "professional"]
+  },
+  "logo": {
+    "urls": ["https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=200"],
+    "colors": ["#0077B6", "#90E0EF", "#03045E"]
+  },
+  "palette": {
+    "primary": [
+      { "hex": "#0077B6", "label": "Ocean Blue" },
+      { "hex": "#00B4D8", "label": "Wave" }
+    ],
+    "secondary": [
+      { "hex": "#90E0EF", "label": "Seafoam" },
+      { "hex": "#03045E", "label": "Deep Sea" }
+    ],
+    "other": [
+      { "hex": "#CAF0F8", "label": "Sky" },
+      { "hex": "#2D6A4F", "label": "Forest" }
+    ]
+  },
+  "fonts": [
+    {
+      "family": "Work Sans",
+      "weight": "500",
+      "color": "#03045E"
+    }
+  ],
+  "voice": {
+    "template": "friendly",
+    "tone": "Optimistic, transparent, and action-oriented. We inspire change without guilt-tripping, celebrating every small step toward sustainability.",
+    "personality": ["authentic", "trustworthy", "caring", "innovative", "adventurous"],
+    "vocabulary": {
+      "preferred": ["sustainable", "planet-positive", "ocean-friendly", "reusable", "impact", "transparent", "mission-driven", "community", "refill revolution", "every sip counts"],
+      "avoided": ["eco-warrior", "sacrifice", "guilt", "shame", "preachy", "virtue", "perfect", "zero waste" ]
+    },
+    "examples": [
+      "One bottle. 500 plastic bottles saved per year. Your daily hydration just became planet-positive.",
+      "We track every bottle's impact—from the recycled steel it's made from to the ocean cleanup projects your purchase supports."
+    ]
+  },
+  "rules": {
+    "doStatements": [
+      "Always include specific impact metrics when possible",
+      "Be transparent about materials and supply chain",
+      "Celebrate progress, not perfection",
+      "Connect individual actions to collective impact"
+    ],
+    "dontStatements": [
+      "Never guilt-trip or shame customers about their choices",
+      "Avoid vague environmental claims without data",
+      "Don't use 'zero waste' - we're honest that some waste exists",
+      "Never greenwash or overstate environmental benefits"
+    ]
+  },
+  "site_images": [
+    "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=800",
+    "https://images.unsplash.com/photo-1581574919402-5b7d733224d6?w=800",
+    "https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=800"
+  ],
+  "characters": [],
+  "scenes": [
+    {
+      "url": "https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=800",
+      "metadata": {
+        "name": "Beach Cleanup",
+        "description": "Volunteers cleaning beach, positive environmental action",
+        "type": "outdoor"
+      }
+    },
+    {
+      "url": "https://images.unsplash.com/photo-1571008887538-b36bb32f4571?w=800",
+      "metadata": {
+        "name": "Mountain Hike",
+        "description": "Hiker with reusable bottle in beautiful mountain landscape",
+        "type": "outdoor"
+      }
+    }
+  ]
+}

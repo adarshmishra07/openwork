@@ -1,0 +1,86 @@
+{
+  "name": "MinimalHome",
+  "overview": "Scandinavian-inspired furniture brand for design-conscious homeowners who believe in 'less but better.' We create timeless, functional pieces with clean lines and sustainable materials that transform spaces into sanctuaries of calm.",
+  "industry": "Home & Furniture",
+  "targetAudience": "Urban professionals aged 30-45 with disposable income who value quality over quantity. Design-savvy, sustainability-minded, likely readers of Dwell or Kinfolk magazines.",
+  "tagline": {
+    "text": "Less, but better",
+    "tones": ["minimal", "elegant", "professional"]
+  },
+  "logo": {
+    "urls": ["https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=200"],
+    "colors": ["#2B2B2B", "#E8E4DE", "#B8A99A"]
+  },
+  "palette": {
+    "primary": [
+      { "hex": "#2B2B2B", "label": "Charcoal" },
+      { "hex": "#E8E4DE", "label": "Warm White" }
+    ],
+    "secondary": [
+      { "hex": "#B8A99A", "label": "Warm Gray" },
+      { "hex": "#D4C4A8", "label": "Natural Oak" }
+    ],
+    "other": [
+      { "hex": "#8B7355", "label": "Walnut" },
+      { "hex": "#F5F5F5", "label": "Snow" }
+    ]
+  },
+  "fonts": [
+    {
+      "family": "Inter",
+      "weight": "300",
+      "color": "#2B2B2B"
+    }
+  ],
+  "voice": {
+    "template": "minimal",
+    "tone": "Refined, understated, and confident. We speak with quiet authority about design and craftsmanship.",
+    "personality": ["sophisticated", "authentic", "trustworthy", "innovative"],
+    "vocabulary": {
+      "preferred": ["crafted", "timeless", "considered", "essential", "curated", "sustainable", "enduring", "intentional", "refined", "sanctuary"],
+      "avoided": ["trendy", "flashy", "bargain", "deal", "cheap", "mass-produced", "basic", "oversized", "cluttered"]
+    },
+    "examples": [
+      "Designed to last generations. Our oak dining table is crafted from FSC-certified wood, finished with natural oils that age beautifully with time.",
+      "Every piece earns its place. The Aria Sofa brings sculptural presence to your space without overwhelming it."
+    ]
+  },
+  "rules": {
+    "doStatements": [
+      "Always mention materials and craftsmanship",
+      "Use precise, architectural language",
+      "Reference Scandinavian design principles",
+      "Emphasize sustainability and longevity"
+    ],
+    "dontStatements": [
+      "Never use exclamation points or excited language",
+      "Avoid superlatives like 'best' or 'amazing'",
+      "Don't mention sales or discounts in product copy",
+      "Never compare to fast-furniture brands"
+    ]
+  },
+  "site_images": [
+    "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800",
+    "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800",
+    "https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?w=800"
+  ],
+  "characters": [],
+  "scenes": [
+    {
+      "url": "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800",
+      "metadata": {
+        "name": "Scandinavian Living",
+        "description": "Minimalist living room with white walls, light wood floors, single statement furniture piece",
+        "type": "home"
+      }
+    },
+    {
+      "url": "https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?w=800",
+      "metadata": {
+        "name": "Craft Workshop",
+        "description": "Artisan furniture workshop with natural lighting",
+        "type": "studio"
+      }
+    }
+  ]
+}

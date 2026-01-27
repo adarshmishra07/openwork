@@ -1,0 +1,98 @@
+{
+  "name": "UrbanFit",
+  "overview": "Bold, inclusive activewear brand designed for the modern city athlete. We create performance wear that transitions seamlessly from the gym to the street, empowering Gen Z women to own their fitness journey with confidence and style.",
+  "industry": "Fashion & Apparel",
+  "targetAudience": "Gen Z women aged 18-28 who are passionate about fitness, self-expression, and sustainability. Active on social media, values authenticity and inclusivity.",
+  "tagline": {
+    "text": "Move your way",
+    "tones": ["bold", "modern", "playful"]
+  },
+  "logo": {
+    "urls": ["https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=200"],
+    "colors": ["#FF6B35", "#1A1A2E", "#FFFFFF"]
+  },
+  "palette": {
+    "primary": [
+      { "hex": "#FF6B35", "label": "Energy Orange" },
+      { "hex": "#E63946", "label": "Power Red" }
+    ],
+    "secondary": [
+      { "hex": "#1A1A2E", "label": "Midnight" },
+      { "hex": "#FFFFFF", "label": "Pure White" }
+    ],
+    "other": [
+      { "hex": "#16213E", "label": "Deep Navy" },
+      { "hex": "#FFD166", "label": "Golden Hour" }
+    ]
+  },
+  "fonts": [
+    {
+      "family": "Montserrat",
+      "weight": "700",
+      "color": "#1A1A2E"
+    }
+  ],
+  "voice": {
+    "template": "playful",
+    "tone": "Energetic, motivational, and unapologetically confident. We're your hype squad cheering you on.",
+    "personality": ["bold", "authentic", "playful", "adventurous", "innovative"],
+    "vocabulary": {
+      "preferred": ["crush it", "level up", "unstoppable", "flex", "squad", "iconic", "vibe", "slay", "goals", "fierce"],
+      "avoided": ["girly", "skinny", "diet", "perfect body", "weight loss", "basic", "cheap", "traditional"]
+    },
+    "examples": [
+      "Your workout, your rules. This set was made for every body ready to crush it.",
+      "From sunrise runs to late-night gym sessions—we've got you, bestie."
+    ]
+  },
+  "rules": {
+    "doStatements": [
+      "Always use inclusive and body-positive language",
+      "Feature diverse models and real customers",
+      "Connect fitness to mental health and empowerment",
+      "Use trendy Gen Z language authentically"
+    ],
+    "dontStatements": [
+      "Never use diet culture language or before/after imagery",
+      "Don't make unrealistic body transformation promises",
+      "Avoid gendered stereotypes about women and fitness",
+      "Never use outdated slang that feels forced"
+    ]
+  },
+  "site_images": [
+    "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=800",
+    "https://images.unsplash.com/photo-1518611012118-696072aa579a?w=800",
+    "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=800"
+  ],
+  "characters": [
+    {
+      "url": "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=800",
+      "metadata": {
+        "name": "Maya",
+        "description": "Confident young woman in activewear, urban setting",
+        "ageGroup": "20-25",
+        "gender": "female",
+        "appearance": "Athletic build, natural curly hair",
+        "outfit": "High-waisted leggings and sports bra"
+      }
+    }
+  ],
+  "scenes": [
+    {
+      "url": "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800",
+      "metadata": {
+        "name": "Urban Gym",
+        "description": "Modern industrial gym with exposed brick and natural lighting",
+        "type": "lifestyle"
+      }
+    },
+    {
+      "url": "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?w=800",
+      "metadata": {
+        "name": "City Run",
+        "description": "Urban street at golden hour, perfect for running shots",
+        "type": "outdoor"
+      }
+    }
+  ]
+}

@@ -331,7 +331,11 @@ export function getBrandExamples(brandId: string, exampleType?: string, limit: n
 
 /**
  * Generate brand context for agent prompts
- * This is injected into every agent request to maintain brand consistency
+ * This is injected into every agent request to maintain brand consistency.
+ * 
+ * The function merges data from BrandProfile and BrandMemory, with BrandProfile
+ * taking precedence. This allows standalone BrandMemory JSON files to provide
+ * voice/rules/context that will be used if the BrandProfile fields are empty.
  */
 export function generateBrandContext(brandId?: string): string {
   const profile = brandId ? getBrandProfile(brandId) : getActiveBrandProfile();
@@ -346,10 +350,10 @@ export function generateBrandContext(brandId?: string): string {
   // Build the context string with all available brand information
   let context = `## Brand Context: ${profile.name}\n\n`;
 
-  // Brand Overview
+  // Brand Overview - use profile fields with memory as fallback
   context += `### Brand Overview\n`;
-  context += `- **Industry**: ${profile.industry || 'Not specified'}\n`;
-  context += `- **Target Audience**: ${profile.targetAudience || 'Not specified'}\n`;
+  context += `- **Industry**: ${profile.industry || memory?.industry || 'Not specified'}\n`;
+  context += `- **Target Audience**: ${profile.targetAudience || memory?.targetAudience || 'Not specified'}\n`;
   context += `- **Description**: ${profile.description || memory?.overview || 'Not specified'}\n`;
   
   // Tagline (from memory)
@@ -362,33 +366,71 @@ export function generateBrandContext(brandId?: string): string {
   }
   context += '\n';
 
-  // Brand Voice
+  // Brand Voice - merge profile.voice with memory.voice as fallback
+  const voiceTemplate = profile.voice?.template || memory?.voice?.template || 'friendly';
+  const voiceTone = profile.voice?.tone || memory?.voice?.tone || 'Match the template style';
+  const voicePersonality = (profile.voice?.personality?.length ? profile.voice.personality : memory?.voice?.personality) || ['Authentic', 'helpful'];
+  
   context += `### Brand Voice\n`;
-  context += `- **Template**: ${profile.voice.template}\n`;
-  context += `- **Tone**: ${profile.voice.tone || 'Match the template style'}\n`;
-  context += `- **Personality**: ${profile.voice.personality?.join(', ') || 'Authentic, helpful'}\n\n`;
+  context += `- **Template**: ${voiceTemplate}\n`;
+  context += `- **Tone**: ${voiceTone}\n`;
+  context += `- **Personality**: ${voicePersonality.join(', ')}\n\n`;
 
-  // Writing Guidelines
+  // Writing Guidelines - merge vocabulary from both sources
+  const preferredWords = [
+    ...(profile.voice?.vocabulary?.preferred || []),
+    ...(memory?.voice?.vocabulary?.preferred || [])
+  ].filter((v, i, a) => a.indexOf(v) === i); // dedupe
+  
+  const avoidedWords = [
+    ...(profile.voice?.vocabulary?.avoided || []),
+    ...(memory?.voice?.vocabulary?.avoided || [])
+  ].filter((v, i, a) => a.indexOf(v) === i); // dedupe
+  
   context += `### Writing Guidelines\n`;
-  if (profile.voice.vocabulary?.preferred?.length) {
-    context += `- **Preferred Words**: ${profile.voice.vocabulary.preferred.join(', ')}\n`;
+  if (preferredWords.length > 0) {
+    context += `- **Preferred Words**: ${preferredWords.join(', ')}\n`;
   }
-  if (profile.voice.vocabulary?.avoided?.length) {
-    context += `- **Avoid Using**: ${profile.voice.vocabulary.avoided.join(', ')}\n`;
+  if (avoidedWords.length > 0) {
+    context += `- **Avoid Using**: ${avoidedWords.join(', ')}\n`;
+  }
+  
+  // Voice examples from both sources
+  const voiceExamples = [
+    ...(profile.voice?.examples || []),
+    ...(memory?.voice?.examples || [])
+  ];
+  if (voiceExamples.length > 0) {
+    context += `- **Example Phrases**:\n`;
+    voiceExamples.slice(0, 5).forEach(ex => {
+      context += `  - "${ex}"\n`;
+    });
   }
   context += '\n';
 
-  // Brand Rules
-  if (profile.rules.doStatements?.length || profile.rules.dontStatements?.length || profile.rules.legalDisclaimer) {
+  // Brand Rules - merge from both sources
+  const doStatements = [
+    ...(profile.rules?.doStatements || []),
+    ...(memory?.rules?.doStatements || [])
+  ].filter((v, i, a) => a.indexOf(v) === i); // dedupe
+  
+  const dontStatements = [
+    ...(profile.rules?.dontStatements || []),
+    ...(memory?.rules?.dontStatements || [])
+  ].filter((v, i, a) => a.indexOf(v) === i); // dedupe
+  
+  const legalDisclaimer = profile.rules?.legalDisclaimer || memory?.rules?.legalDisclaimer;
+  
+  if (doStatements.length > 0 || dontStatements.length > 0 || legalDisclaimer) {
     context += `### Brand Rules\n`;
-    if (profile.rules.doStatements?.length) {
-      context += profile.rules.doStatements.map(s => `- DO: ${s}`).join('\n') + '\n';
+    if (doStatements.length > 0) {
+      context += doStatements.map(s => `- DO: ${s}`).join('\n') + '\n';
     }
-    if (profile.rules.dontStatements?.length) {
-      context += profile.rules.dontStatements.map(s => `- DON'T: ${s}`).join('\n') + '\n';
+    if (dontStatements.length > 0) {
+      context += dontStatements.map(s => `- DON'T: ${s}`).join('\n') + '\n';
     }
-    if (profile.rules.legalDisclaimer) {
-      context += `- **Legal Note**: ${profile.rules.legalDisclaimer}\n`;
+    if (legalDisclaimer) {
+      context += `- **Legal Note**: ${legalDisclaimer}\n`;
     }
     context += '\n';
   }
@@ -505,7 +547,7 @@ export function generateBrandContext(brandId?: string): string {
     context += `- Background and scene compositions\n`;
   }
 
-  context += `\n**IMPORTANT**: All content you generate must align with this brand voice and style. When writing product descriptions, marketing copy, or any customer-facing content, embody the ${profile.voice.template} voice template.`;
+  context += `\n**IMPORTANT**: All content you generate must align with this brand voice and style. When writing product descriptions, marketing copy, or any customer-facing content, embody the ${voiceTemplate} voice template.`;
 
   return context.trim();
 }

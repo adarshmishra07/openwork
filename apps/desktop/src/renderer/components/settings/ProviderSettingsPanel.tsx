@@ -5,7 +5,6 @@ import type { ProviderId, ConnectedProvider } from '@shopos/shared';
 import { PROVIDER_META } from '@shopos/shared';
 import {
   ClassicProviderForm,
-  BedrockProviderForm,
   OllamaProviderForm,
   OpenRouterProviderForm,
   LiteLLMProviderForm,
@@ -38,17 +37,6 @@ export function ProviderSettingsPanel({
         return (
           <ClassicProviderForm
             providerId={providerId}
-            connectedProvider={connectedProvider}
-            onConnect={onConnect}
-            onDisconnect={onDisconnect}
-            onModelChange={onModelChange}
-            showModelError={showModelError}
-          />
-        );
-
-      case 'aws':
-        return (
-          <BedrockProviderForm
             connectedProvider={connectedProvider}
             onConnect={onConnect}
             onDisconnect={onDisconnect}

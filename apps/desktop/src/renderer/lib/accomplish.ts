@@ -15,7 +15,6 @@ import type {
   TaskProgress,
   ApiKeyConfig,
   TaskMessage,
-  BedrockCredentials,
   ProviderSettings,
   ProviderId,
   ConnectedProvider,
@@ -50,7 +49,7 @@ interface AccomplishAPI {
 
   // Settings
   getApiKeys(): Promise<ApiKeyConfig[]>;
-  addApiKey(provider: 'anthropic' | 'openai' | 'openrouter' | 'google' | 'xai' | 'deepseek' | 'zai' | 'custom' | 'bedrock' | 'litellm', key: string, label?: string): Promise<ApiKeyConfig>;
+  addApiKey(provider: 'anthropic' | 'openai' | 'openrouter' | 'google' | 'xai' | 'deepseek' | 'zai' | 'custom' | 'kimi' | 'litellm', key: string, label?: string): Promise<ApiKeyConfig>;
   removeApiKey(id: string): Promise<void>;
   getDebugMode(): Promise<boolean>;
   setDebugMode(enabled: boolean): Promise<void>;
@@ -110,11 +109,8 @@ interface AccomplishAPI {
   getLiteLLMConfig(): Promise<{ baseUrl: string; enabled: boolean; lastValidated?: number; models?: Array<{ id: string; name: string; provider: string; contextLength: number }> } | null>;
   setLiteLLMConfig(config: { baseUrl: string; enabled: boolean; lastValidated?: number; models?: Array<{ id: string; name: string; provider: string; contextLength: number }> } | null): Promise<void>;
 
-  // Bedrock configuration
-  validateBedrockCredentials(credentials: string): Promise<{ valid: boolean; error?: string }>;
-  saveBedrockCredentials(credentials: string): Promise<ApiKeyConfig>;
-  getBedrockCredentials(): Promise<BedrockCredentials | null>;
-  fetchBedrockModels(credentials: string): Promise<{ success: boolean; models: Array<{ id: string; name: string; provider: string }>; error?: string }>;
+  // Kimi (Moonshot) API validation
+  validateKimiApiKey(apiKey: string): Promise<{ valid: boolean; error?: string }>;
 
   // E2E Testing
   isE2EMode(): Promise<boolean>;
@@ -180,6 +176,7 @@ interface AccomplishAPI {
   onDebugModeChange?(callback: (data: { enabled: boolean }) => void): () => void;
   onTaskStatusChange?(callback: (data: { taskId: string; status: TaskStatus }) => void): () => void;
   onTaskSummary?(callback: (data: { taskId: string; summary: string }) => void): () => void;
+  onQuestionLateResponse?(callback: (data: { taskId: string; sessionId: string; answer: string }) => void): () => void;
 
   // Logging
   logEvent(payload: { level?: string; message: string; context?: Record<string, unknown> }): Promise<unknown>;
@@ -243,19 +240,9 @@ export function getAccomplish() {
   return {
     ...window.accomplish,
 
-    validateBedrockCredentials: async (credentials: BedrockCredentials): Promise<{ valid: boolean; error?: string }> => {
-      return window.accomplish!.validateBedrockCredentials(JSON.stringify(credentials));
+    validateKimiApiKey: async (apiKey: string): Promise<{ valid: boolean; error?: string }> => {
+      return window.accomplish!.validateKimiApiKey(apiKey);
     },
-
-    saveBedrockCredentials: async (credentials: BedrockCredentials): Promise<ApiKeyConfig> => {
-      return window.accomplish!.saveBedrockCredentials(JSON.stringify(credentials));
-    },
-
-    getBedrockCredentials: async (): Promise<BedrockCredentials | null> => {
-      return window.accomplish!.getBedrockCredentials();
-    },
-
-    fetchBedrockModels: (credentials: string) => window.accomplish!.fetchBedrockModels(credentials),
   };
 }
 

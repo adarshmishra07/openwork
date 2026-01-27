@@ -17,6 +17,7 @@ import {
 
 const PERMISSION_API_PORT = process.env.PERMISSION_API_PORT || '9226';
 const PERMISSION_API_URL = `http://localhost:${PERMISSION_API_PORT}/permission`;
+const UPLOAD_TO_S3_URL = `http://localhost:${PERMISSION_API_PORT}/upload-to-s3`;
 
 interface FilePermissionInput {
   operation: 'create' | 'delete' | 'rename' | 'move' | 'modify' | 'overwrite';
@@ -24,6 +25,11 @@ interface FilePermissionInput {
   filePaths?: string[];
   targetPath?: string;
   contentPreview?: string;
+}
+
+interface UploadToS3Input {
+  file_path: string;
+  task_id?: string;
 }
 
 const server = new Server(
@@ -67,11 +73,81 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['operation'],
       },
     },
+    {
+      name: 'upload_to_s3',
+      description:
+        'Upload a local image file to S3 and get a public URL. Use this after generating images to /tmp/ with Gemini, BEFORE using them with Shopify. Returns { success: true, url: "https://..." } on success.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          file_path: {
+            type: 'string',
+            description: 'Absolute path to the local image file (e.g., /tmp/matcha_product.png)',
+          },
+          task_id: {
+            type: 'string',
+            description: 'Optional task ID for organizing uploads. If not provided, uses the active task ID.',
+          },
+        },
+        required: ['file_path'],
+      },
+    },
   ],
 }));
 
 // Handle tool calls
 server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToolResult> => {
+  // Handle upload_to_s3 tool
+  if (request.params.name === 'upload_to_s3') {
+    const args = request.params.arguments as UploadToS3Input;
+    
+    if (!args.file_path) {
+      return {
+        content: [{ type: 'text', text: 'Error: file_path is required' }],
+        isError: true,
+      };
+    }
+
+    try {
+      const response = await fetch(UPLOAD_TO_S3_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          file_path: args.file_path,
+          task_id: args.task_id,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          content: [{ type: 'text', text: `Error: Upload API returned ${response.status}: ${errorText}` }],
+          isError: true,
+        };
+      }
+
+      const result = (await response.json()) as { success: boolean; url?: string; error?: string };
+      
+      if (result.success && result.url) {
+        return {
+          content: [{ type: 'text', text: JSON.stringify({ success: true, url: result.url }) }],
+        };
+      } else {
+        return {
+          content: [{ type: 'text', text: `Error: ${result.error || 'Upload failed'}` }],
+          isError: true,
+        };
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{ type: 'text', text: `Error: Failed to upload to S3: ${errorMessage}` }],
+        isError: true,
+      };
+    }
+  }
+
+  // Handle request_file_permission tool
   if (request.params.name !== 'request_file_permission') {
     return {
       content: [{ type: 'text', text: `Error: Unknown tool: ${request.params.name}` }],

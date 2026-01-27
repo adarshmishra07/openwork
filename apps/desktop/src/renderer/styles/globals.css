@@ -210,3 +210,20 @@ textarea::placeholder {
   animation: browser-glow-pulse 2s ease-in-out infinite;
   border-radius: 0.5rem;
 }
+
+/* ============================================
+   Question Card Pulsating Border
+   Subtle opacity animation for "waiting for answer" state
+   ============================================ */
+@keyframes pulse-border {
+  0%, 100% {
+    border-color: hsl(var(--border) / 0.4);
+  }
+  50% {
+    border-color: hsl(var(--border) / 1);
+  }
+}
+
+.animate-pulse-border {
+  animation: pulse-border 2s ease-in-out infinite;
+}

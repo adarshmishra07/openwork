@@ -96,6 +96,7 @@ type OnboardingStepId =
   | 'brand-palette'
   | 'brand-typography'
   | 'brand-voice'
+  | 'brand-rules'
   | 'brand-assets'
   | 'shopify-connect'
   | 'complete';
@@ -107,6 +108,7 @@ const STEPS: { id: OnboardingStepId; title: string; icon: React.ElementType; opt
   { id: 'brand-palette', title: 'Colors', icon: Palette },
   { id: 'brand-typography', title: 'Fonts', icon: Type, optional: true },
   { id: 'brand-voice', title: 'Voice', icon: MessageSquare },
+  { id: 'brand-rules', title: 'Rules', icon: CheckCircle2, optional: true },
   { id: 'brand-assets', title: 'Assets', icon: Users, optional: true },
   { id: 'shopify-connect', title: 'Shopify', icon: ShoppingBag, optional: true },
   { id: 'complete', title: 'Complete', icon: CheckCircle2 },
@@ -137,6 +139,11 @@ interface OnboardingBrandData {
     personality: string[];
     vocabulary: { preferred: string[]; avoided: string[] };
     examples: string[];
+  };
+  rules: {
+    doStatements: string[];
+    dontStatements: string[];
+    legalDisclaimer: string;
   };
   characters: { url: string; name: string; description: string }[];
   scenes: { url: string; name: string; description: string; type: string }[];
@@ -169,6 +176,11 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
       personality: [],
       vocabulary: { preferred: [], avoided: [] },
       examples: [],
+    },
+    rules: {
+      doStatements: [],
+      dontStatements: [],
+      legalDisclaimer: '',
     },
     characters: [],
     scenes: [],
@@ -218,14 +230,34 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
           metadata: { name: s.name, description: s.description, type: s.type as 'studio' | 'lifestyle' | 'outdoor' | 'abstract' | 'home' | 'other' },
         })),
         site_images: brandData.siteImages.length > 0 ? brandData.siteImages : undefined,
+        // Include voice in BrandMemory for self-contained JSON exports
+        voice: {
+          template: brandData.voice.template,
+          tone: brandData.voice.tone || undefined,
+          personality: brandData.voice.personality.length > 0 ? brandData.voice.personality : undefined,
+          vocabulary: (brandData.voice.vocabulary.preferred.length > 0 || brandData.voice.vocabulary.avoided.length > 0) ? {
+            preferred: brandData.voice.vocabulary.preferred.length > 0 ? brandData.voice.vocabulary.preferred : undefined,
+            avoided: brandData.voice.vocabulary.avoided.length > 0 ? brandData.voice.vocabulary.avoided : undefined,
+          } : undefined,
+          examples: brandData.voice.examples.length > 0 ? brandData.voice.examples : undefined,
+        },
+        // Include rules in BrandMemory
+        rules: (brandData.rules.doStatements.length > 0 || brandData.rules.dontStatements.length > 0 || brandData.rules.legalDisclaimer) ? {
+          doStatements: brandData.rules.doStatements.length > 0 ? brandData.rules.doStatements : undefined,
+          dontStatements: brandData.rules.dontStatements.length > 0 ? brandData.rules.dontStatements : undefined,
+          legalDisclaimer: brandData.rules.legalDisclaimer || undefined,
+        } : undefined,
+        // Include context fields
+        industry: brandData.industry || undefined,
+        targetAudience: brandData.targetAudience || undefined,
       };
 
       const completedProfile: BrandProfile = {
         id: brandData.id,
         name: brandMemory?.name || brandData.name || 'My Brand',
         description: brandMemory?.overview || brandData.description || '',
-        industry: brandData.industry || '',
-        targetAudience: brandData.targetAudience || '',
+        industry: brandData.industry || brandMemory?.industry || '',
+        targetAudience: brandData.targetAudience || brandMemory?.targetAudience || '',
         voice: brandData.voice,
         style: {
           primaryColor: brandData.palette.primary[0]?.hex || '#6366F1',
@@ -234,8 +266,9 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
           imageStyle: 'lifestyle',
         },
         rules: {
-          doStatements: [],
-          dontStatements: [],
+          doStatements: brandData.rules.doStatements,
+          dontStatements: brandData.rules.dontStatements,
+          legalDisclaimer: brandData.rules.legalDisclaimer || undefined,
         },
         memory: brandMemory || memory,
         shopifyConnected: brandData.shopifyConnected,
@@ -274,9 +307,31 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
         return brandData.logos.length > 0;
       case 'brand-palette':
         return brandData.palette.primary.length > 0;
+      case 'brand-voice':
+        // Validation: require at least 2 personality traits and 1 preferred word
+        return (
+          brandData.voice.template &&
+          brandData.voice.personality.length >= 2 &&
+          brandData.voice.vocabulary.preferred.length >= 1
+        );
       default:
         return true;
     }
+  };
+  
+  // Get validation message for current step
+  const getValidationMessage = () => {
+    if (currentStep.id === 'brand-voice') {
+      const issues: string[] = [];
+      if (brandData.voice.personality.length < 2) {
+        issues.push(`Select at least 2 personality traits (${brandData.voice.personality.length}/2)`);
+      }
+      if (brandData.voice.vocabulary.preferred.length < 1) {
+        issues.push('Add at least 1 preferred word');
+      }
+      return issues.length > 0 ? issues.join(' • ') : null;
+    }
+    return null;
   };
 
   return (
@@ -363,6 +418,12 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
               )}
               {currentStep.id === 'brand-voice' && (
                 <BrandVoiceStep 
+                  data={brandData} 
+                  onChange={updateBrandData} 
+                />
+              )}
+              {currentStep.id === 'brand-rules' && (
+                <BrandRulesStep 
                   data={brandData} 
                   onChange={updateBrandData} 
                 />
@@ -1292,6 +1353,167 @@ function BrandVoiceStep({ data, onChange }: StepProps) {
               </span>
             ))}
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BrandRulesStep({ data, onChange }: StepProps) {
+  const [doInput, setDoInput] = useState('');
+  const [dontInput, setDontInput] = useState('');
+
+  const addDoStatement = () => {
+    if (!doInput.trim()) return;
+    onChange({
+      rules: {
+        ...data.rules,
+        doStatements: [...data.rules.doStatements, doInput.trim()],
+      },
+    });
+    setDoInput('');
+  };
+
+  const addDontStatement = () => {
+    if (!dontInput.trim()) return;
+    onChange({
+      rules: {
+        ...data.rules,
+        dontStatements: [...data.rules.dontStatements, dontInput.trim()],
+      },
+    });
+    setDontInput('');
+  };
+
+  const removeDoStatement = (statement: string) => {
+    onChange({
+      rules: {
+        ...data.rules,
+        doStatements: data.rules.doStatements.filter(s => s !== statement),
+      },
+    });
+  };
+
+  const removeDontStatement = (statement: string) => {
+    onChange({
+      rules: {
+        ...data.rules,
+        dontStatements: data.rules.dontStatements.filter(s => s !== statement),
+      },
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold mb-2">Brand rules</h2>
+        <p className="text-muted-foreground">Define what your brand should and shouldn't do</p>
+      </div>
+
+      {/* Do Statements */}
+      <div>
+        <Label className="text-green-600 dark:text-green-400 flex items-center gap-2 mb-2">
+          <CheckCircle2 className="w-4 h-4" />
+          Do's - Things your brand should always do
+        </Label>
+        <div className="flex gap-2">
+          <Input
+            value={doInput}
+            onChange={(e) => setDoInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addDoStatement()}
+            placeholder="e.g., Always use inclusive language"
+            className="flex-1"
+          />
+          <Button size="sm" onClick={addDoStatement}>
+            <Plus className="w-4 h-4" />
+          </Button>
+        </div>
+        <div className="flex flex-wrap gap-2 mt-3">
+          {data.rules.doStatements.map((statement, index) => (
+            <span 
+              key={index} 
+              className="px-3 py-1.5 rounded-lg bg-green-500/20 text-green-700 dark:text-green-300 text-sm flex items-center gap-2"
+            >
+              {statement}
+              <button 
+                onClick={() => removeDoStatement(statement)}
+                className="hover:bg-green-500/30 rounded p-0.5"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+        {data.rules.doStatements.length === 0 && (
+          <p className="text-sm text-muted-foreground mt-2">No do's added yet</p>
+        )}
+      </div>
+
+      {/* Don't Statements */}
+      <div>
+        <Label className="text-red-600 dark:text-red-400 flex items-center gap-2 mb-2">
+          <XCircle className="w-4 h-4" />
+          Don'ts - Things your brand should never do
+        </Label>
+        <div className="flex gap-2">
+          <Input
+            value={dontInput}
+            onChange={(e) => setDontInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addDontStatement()}
+            placeholder="e.g., Never use slang or profanity"
+            className="flex-1"
+          />
+          <Button size="sm" onClick={addDontStatement}>
+            <Plus className="w-4 h-4" />
+          </Button>
+        </div>
+        <div className="flex flex-wrap gap-2 mt-3">
+          {data.rules.dontStatements.map((statement, index) => (
+            <span 
+              key={index} 
+              className="px-3 py-1.5 rounded-lg bg-red-500/20 text-red-700 dark:text-red-300 text-sm flex items-center gap-2"
+            >
+              {statement}
+              <button 
+                onClick={() => removeDontStatement(statement)}
+                className="hover:bg-red-500/30 rounded p-0.5"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+        {data.rules.dontStatements.length === 0 && (
+          <p className="text-sm text-muted-foreground mt-2">No don'ts added yet</p>
+        )}
+      </div>
+
+      {/* Legal Disclaimer */}
+      <div>
+        <Label htmlFor="legalDisclaimer">Legal Disclaimer (Optional)</Label>
+        <p className="text-xs text-muted-foreground mb-2">
+          Text to append to product descriptions for compliance
+        </p>
+        <textarea
+          id="legalDisclaimer"
+          value={data.rules.legalDisclaimer}
+          onChange={(e) => onChange({ 
+            rules: { ...data.rules, legalDisclaimer: e.target.value } 
+          })}
+          placeholder="e.g., Results may vary. Not intended to diagnose, treat, or cure any disease."
+          className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
+        />
+      </div>
+
+      {/* Summary */}
+      <div className="p-4 rounded-lg bg-muted/50">
+        <Label className="text-xs text-muted-foreground mb-2 block">Summary</Label>
+        <div className="text-sm space-y-1">
+          <p><span className="text-green-600 dark:text-green-400">{data.rules.doStatements.length}</span> do's defined</p>
+          <p><span className="text-red-600 dark:text-red-400">{data.rules.dontStatements.length}</span> don'ts defined</p>
+          {data.rules.legalDisclaimer && (
+            <p className="text-muted-foreground">Legal disclaimer added</p>
+          )}
         </div>
       </div>
     </div>

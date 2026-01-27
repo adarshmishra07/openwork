@@ -14,7 +14,6 @@ import xaiLogo from '/assets/ai-logos/xai.svg';
 import deepseekLogo from '/assets/ai-logos/deepseek.svg';
 import zaiLogo from '/assets/ai-logos/zai.svg';
 import glmLogo from '/assets/ai-logos/glm.svg';
-import bedrockLogo from '/assets/ai-logos/bedrock.svg';
 import ollamaLogo from '/assets/ai-logos/ollama.svg';
 import openrouterLogo from '/assets/ai-logos/openrouter.svg';
 import litellmLogo from '/assets/ai-logos/litellm.svg';
@@ -30,7 +29,7 @@ const PROVIDER_LOGOS: Record<ProviderId, string> = {
   deepseek: deepseekLogo,
   zai: zaiLogo,
   glm: glmLogo,
-  bedrock: bedrockLogo,
+  kimi: '', // Text-only fallback
   ollama: ollamaLogo,
   openrouter: openrouterLogo,
   litellm: litellmLogo,
@@ -103,11 +102,15 @@ export const ProviderCard = memo(function ProviderCard({
 
       {/* Provider Logo */}
       <div className="mb-2 h-10 w-10 flex items-center justify-center">
-        <img
-          src={logoSrc}
-          alt={`${meta.name} logo`}
-          className="h-8 w-8 object-contain"
-        />
+        {logoSrc ? (
+          <img
+            src={logoSrc}
+            alt={`${meta.name} logo`}
+            className="h-8 w-8 object-contain"
+          />
+        ) : (
+          <span className="text-lg font-bold text-foreground">{meta.name.charAt(0)}</span>
+        )}
       </div>
 
       {/* Name */}

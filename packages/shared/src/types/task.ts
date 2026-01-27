@@ -85,6 +85,8 @@ export interface TaskMessage {
   displayLabel?: string;
   /** Whether this message is a final response that should persist as a chat bubble */
   isFinal?: boolean;
+  /** Image references from previous messages (e.g., when user selects image [C] to reference) */
+  imageReferences?: Array<{ label: string; url: string }>;
 }
 
 export interface TaskResult {

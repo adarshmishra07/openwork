@@ -1,0 +1,86 @@
+{
+  "name": "GreenLeaf Teas",
+  "overview": "Premium organic tea subscription service focused on wellness and mindfulness. We source single-origin teas from sustainable farms around the world, delivering curated monthly selections to tea enthusiasts who value quality, authenticity, and the ritual of tea.",
+  "industry": "Food & Beverage",
+  "targetAudience": "Health-conscious adults aged 30-55 who appreciate mindfulness, sustainable living, and premium quality products. Often practices yoga or meditation.",
+  "tagline": {
+    "text": "Sip mindfully, live fully",
+    "tones": ["minimal", "elegant", "professional"]
+  },
+  "logo": {
+    "urls": ["https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=200"],
+    "colors": ["#2D5A3D", "#F5F1E8", "#8B7355"]
+  },
+  "palette": {
+    "primary": [
+      { "hex": "#2D5A3D", "label": "Forest Green" },
+      { "hex": "#3A7A4E", "label": "Tea Leaf" }
+    ],
+    "secondary": [
+      { "hex": "#F5F1E8", "label": "Cream" },
+      { "hex": "#8B7355", "label": "Earth" }
+    ],
+    "other": [
+      { "hex": "#D4C4A8", "label": "Parchment" }
+    ]
+  },
+  "fonts": [
+    {
+      "family": "Playfair Display",
+      "weight": "400",
+      "color": "#2D5A3D"
+    }
+  ],
+  "voice": {
+    "template": "luxury",
+    "tone": "Calm, serene, and nurturing. We speak like a knowledgeable friend sharing wisdom about tea culture.",
+    "personality": ["authentic", "caring", "sophisticated", "trustworthy"],
+    "vocabulary": {
+      "preferred": ["curated", "artisanal", "mindful", "ritual", "wellness", "organic", "single-origin", "handpicked", "serene", "nourish"],
+      "avoided": ["cheap", "basic", "caffeine-free alternative", "instant", "mass-produced", "discount", "deal"]
+    },
+    "examples": [
+      "Begin your morning ritual with our hand-selected oolong, carefully harvested at dawn when the leaves hold their deepest essence.",
+      "Each cup is an invitation to pause, breathe, and reconnect with the present moment."
+    ]
+  },
+  "rules": {
+    "doStatements": [
+      "Always mention the origin story of our teas",
+      "Use sensory language to describe flavors and aromas",
+      "Connect tea drinking to wellness and mindfulness practices",
+      "Highlight sustainability and ethical sourcing"
+    ],
+    "dontStatements": [
+      "Never compare to supermarket tea brands",
+      "Avoid using aggressive sales language or urgency tactics",
+      "Don't use slang or overly casual language",
+      "Never make unsubstantiated health claims"
+    ],
+    "legalDisclaimer": "These statements have not been evaluated by the FDA. This product is not intended to diagnose, treat, cure, or prevent any disease."
+  },
+  "site_images": [
+    "https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=800",
+    "https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=800",
+    "https://images.unsplash.com/photo-1563822249366-3efb23b8e0c9?w=800"
+  ],
+  "characters": [],
+  "scenes": [
+    {
+      "url": "https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=800",
+      "metadata": {
+        "name": "Morning Tea Ritual",
+        "description": "Minimalist wooden table with ceramic teapot, soft natural lighting",
+        "type": "lifestyle"
+      }
+    },
+    {
+      "url": "https://images.unsplash.com/photo-1563822249366-3efb23b8e0c9?w=800",
+      "metadata": {
+        "name": "Tea Garden",
+        "description": "Lush green tea plantation at sunrise",
+        "type": "outdoor"
+      }
+    }
+  ]
+}

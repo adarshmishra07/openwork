@@ -18,6 +18,8 @@ export const permissionResponseSchema = z.object({
   message: z.string().optional(),
   selectedOptions: z.array(z.string()).optional(),
   customText: z.string().optional(),
+  rememberSession: z.boolean().optional(),
+  rememberPermanent: z.boolean().optional(),
 });
 
 export const resumeSessionSchema = z.object({

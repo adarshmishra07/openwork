@@ -54,16 +54,20 @@ import {
   getProviderDebugMode,
   hasReadyProvider,
 } from '../store/providerSettings';
-import type { ProviderId, ConnectedProvider, BedrockCredentials } from '@shopos/shared';
+import type { ProviderId, ConnectedProvider } from '@shopos/shared';
 import { getDesktopConfig } from '../config';
 import {
   startPermissionApiServer,
   startQuestionApiServer,
+  startShopifyPermissionApiServer,
   initPermissionApi,
   resolvePermission,
   resolveQuestion,
+  resolveShopifyPermission,
   isFilePermissionRequest,
   isQuestionRequest,
+  isShopifyPermissionRequest,
+  type QuestionResolveResult,
 } from '../permission-api';
 import type {
   TaskConfig,
@@ -84,8 +88,7 @@ import {
   taskConfigSchema,
   validate,
 } from './validation';
-import { BedrockClient, ListFoundationModelsCommand } from '@aws-sdk/client-bedrock';
-import { fromIni } from '@aws-sdk/credential-providers';
+
 import {
   isMockTaskEventsEnabled,
   createMockTask,
@@ -97,7 +100,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const MAX_TEXT_LENGTH = 8000;
-const ALLOWED_API_KEY_PROVIDERS = new Set(['anthropic', 'openai', 'openrouter', 'google', 'xai', 'deepseek', 'zai', 'custom', 'bedrock', 'litellm']);
+const ALLOWED_API_KEY_PROVIDERS = new Set(['anthropic', 'openai', 'openrouter', 'google', 'xai', 'deepseek', 'zai', 'custom', 'kimi', 'litellm']);
 const API_KEY_VALIDATION_TIMEOUT_MS = 15000;
 
 interface OllamaModel {
@@ -321,6 +324,7 @@ export function registerIPCHandlers(): void {
       initPermissionApi(window, () => taskManager.getActiveTaskId());
       startPermissionApiServer();
       startQuestionApiServer();
+      startShopifyPermissionApiServer();
       permissionApiInitialized = true;
     }
 
@@ -549,12 +553,42 @@ export function registerIPCHandlers(): void {
 
   // Permission: Respond to permission request
   handle('permission:respond', async (_event: IpcMainInvokeEvent, response: PermissionResponse) => {
+    console.log('[IPC] >>> permission:respond received', {
+      requestId: response.requestId,
+      taskId: response.taskId,
+      decision: response.decision,
+      selectedOptions: response.selectedOptions,
+      customText: response.customText?.substring(0, 50),
+    });
+    
     const parsedResponse = validate(permissionResponseSchema, response);
     const { taskId, decision, requestId } = parsedResponse;
+
+    console.log(`[IPC] Request ID analysis: ${requestId}`);
+    console.log(`[IPC]   - isFilePermissionRequest: ${requestId ? isFilePermissionRequest(requestId) : 'no requestId'}`);
+    console.log(`[IPC]   - isQuestionRequest: ${requestId ? isQuestionRequest(requestId) : 'no requestId'}`);
+    console.log(`[IPC]   - isShopifyPermissionRequest: ${requestId ? isShopifyPermissionRequest(requestId) : 'no requestId'}`);
+
+    // Check if this is a Shopify permission request from the MCP server
+    if (requestId && isShopifyPermissionRequest(requestId)) {
+      const allowed = decision === 'allow';
+      const rememberSession = parsedResponse.rememberSession;
+      console.log(`[IPC] Processing as SHOPIFY permission request: ${requestId}`);
+      console.log(`[IPC]   - allowed: ${allowed}, rememberSession: ${rememberSession}`);
+      const resolved = resolveShopifyPermission(requestId, allowed, rememberSession);
+      if (resolved) {
+        console.log(`[IPC] Shopify permission request ${requestId} resolved: ${allowed ? 'allowed' : 'denied'}`);
+        return;
+      }
+      // If not found in pending, DON'T fall through
+      console.error(`[IPC] !!! Shopify permission request ${requestId} not found in pending requests - NOT falling through`);
+      return;
+    }
 
     // Check if this is a file permission request from the MCP server
     if (requestId && isFilePermissionRequest(requestId)) {
       const allowed = decision === 'allow';
+      console.log(`[IPC] Processing as FILE permission request: ${requestId}`);
       const resolved = resolvePermission(requestId, allowed);
       if (resolved) {
         console.log(`[IPC] File permission request ${requestId} resolved: ${allowed ? 'allowed' : 'denied'}`);
@@ -567,17 +601,75 @@ export function registerIPCHandlers(): void {
     // Check if this is a question request from the MCP server
     if (requestId && isQuestionRequest(requestId)) {
       const denied = decision === 'deny';
-      const resolved = resolveQuestion(requestId, {
+      console.log(`[IPC] Processing as QUESTION request: ${requestId}`);
+      console.log(`[IPC]   - selectedOptions: ${parsedResponse.selectedOptions?.join(', ')}`);
+      console.log(`[IPC]   - customText: ${parsedResponse.customText}`);
+      console.log(`[IPC]   - denied: ${denied}`);
+      
+      const result: QuestionResolveResult = resolveQuestion(requestId, {
         selectedOptions: parsedResponse.selectedOptions,
         customText: parsedResponse.customText,
         denied,
       });
-      if (resolved) {
-        console.log(`[IPC] Question request ${requestId} resolved: ${denied ? 'denied' : 'answered'}`);
+      
+      if (result.resolved && !result.lateResponse) {
+        // Normal flow - question answered while MCP was still waiting
+        console.log(`[IPC] Question request ${requestId} resolved immediately: ${denied ? 'denied' : 'answered'}`);
         return;
       }
-      // If not found in pending, fall through to standard handling
-      console.warn(`[IPC] Question request ${requestId} not found in pending requests`);
+      
+      if (result.resolved && result.lateResponse && result.taskId && result.response) {
+        // Late response - MCP timed out, but user just answered
+        // We need to resume the session with the user's answer
+        console.log(`[IPC] Late question response for task ${result.taskId} - will resume session`);
+        
+        // Format the answer as a message for the agent
+        let answerText: string;
+        if (result.response.denied) {
+          answerText = "I've decided not to answer that question. Please proceed without this information.";
+        } else if (result.response.selectedOptions?.length) {
+          answerText = `My answer to your question: ${result.response.selectedOptions.join(', ')}`;
+        } else if (result.response.customText) {
+          answerText = `My answer to your question: ${result.response.customText}`;
+        } else {
+          answerText = "I've acknowledged your question but provided no specific answer.";
+        }
+        
+        // Persist the user's answer to task history as a message
+        // This ensures the answer appears in chat history even if app restarts
+        const answerMessage: TaskMessage = {
+          id: createMessageId(),
+          type: 'user',
+          content: answerText,
+          timestamp: new Date().toISOString(),
+        };
+        addTaskMessage(result.taskId, answerMessage);
+        console.log(`[IPC] Persisted answer to task history for task ${result.taskId}`);
+        
+        // Get the task to find its session ID
+        const task = getTask(result.taskId);
+        if (task?.sessionId) {
+          console.log(`[IPC] Resuming session ${task.sessionId} with answer: "${answerText.substring(0, 50)}..."`);
+          
+          // Emit an event to tell the frontend to resume the session
+          // The frontend will call session:resume with the answer
+          const window = BrowserWindow.getAllWindows()[0];
+          if (window && !window.isDestroyed()) {
+            window.webContents.send('question:late-response', {
+              taskId: result.taskId,
+              sessionId: task.sessionId,
+              answer: answerText,
+            });
+          }
+        } else {
+          console.warn(`[IPC] Cannot resume - task ${result.taskId} has no sessionId`);
+        }
+        return;
+      }
+      
+      // If not found in pending or timed-out, DON'T fall through - just log and return
+      console.error(`[IPC] !!! Question request ${requestId} not found in pending requests - NOT falling through to PTY`);
+      return;  // Prevent race condition by not falling through
     }
 
     // Check if the task is still active
@@ -586,13 +678,16 @@ export function registerIPCHandlers(): void {
       return;
     }
 
+    console.log(`[IPC] Falling through to standard PTY response for task ${taskId}`);
     if (decision === 'allow') {
       // Send the response to the correct task's CLI
       const message = parsedResponse.selectedOptions?.join(', ') || parsedResponse.message || 'yes';
       const sanitizedMessage = sanitizeString(message, 'permissionResponse', 1024);
+      console.log(`[IPC] Sending to PTY: "${sanitizedMessage}"`);
       await taskManager.sendResponse(taskId, sanitizedMessage);
     } else {
       // Send denial to the correct task
+      console.log(`[IPC] Sending denial to PTY: "no"`);
       await taskManager.sendResponse(taskId, 'no');
     }
   });
@@ -770,30 +865,15 @@ export function registerIPCHandlers(): void {
       .map((credential) => {
         const provider = credential.account.replace('apiKey:', '');
 
-        // Handle Bedrock specially - it stores JSON credentials
-        let keyPrefix = '';
-        if (provider === 'bedrock') {
-          try {
-            const parsed = JSON.parse(credential.password);
-            if (parsed.authType === 'accessKeys') {
-              keyPrefix = `${parsed.accessKeyId?.substring(0, 8) || 'AKIA'}...`;
-            } else if (parsed.authType === 'profile') {
-              keyPrefix = `Profile: ${parsed.profileName || 'default'}`;
-            }
-          } catch {
-            keyPrefix = 'AWS Credentials';
-          }
-        } else {
-          keyPrefix =
-            credential.password && credential.password.length > 0
-              ? `${credential.password.substring(0, 8)}...`
-              : '';
-        }
+        const keyPrefix =
+          credential.password && credential.password.length > 0
+            ? `${credential.password.substring(0, 8)}...`
+            : '';
 
         return {
           id: `local-${provider}`,
           provider,
-          label: provider === 'bedrock' ? 'AWS Credentials' : 'Local API Key',
+          label: 'Local API Key',
           keyPrefix,
           isActive: true,
           createdAt: new Date().toISOString(),
@@ -1029,145 +1109,46 @@ export function registerIPCHandlers(): void {
     }
   });
 
-  // Bedrock: Validate AWS credentials
-  handle('bedrock:validate', async (_event: IpcMainInvokeEvent, credentials: string) => {
-    console.log('[Bedrock] Validation requested');
+  // Kimi: Validate API key (simple test against Moonshot API)
+  handle('kimi:validate', async (_event: IpcMainInvokeEvent, apiKey: string) => {
+    console.log('[Kimi] Validation requested');
 
     try {
-      const parsed = JSON.parse(credentials);
-      let client: BedrockClient;
+      // Test by calling the models endpoint
+      const response = await fetchWithTimeout(
+        'https://api.moonshot.ai/v1/models',
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+        },
+        API_KEY_VALIDATION_TIMEOUT_MS
+      );
 
-      if (parsed.authType === 'accessKeys') {
-        // Access key authentication
-        const awsCredentials: { accessKeyId: string; secretAccessKey: string; sessionToken?: string } = {
-          accessKeyId: parsed.accessKeyId,
-          secretAccessKey: parsed.secretAccessKey,
-        };
-        if (parsed.sessionToken) {
-          awsCredentials.sessionToken = parsed.sessionToken;
-        }
-        client = new BedrockClient({
-          region: parsed.region || 'us-east-1',
-          credentials: awsCredentials,
-        });
-      } else if (parsed.authType === 'profile') {
-        // AWS Profile authentication
-        client = new BedrockClient({
-          region: parsed.region || 'us-east-1',
-          credentials: fromIni({ profile: parsed.profileName || 'default' }),
-        });
-      } else {
-        return { valid: false, error: 'Invalid authentication type' };
+      if (response.ok) {
+        console.log('[Kimi] Validation succeeded');
+        return { valid: true };
       }
 
-      // Test by listing foundation models
-      const command = new ListFoundationModelsCommand({});
-      await client.send(command);
-
-      console.log('[Bedrock] Validation succeeded');
-      return { valid: true };
+      const errorText = await response.text();
+      console.warn('[Kimi] Validation failed:', response.status, errorText);
+      
+      if (response.status === 401) {
+        return { valid: false, error: 'Invalid API key. Please check your Moonshot API key.' };
+      }
+      
+      return { valid: false, error: `Validation failed: ${response.status}` };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Validation failed';
-      console.warn('[Bedrock] Validation failed:', message);
-
-      // Provide user-friendly error messages
-      if (message.includes('UnrecognizedClientException') || message.includes('InvalidSignatureException')) {
-        return { valid: false, error: 'Invalid AWS credentials. Please check your Access Key ID and Secret Access Key.' };
+      console.warn('[Kimi] Validation error:', message);
+      
+      if (message.includes('timeout') || message.includes('abort')) {
+        return { valid: false, error: 'Request timed out. Please check your internet connection.' };
       }
-      if (message.includes('AccessDeniedException')) {
-        return { valid: false, error: 'Access denied. Ensure your AWS credentials have Bedrock permissions.' };
-      }
-      if (message.includes('could not be found')) {
-        return { valid: false, error: 'AWS profile not found. Check your ~/.aws/credentials file.' };
-      }
-
+      
       return { valid: false, error: message };
-    }
-  });
-
-  // Fetch available Bedrock models
-  handle('bedrock:fetch-models', async (_event: IpcMainInvokeEvent, credentialsJson: string) => {
-    try {
-      const credentials = JSON.parse(credentialsJson) as BedrockCredentials;
-
-      // Create Bedrock client (same pattern as validate)
-      let bedrockClient: BedrockClient;
-      if (credentials.authType === 'accessKeys') {
-        bedrockClient = new BedrockClient({
-          region: credentials.region || 'us-east-1',
-          credentials: {
-            accessKeyId: credentials.accessKeyId,
-            secretAccessKey: credentials.secretAccessKey,
-            sessionToken: credentials.sessionToken,
-          },
-        });
-      } else {
-        bedrockClient = new BedrockClient({
-          region: credentials.region || 'us-east-1',
-          credentials: fromIni({ profile: credentials.profileName }),
-        });
-      }
-
-      // Fetch all foundation models
-      const command = new ListFoundationModelsCommand({});
-      const response = await bedrockClient.send(command);
-
-      // Transform to standard format, filtering for text output models
-      // Use modelId for display name to avoid duplicates (multiple versions share the same modelName)
-      const models = (response.modelSummaries || [])
-        .filter(m => m.outputModalities?.includes('TEXT'))
-        .map(m => ({
-          id: `amazon-bedrock/${m.modelId}`,
-          name: m.modelId || 'Unknown',
-          provider: m.providerName || 'Unknown',
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name));
-
-      return { success: true, models };
-    } catch (error) {
-      console.error('[Bedrock] Failed to fetch models:', error);
-      return { success: false, error: normalizeIpcError(error), models: [] };
-    }
-  });
-
-  // Bedrock: Save credentials
-  handle('bedrock:save', async (_event: IpcMainInvokeEvent, credentials: string) => {
-    const parsed = JSON.parse(credentials);
-
-    // Validate structure
-    if (parsed.authType === 'accessKeys') {
-      if (!parsed.accessKeyId || !parsed.secretAccessKey) {
-        throw new Error('Access Key ID and Secret Access Key are required');
-      }
-    } else if (parsed.authType === 'profile') {
-      if (!parsed.profileName) {
-        throw new Error('Profile name is required');
-      }
-    } else {
-      throw new Error('Invalid authentication type');
-    }
-
-    // Store the credentials
-    storeApiKey('bedrock', credentials);
-
-    return {
-      id: 'local-bedrock',
-      provider: 'bedrock',
-      label: parsed.authType === 'accessKeys' ? 'AWS Access Keys' : `AWS Profile: ${parsed.profileName}`,
-      keyPrefix: parsed.authType === 'accessKeys' ? `${parsed.accessKeyId.substring(0, 8)}...` : parsed.profileName,
-      isActive: true,
-      createdAt: new Date().toISOString(),
-    };
-  });
-
-  // Bedrock: Get credentials
-  handle('bedrock:get-credentials', async (_event: IpcMainInvokeEvent) => {
-    const stored = getApiKey('bedrock');
-    if (!stored) return null;
-    try {
-      return JSON.parse(stored);
-    } catch {
-      return null;
     }
   });
 
@@ -2040,12 +2021,28 @@ export function registerIPCHandlers(): void {
     const { uploadChatAttachment } = await import('../spaces/space-runtime-client');
     
     try {
-      return uploadChatAttachment({
+      const base64Size = base64Data.length;
+      console.log(`[Attachment] Uploading ${filename} (${contentType}), base64 size: ${(base64Size / 1024 / 1024).toFixed(2)}MB`);
+      
+      // Check if payload might exceed Lambda limit (6MB for sync, but we use ~4MB as safe limit)
+      const MAX_PAYLOAD_SIZE = 4 * 1024 * 1024; // 4MB
+      if (base64Size > MAX_PAYLOAD_SIZE) {
+        console.error(`[Attachment] File too large for upload: ${(base64Size / 1024 / 1024).toFixed(2)}MB exceeds ${MAX_PAYLOAD_SIZE / 1024 / 1024}MB limit`);
+        return {
+          success: false,
+          error: `File too large for upload. Maximum size is ~3MB (your file is ${(base64Size / 1024 / 1024).toFixed(1)}MB after encoding). Please use a smaller image.`,
+        };
+      }
+      
+      const result = await uploadChatAttachment({
         taskId,
         filename,
         contentType,
         base64Data,
       });
+      
+      console.log(`[Attachment] Upload result for ${filename}:`, result.success ? 'success' : result.error);
+      return result;
     } catch (error) {
       console.error('[Attachment] Failed to upload base64 data:', error);
       return {
@@ -2095,6 +2092,40 @@ function createMessageId(): string {
 }
 
 /**
+ * Validate that a base64 data URL contains actual image data
+ * Returns false for malformed data URLs like "data:image/png;base64,null" or very short data
+ */
+function isValidBase64DataUrl(dataUrl: string): boolean {
+  // Extract the base64 portion after the comma
+  const commaIndex = dataUrl.indexOf(',');
+  if (commaIndex === -1) return false;
+  
+  const base64Data = dataUrl.substring(commaIndex + 1);
+  
+  // Reject null, empty, or very short base64 (real images are much larger)
+  if (!base64Data || 
+      base64Data === 'null' || 
+      base64Data === 'undefined' ||
+      base64Data.length < 100) {
+    console.warn(`[extractScreenshots] Rejected malformed base64 data URL (data length: ${base64Data?.length || 0})`);
+    return false;
+  }
+  
+  // Valid PNG base64 starts with iVBORw0 (PNG header)
+  // Valid JPEG base64 starts with /9j/ (JPEG header)
+  // Valid WebP base64 starts with UklGR (RIFF header)
+  const validPrefixes = ['iVBORw0', '/9j/', 'UklGR'];
+  const hasValidPrefix = validPrefixes.some(prefix => base64Data.startsWith(prefix));
+  
+  if (!hasValidPrefix) {
+    console.warn(`[extractScreenshots] Rejected base64 data URL with invalid image header`);
+    return false;
+  }
+  
+  return true;
+}
+
+/**
  * Extract base64 screenshots from tool output
  * Returns cleaned text (with images replaced by placeholders) and extracted attachments
  */
@@ -2108,11 +2139,15 @@ function extractScreenshots(output: string): {
   const dataUrlRegex = /data:image\/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+/g;
   let match;
   while ((match = dataUrlRegex.exec(output)) !== null) {
-    attachments.push({
-      type: 'screenshot',
-      data: match[0],
-      label: 'Browser screenshot',
-    });
+    const dataUrl = match[0];
+    // Validate the base64 data before adding
+    if (isValidBase64DataUrl(dataUrl)) {
+      attachments.push({
+        type: 'screenshot',
+        data: dataUrl,
+        label: 'Browser screenshot',
+      });
+    }
   }
 
   // Also check for raw base64 PNG (starts with iVBORw0)
@@ -2212,6 +2247,7 @@ async function processGeneratedImages(content: string, taskId: string): Promise<
   const uniquePaths = [...new Set(matches)];
   
   let processedContent = content;
+  const uploadedImages: Array<{ filename: string; s3Url: string }> = [];
   
   for (const localPath of uniquePaths) {
     try {
@@ -2223,6 +2259,13 @@ async function processGeneratedImages(content: string, taskId: string): Promise<
 
       // Read file and convert to base64
       const fileBuffer = fs.readFileSync(localPath);
+      
+      // Skip corrupt/empty files (real images are > 10KB)
+      if (fileBuffer.length < 10000) {
+        console.warn(`[IPC handlers] Skipping corrupt image (${fileBuffer.length} bytes): ${localPath}`);
+        continue;
+      }
+      
       const base64Data = fileBuffer.toString('base64');
       const filename = path.basename(localPath);
 
@@ -2239,12 +2282,23 @@ async function processGeneratedImages(content: string, taskId: string): Promise<
         // Replace local path with S3 URL in content
         processedContent = processedContent.split(localPath).join(result.url);
         console.log(`[IPC handlers] Replaced ${localPath} with ${result.url}`);
+        // Track for URL summary (agent needs this to use S3 URLs with Shopify)
+        uploadedImages.push({ filename, s3Url: result.url });
       } else {
         console.warn(`[IPC handlers] Failed to upload generated image: ${result.error}`);
       }
     } catch (error) {
       console.error(`[IPC handlers] Error processing generated image ${localPath}:`, error);
     }
+  }
+
+  // Append S3 URL summary so agent sees URLs in conversation history
+  // Uses markdown link syntax: clean for users, agent can extract URLs
+  if (uploadedImages.length > 0) {
+    const urlSummary = uploadedImages
+      .map(img => `- [${img.filename}](${img.s3Url})`)
+      .join('\n');
+    processedContent += `\n\n**Generated Images:**\n${urlSummary}`;
   }
 
   return processedContent;

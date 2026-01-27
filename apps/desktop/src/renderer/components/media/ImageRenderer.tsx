@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Download, ChevronLeft, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
+import { X, Download, ChevronLeft, ChevronRight, AlertCircle, Loader2, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ImageRendererProps {
@@ -251,13 +251,13 @@ function Lightbox({ url, alt, onClose, onPrev, onNext, counter }: LightboxProps)
         onClick={handleBackdropClick}
       />
 
-      {/* Close button */}
+      {/* Close button - prominent with higher z-index */}
       <button
         data-testid="lightbox-close"
         onClick={onClose}
-        className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+        className="absolute top-4 right-4 z-50 p-3 rounded-full bg-black/70 hover:bg-black/90 text-white transition-colors border border-white/20"
       >
-        <X className="w-6 h-6" />
+        <X className="w-8 h-8" />
       </button>
 
       {/* Navigation buttons */}
@@ -314,6 +314,10 @@ function Lightbox({ url, alt, onClose, onPrev, onNext, counter }: LightboxProps)
 interface ImageGalleryProps {
   urls: string[];
   className?: string;
+  /** Enable selection mode with letter labels (A, B, C...) */
+  selectable?: boolean;
+  /** Callback when an image is selected */
+  onSelect?: (label: string, url: string, index: number) => void;
 }
 
 /**
@@ -381,7 +385,7 @@ function useLocalFilesLoader(urls: string[]): {
   return { resolvedUrls, isLoading, errors };
 }
 
-export function ImageGallery({ urls, className }: ImageGalleryProps) {
+export function ImageGallery({ urls, className, selectable = false, onSelect }: ImageGalleryProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [loadedStates, setLoadedStates] = useState<Record<number, LoadingState>>({});
   
@@ -459,8 +463,10 @@ export function ImageGallery({ urls, className }: ImageGalleryProps) {
             <div
               key={urls[index]} // Use original URL as key for stability
               className={cn(
-                'relative rounded-lg overflow-hidden bg-muted/30 group cursor-pointer',
-                loadedStates[index] !== 'loaded' && 'min-h-[100px]'
+                'relative rounded-lg overflow-hidden group cursor-pointer',
+                'aspect-square', // 1:1 aspect ratio container
+                'bg-gray-200/50 dark:bg-gray-700/50', // Light gray with 50% opacity
+                'border border-gray-300/50 dark:border-gray-600/50' // Border with 50% opacity
               )}
             >
               {/* Loading spinner */}
@@ -473,7 +479,7 @@ export function ImageGallery({ urls, className }: ImageGalleryProps) {
               {/* Error state */}
               {showError && (
                 <div className={cn(
-                  "flex items-center gap-2 p-4",
+                  "absolute inset-0 flex items-center justify-center gap-2 p-4",
                   hasLocalError === 'File no longer exists' ? "text-muted-foreground" : "text-destructive"
                 )}>
                   <AlertCircle className="w-5 h-5 flex-shrink-0" />
@@ -489,7 +495,7 @@ export function ImageGallery({ urls, className }: ImageGalleryProps) {
                   onError={() => handleImageError(index)}
                   onClick={() => handleImageClick(index)}
                   className={cn(
-                    'w-full h-auto transition-opacity',
+                    'absolute inset-0 w-full h-full object-contain transition-opacity',
                     loadedStates[index] !== 'loaded' && 'opacity-0',
                     loadedStates[index] === 'loaded' && 'opacity-100',
                     loadedStates[index] === 'error' && 'hidden'
@@ -497,9 +503,31 @@ export function ImageGallery({ urls, className }: ImageGalleryProps) {
                 />
               )}
 
-              {/* Download button overlay */}
+              {/* Letter label for selection mode */}
+              {selectable && loadedStates[index] === 'loaded' && (
+                <div className="absolute top-2 left-2 w-6 h-6 rounded-full bg-black/70 flex items-center justify-center text-white text-xs font-bold z-10">
+                  {String.fromCharCode(65 + index)}
+                </div>
+              )}
+
+              {/* Action buttons overlay */}
               {loadedStates[index] === 'loaded' && (
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {/* Select button */}
+                  {selectable && onSelect && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const label = String.fromCharCode(65 + index);
+                        onSelect(label, resolvedUrl, index);
+                      }}
+                      className="p-1.5 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground transition-colors"
+                      title={`Select image ${String.fromCharCode(65 + index)}`}
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  )}
+                  {/* Download button */}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();

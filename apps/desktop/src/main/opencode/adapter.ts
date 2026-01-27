@@ -9,7 +9,7 @@ import {
   isOpenCodeBundled,
   getBundledOpenCodeVersion,
 } from './cli-path';
-import { getAllApiKeys, getBedrockCredentials } from '../store/secureStorage';
+import { getAllApiKeys } from '../store/secureStorage';
 import { getSelectedModel } from '../store/appSettings';
 import { getActiveProviderModel } from '../store/providerSettings';
 import { generateOpenCodeConfig, ACCOMPLISH_AGENT_NAME, syncApiKeysToOpenCodeAuth, getAppScopedDataHome } from './config-generator';
@@ -517,24 +517,10 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
       console.log('[OpenCode CLI] Using LiteLLM API key from settings');
     }
 
-    // Set Bedrock credentials if configured
-    const bedrockCredentials = getBedrockCredentials();
-    if (bedrockCredentials) {
-      if (bedrockCredentials.authType === 'accessKeys') {
-        env.AWS_ACCESS_KEY_ID = bedrockCredentials.accessKeyId;
-        env.AWS_SECRET_ACCESS_KEY = bedrockCredentials.secretAccessKey;
-        if (bedrockCredentials.sessionToken) {
-          env.AWS_SESSION_TOKEN = bedrockCredentials.sessionToken;
-        }
-        console.log('[OpenCode CLI] Using Bedrock Access Key credentials');
-      } else if (bedrockCredentials.authType === 'profile') {
-        env.AWS_PROFILE = bedrockCredentials.profileName;
-        console.log('[OpenCode CLI] Using Bedrock AWS Profile:', bedrockCredentials.profileName);
-      }
-      if (bedrockCredentials.region) {
-        env.AWS_REGION = bedrockCredentials.region;
-        console.log('[OpenCode CLI] Using Bedrock region:', bedrockCredentials.region);
-      }
+    // Set Kimi (Moonshot) API key if configured
+    if (apiKeys.kimi) {
+      env.MOONSHOT_API_KEY = apiKeys.kimi;
+      console.log('[OpenCode CLI] Using Kimi (Moonshot) API key from settings');
     }
 
     // Set Ollama host if configured (check new settings first, then legacy)
@@ -588,6 +574,9 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     // Build the prompt - enhance with attachment context if present
     let prompt = config.prompt;
     if (config.attachments && config.attachments.length > 0) {
+      // Check if any attachments are images
+      const hasImages = config.attachments.some((att) => att.contentType.startsWith('image/'));
+      
       const attachmentContext = config.attachments.map((att) => {
         // Determine file type for context
         const isImage = att.contentType.startsWith('image/');
@@ -601,11 +590,29 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
         else if (isJson) typeLabel = 'JSON';
         else if (isText) typeLabel = 'Text file';
         
-        return `- ${typeLabel}: ${att.filename} (${att.url})`;
+        return `- ${typeLabel}: ${att.filename}
+  URL: ${att.url}`;
       }).join('\n');
 
-      prompt = `User's attached files (publicly accessible S3 URLs):
+      // Build guidance based on attachment types
+      let usageGuidance = `
+IMPORTANT - How to use these attachments:
+- These S3 URLs are PUBLICLY ACCESSIBLE - no authentication needed
+- DO NOT open in browser, screenshot, download, or convert to base64`;
+
+      if (hasImages) {
+        usageGuidance += `
+- For AI image generation/editing with these images:
+  * OpenAI Vision: Use "image_url": {"url": "THE_S3_URL"} directly in the API request
+  * For Gemini: Download with curl, then use JSON FILE approach (see system prompt for example)
+  * For space_* tools: Pass the S3 URL directly as the image parameter
+- NEVER use browser to navigate to an image URL just to view it - the URL IS the image
+- CRITICAL FOR GEMINI: Never embed base64 directly in shell commands - use JSON file with curl -d @file.json`;
+      }
+
+      prompt = `User's attached files:
 ${attachmentContext}
+${usageGuidance}
 
 User's request: ${config.prompt}`;
       
@@ -718,9 +725,16 @@ User's request: ${config.prompt}`;
           message: `Using ${toolName}`,
         });
 
-        // Check if this is AskUserQuestion (requires user input)
+        // DISABLED: AskUserQuestion is now handled via MCP server HTTP path (permission-api.ts)
+        // The MCP server properly blocks Claude until user responds. Emitting permission-request
+        // here causes a duplicate question display and race condition where responses may go
+        // to the wrong handler. See: https://github.com/shopos/brandwork/issues/XXX
+        // To rollback, uncomment the following:
+        // if (toolName === 'AskUserQuestion') {
+        //   this.handleAskUserQuestion(toolInput as AskUserQuestionInput);
+        // }
         if (toolName === 'AskUserQuestion') {
-          this.handleAskUserQuestion(toolInput as AskUserQuestionInput);
+          console.log('[OpenCode Adapter] AskUserQuestion tool_call detected - handled via MCP HTTP path, skipping duplicate event');
         }
         break;
 
@@ -770,9 +784,16 @@ User's request: ${config.prompt}`;
           this.emit('tool-result', toolUseOutput);
         }
 
-        // Check if this is AskUserQuestion (requires user input)
+        // DISABLED: AskUserQuestion is now handled via MCP server HTTP path (permission-api.ts)
+        // The MCP server properly blocks Claude until user responds. Emitting permission-request
+        // here causes a duplicate question display and race condition where responses may go
+        // to the wrong handler. See: https://github.com/shopos/brandwork/issues/XXX
+        // To rollback, uncomment the following:
+        // if (toolUseName === 'AskUserQuestion') {
+        //   this.handleAskUserQuestion(toolUseInput as AskUserQuestionInput);
+        // }
         if (toolUseName === 'AskUserQuestion') {
-          this.handleAskUserQuestion(toolUseInput as AskUserQuestionInput);
+          console.log('[OpenCode Adapter] AskUserQuestion tool_use detected - handled via MCP HTTP path, skipping duplicate event');
         }
         break;
 
@@ -805,17 +826,30 @@ User's request: ${config.prompt}`;
           }
           
           this.hasCompleted = true;
-          this.emit('complete', {
-            status: 'success',
-            sessionId: this.currentSessionId || undefined,
-          });
+          
+          // Delay completion (1s) to allow final text messages to be processed by frontend
+          // This prevents the "Completed" state from appearing before the final text bubble
+          setTimeout(() => {
+            if (!this.isDisposed) {
+              this.emit('complete', {
+                status: 'success',
+                sessionId: this.currentSessionId || undefined,
+              });
+            }
+          }, 1000);
         } else if (message.part.reason === 'error') {
           this.hasCompleted = true;
-          this.emit('complete', {
-            status: 'error',
-            sessionId: this.currentSessionId || undefined,
-            error: 'Task failed',
-          });
+          
+          // Delay completion (1s) for consistency and to allow any buffered logs to appear
+          setTimeout(() => {
+            if (!this.isDisposed) {
+              this.emit('complete', {
+                status: 'error',
+                sessionId: this.currentSessionId || undefined,
+                error: 'Task failed',
+              });
+            }
+          }, 1000);
         }
         // 'tool_use' reason means agent is continuing, don't emit complete
         break;

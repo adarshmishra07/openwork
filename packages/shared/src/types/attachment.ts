@@ -57,17 +57,17 @@ export type FileCategory = 'image' | 'document' | 'data' | 'text';
  * Supported file types with their configurations
  */
 export const SUPPORTED_FILE_TYPES: Record<string, FileTypeConfig> = {
-  // Images (10MB limit)
-  'image/jpeg': { extension: '.jpg', maxSize: 10 * 1024 * 1024, category: 'image' },
-  'image/png': { extension: '.png', maxSize: 10 * 1024 * 1024, category: 'image' },
-  'image/gif': { extension: '.gif', maxSize: 10 * 1024 * 1024, category: 'image' },
-  'image/webp': { extension: '.webp', maxSize: 10 * 1024 * 1024, category: 'image' },
-  'image/svg+xml': { extension: '.svg', maxSize: 2 * 1024 * 1024, category: 'image' },
-  // Documents (25MB limit for PDF)
-  'application/pdf': { extension: '.pdf', maxSize: 25 * 1024 * 1024, category: 'document' },
-  // Data files (5MB limit)
-  'application/json': { extension: '.json', maxSize: 5 * 1024 * 1024, category: 'data' },
-  'text/csv': { extension: '.csv', maxSize: 5 * 1024 * 1024, category: 'data' },
+  // Images (3MB limit - base64 encoding adds ~33%, Lambda has 6MB payload limit)
+  'image/jpeg': { extension: '.jpg', maxSize: 3 * 1024 * 1024, category: 'image' },
+  'image/png': { extension: '.png', maxSize: 3 * 1024 * 1024, category: 'image' },
+  'image/gif': { extension: '.gif', maxSize: 3 * 1024 * 1024, category: 'image' },
+  'image/webp': { extension: '.webp', maxSize: 3 * 1024 * 1024, category: 'image' },
+  'image/svg+xml': { extension: '.svg', maxSize: 1 * 1024 * 1024, category: 'image' },
+  // Documents (3MB limit - same Lambda constraint)
+  'application/pdf': { extension: '.pdf', maxSize: 3 * 1024 * 1024, category: 'document' },
+  // Data files (3MB limit)
+  'application/json': { extension: '.json', maxSize: 3 * 1024 * 1024, category: 'data' },
+  'text/csv': { extension: '.csv', maxSize: 3 * 1024 * 1024, category: 'data' },
   // Text files (2MB limit)
   'text/markdown': { extension: '.md', maxSize: 2 * 1024 * 1024, category: 'text' },
   'text/plain': { extension: '.txt', maxSize: 2 * 1024 * 1024, category: 'text' },

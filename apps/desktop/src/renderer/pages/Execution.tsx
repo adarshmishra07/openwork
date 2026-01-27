@@ -11,7 +11,7 @@ import { hasAnyReadyProvider, getAcceptedFileTypes } from '@shopos/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { XCircle, CornerDownLeft, ArrowLeft, CheckCircle2, AlertCircle, AlertTriangle, Terminal, Wrench, FileText, Search, Code, Brain, Clock, Square, Play, Download, File, Bug, ChevronUp, ChevronDown, Trash2, Check, Sparkles, BookOpen, Palette, Globe } from 'lucide-react';
+import { XCircle, X, CornerDownLeft, ArrowLeft, CheckCircle2, AlertCircle, Terminal, Wrench, FileText, Search, Code, Brain, Clock, Square, Play, Download, Bug, ChevronUp, ChevronDown, Trash2, Check, Sparkles, BookOpen, Palette, Globe, Copy } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
@@ -25,6 +25,7 @@ import { CollapsibleThinking } from '../components/chat/CollapsibleThinking';
 import { CollapsibleToolCall } from '../components/chat/CollapsibleToolCall';
 import { ProgressIndicator } from '../components/chat/ProgressIndicator';
 import { TodoList } from '../components/chat/TodoList';
+import { InlinePermission } from '../components/chat/InlinePermission';
 import { AttachmentButton, AttachmentList, AttachmentDropzone } from '../components/attachments';
 import { useAttachmentStore } from '../stores/attachmentStore';
 
@@ -115,6 +116,32 @@ function formatToolName(rawName: string): string {
     .replace(/^Type$/, 'Typing');
   
   return name;
+}
+
+/**
+ * Pre-process markdown content to convert image links to image syntax
+ * [filename](https://...png) → ![filename](https://...png)
+ * This makes ReactMarkdown render them as <img> tags instead of <a> links
+ */
+function preprocessImageLinks(content: string): string {
+  if (!content) return '';
+  
+  let processed = content;
+  
+  // Convert markdown links that point to images into markdown image syntax
+  // [filename](https://...png) → ![filename](https://...png)
+  processed = processed.replace(
+    /(?<!!)\[([^\]]+)\]\((https?:\/\/[^\s)]+\.(?:png|jpg|jpeg|gif|webp|svg|bmp|avif)(?:\?[^\s)]*)?)\)/gi,
+    '![$1]($2)'
+  );
+  
+  // Also convert bare image URLs on their own line
+  processed = processed.replace(
+    /(?<=^|\s)(https?:\/\/[^\s<>]+\.(?:png|jpg|jpeg|gif|webp|svg|bmp|avif)(?:\?[^\s<>]*)?)(?=\s|$)/gim,
+    '![]($1)'
+  );
+  
+  return processed;
 }
 
 /**
@@ -215,30 +242,6 @@ function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T 
   }) as T;
 }
 
-// Helper for file operation badge colors - only delete uses red (semantic: danger)
-function getOperationBadgeClasses(operation?: string): string {
-  switch (operation) {
-    case 'delete': return 'bg-red-500/10 text-red-600';
-    default: return 'bg-muted text-muted-foreground';
-  }
-}
-
-// Helper to check if this is a delete operation
-function isDeleteOperation(request: { type: string; fileOperation?: string }): boolean {
-  return request.type === 'file' && request.fileOperation === 'delete';
-}
-
-// Get file paths to display (handles both single and multiple)
-function getDisplayFilePaths(request: { filePath?: string; filePaths?: string[] }): string[] {
-  if (request.filePaths && request.filePaths.length > 0) {
-    return request.filePaths;
-  }
-  if (request.filePath) {
-    return [request.filePath];
-  }
-  return [];
-}
-
 export default function ExecutionPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -254,9 +257,6 @@ export default function ExecutionPage() {
   const [debugModeEnabled, setDebugModeEnabled] = useState(false);
   const [debugExported, setDebugExported] = useState(false);
   const debugPanelRef = useRef<HTMLDivElement>(null);
-  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
-  const [customResponse, setCustomResponse] = useState('');
-  const [showCustomInput, setShowCustomInput] = useState(false);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [pendingFollowUp, setPendingFollowUp] = useState<string | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<FileAttachment[]>([]);
@@ -297,6 +297,11 @@ export default function ExecutionPage() {
     setupProgress,
     setupProgressTaskId,
     setupDownloadStep,
+    // Image selection
+    selectedImages,
+    selectImage,
+    deselectImage,
+    clearSelectedImages,
   } = useTaskStore();
 
   // Debounced scroll function
@@ -505,9 +510,24 @@ export default function ExecutionPage() {
         size: a.size,
       }));
 
-    await sendFollowUp(followUp, attachmentsForApi.length > 0 ? attachmentsForApi : undefined);
+    // Prepend selected image labels to the message if any are selected
+    let messageToSend = followUp;
+    const imageReferences = selectedImages.length > 0 
+      ? selectedImages.map(img => ({ label: img.label, url: img.url }))
+      : undefined;
+    if (selectedImages.length > 0) {
+      const imageRefs = selectedImages.map(img => `[${img.label}]`).join(' ');
+      messageToSend = `${imageRefs} ${followUp}`.trim();
+    }
+
+    await sendFollowUp(
+      messageToSend, 
+      attachmentsForApi.length > 0 ? attachmentsForApi : undefined,
+      imageReferences
+    );
     setFollowUp('');
     clearAttachments();
+    clearSelectedImages(); // Clear selected images after sending
     // Generate new local task ID for next follow-up
     setLocalTaskId(`task_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`);
   };
@@ -582,30 +602,33 @@ export default function ExecutionPage() {
     setTimeout(() => setDebugExported(false), 2000);
   }, [debugLogs, id]);
 
-  const handlePermissionResponse = async (allowed: boolean) => {
+  // Handler for InlinePermission component
+  const handleInlinePermissionResponse = async (
+    allowed: boolean,
+    options?: {
+      rememberSession?: boolean;
+      rememberPermanent?: boolean;
+      selectedOptions?: string[];
+      customText?: string;
+    }
+  ) => {
     if (!permissionRequest || !currentTask) return;
 
-    // For questions, handle custom text response
     const isQuestion = permissionRequest.type === 'question';
-    const hasCustomText = isQuestion && showCustomInput && customResponse.trim();
 
     await respondToPermission({
       requestId: permissionRequest.id,
       taskId: permissionRequest.taskId,
       decision: allowed ? 'allow' : 'deny',
-      selectedOptions: isQuestion ? (hasCustomText ? [] : selectedOptions) : undefined,
-      customText: hasCustomText ? customResponse.trim() : undefined,
+      selectedOptions: options?.selectedOptions,
+      customText: options?.customText,
+      rememberSession: options?.rememberSession,
+      rememberPermanent: options?.rememberPermanent,
     });
 
-    // Reset state for next question
-    setSelectedOptions([]);
-    setCustomResponse('');
-    setShowCustomInput(false);
-
-    // If denied on a question, also interrupt the task
-    if (!allowed && isQuestion) {
-      interruptTask();
-    }
+    // Note: For questions, we don't interrupt the task on skip/deny.
+    // The MCP server returns "User declined to answer" and Claude continues gracefully.
+    // Only permission denials (shopify, file, tool) may cause the agent to pause.
   };
 
   if (error) {
@@ -906,6 +929,8 @@ export default function ExecutionPage() {
                       continueLabel={currentTask.status === 'interrupted' ? 'Continue' : 'Done, Continue'}
                       onContinue={handleContinue}
                       isLoading={isLoading}
+                      imageSelectable={message.type === 'assistant'}
+                      onImageSelect={selectImage}
                     />
                   );
                 } else {
@@ -962,6 +987,8 @@ export default function ExecutionPage() {
                              showContinueButton={false}
                              onContinue={handleContinue}
                              isLoading={isLoading}
+                             imageSelectable={message.type === 'assistant'}
+                             onImageSelect={selectImage}
                            />
                          );
                       })}
@@ -996,308 +1023,21 @@ export default function ExecutionPage() {
               )}
             </AnimatePresence>
 
+            {/* Inline Permission Request */}
+            <AnimatePresence>
+              {permissionRequest && (
+                <InlinePermission
+                  request={permissionRequest}
+                  onRespond={handleInlinePermissionResponse}
+                  isLoading={isLoading}
+                />
+              )}
+            </AnimatePresence>
+
             <div ref={messagesEndRef} />
           </div>
         </div>
       )}
-
-      {/* Permission Request Modal */}
-      <AnimatePresence>
-        {permissionRequest && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-            data-testid="execution-permission-modal"
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              transition={springs.bouncy}
-            >
-              <Card className="w-full max-w-lg p-6 mx-4">
-                <div className="flex items-start gap-4">
-                  <div className={cn(
-                    "flex h-10 w-10 items-center justify-center rounded-full shrink-0",
-                    isDeleteOperation(permissionRequest) ? "bg-red-500/10" :
-                    permissionRequest.type === 'file' ? "bg-amber-500/10" :
-                    permissionRequest.type === 'question' ? "bg-primary/10" : "bg-warning/10"
-                  )}>
-                    {isDeleteOperation(permissionRequest) ? (
-                      <AlertTriangle className="h-5 w-5 text-red-600" />
-                    ) : permissionRequest.type === 'file' ? (
-                      <File className="h-5 w-5 text-amber-600" />
-                    ) : permissionRequest.type === 'question' ? (
-                      <Brain className="h-5 w-5 text-primary" />
-                    ) : (
-                      <AlertCircle className="h-5 w-5 text-warning" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className={cn(
-                      "text-lg font-semibold mb-2",
-                      isDeleteOperation(permissionRequest) ? "text-red-600" : "text-foreground"
-                    )}>
-                      {isDeleteOperation(permissionRequest)
-                        ? 'File Deletion Warning'
-                        : permissionRequest.type === 'file'
-                          ? 'File Permission Required'
-                          : permissionRequest.type === 'question'
-                            ? (permissionRequest.header || 'Question')
-                            : 'Permission Required'}
-                    </h3>
-
-                    {/* File permission specific UI */}
-                    {permissionRequest.type === 'file' && (
-                      <>
-                        {/* Delete operation warning banner */}
-                        {isDeleteOperation(permissionRequest) && (
-                          <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-                            <p className="text-sm text-red-600">
-                              {(() => {
-                                const paths = getDisplayFilePaths(permissionRequest);
-                                return paths.length > 1
-                                  ? `${paths.length} files will be permanently deleted:`
-                                  : 'This file will be permanently deleted:';
-                              })()}
-                            </p>
-                          </div>
-                        )}
-
-                        {/* Non-delete operation badge */}
-                        {!isDeleteOperation(permissionRequest) && (
-                          <div className="mb-3">
-                            <span className={cn(
-                              "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
-                              getOperationBadgeClasses(permissionRequest.fileOperation)
-                            )}>
-                              {permissionRequest.fileOperation?.toUpperCase()}
-                            </span>
-                          </div>
-                        )}
-
-                        {/* File path(s) display */}
-                        <div className={cn(
-                          "mb-4 p-3 rounded-lg",
-                          isDeleteOperation(permissionRequest)
-                            ? "bg-red-500/5 border border-red-500/20"
-                            : "bg-muted"
-                        )}>
-                          {(() => {
-                            const paths = getDisplayFilePaths(permissionRequest);
-                            if (paths.length > 1) {
-                              return (
-                                <ul className="space-y-1">
-                                  {paths.map((path, idx) => (
-                                    <li key={idx} className={cn(
-                                      "text-sm font-mono break-all",
-                                      isDeleteOperation(permissionRequest) ? "text-red-600" : "text-foreground"
-                                    )}>
-                                      • {path}
-                                    </li>
-                                  ))}
-                                </ul>
-                              );
-                            }
-                            return (
-                              <p className={cn(
-                                "text-sm font-mono break-all",
-                                isDeleteOperation(permissionRequest) ? "text-red-600" : "text-foreground"
-                              )}>
-                                {paths[0]}
-                              </p>
-                            );
-                          })()}
-                          {permissionRequest.targetPath && (
-                            <p className="text-sm font-mono text-muted-foreground mt-1">
-                              → {permissionRequest.targetPath}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Delete warning text */}
-                        {isDeleteOperation(permissionRequest) && (
-                          <p className="text-sm text-red-600/80 mb-4">
-                            This action cannot be undone.
-                          </p>
-                        )}
-
-                        {permissionRequest.contentPreview && (
-                          <details className="mb-4">
-                            <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
-                              Preview content
-                            </summary>
-                            <pre className="mt-2 p-2 rounded bg-muted text-xs overflow-x-auto max-h-32 overflow-y-auto">
-                              {permissionRequest.contentPreview}
-                            </pre>
-                          </details>
-                        )}
-                      </>
-                    )}
-
-                    {/* Question type UI with options */}
-                    {permissionRequest.type === 'question' && (
-                      <>
-                        {(() => {
-                          // Extract image URLs from question text and render them
-                          const imageUrlRegex = /(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp)(?:\?[^\s]*)?)/gi;
-                          const questionText = permissionRequest.question || '';
-                          const imageUrls = questionText.match(imageUrlRegex) || [];
-                          const textWithoutImages = questionText.replace(imageUrlRegex, '').trim();
-                          
-                          return (
-                            <div className="mb-4">
-                              {/* Render extracted images */}
-                              {imageUrls.length > 0 && (
-                                <div className="flex flex-wrap gap-2 mb-3">
-                                  {imageUrls.map((url, idx) => (
-                                    <img
-                                      key={idx}
-                                      src={url}
-                                      alt={`Image ${idx + 1}`}
-                                      className="max-w-full max-h-[200px] rounded-lg object-contain border border-border"
-                                      onError={(e) => {
-                                        (e.target as HTMLImageElement).style.display = 'none';
-                                      }}
-                                    />
-                                  ))}
-                                </div>
-                              )}
-                              {/* Render remaining text */}
-                              {textWithoutImages && (
-                                <p className="text-sm text-foreground">{textWithoutImages}</p>
-                              )}
-                            </div>
-                          );
-                        })()}
-
-                        {/* Options list */}
-                        {!showCustomInput && permissionRequest.options && permissionRequest.options.length > 0 && (
-                          <div className="mb-4 space-y-2">
-                            {permissionRequest.options.map((option, idx) => (
-                              <button
-                                key={idx}
-                                onClick={() => {
-                                  // If "Other" is selected, show custom input
-                                  if (option.label.toLowerCase() === 'other') {
-                                    setShowCustomInput(true);
-                                    setSelectedOptions([]);
-                                    return;
-                                  }
-                                  if (permissionRequest.multiSelect) {
-                                    setSelectedOptions((prev) =>
-                                      prev.includes(option.label)
-                                        ? prev.filter((o) => o !== option.label)
-                                        : [...prev, option.label]
-                                    );
-                                  } else {
-                                    setSelectedOptions([option.label]);
-                                  }
-                                }}
-                                className={cn(
-                                  "w-full text-left p-3 rounded-lg border transition-colors",
-                                  selectedOptions.includes(option.label)
-                                    ? "border-primary bg-primary/10"
-                                    : "border-border hover:border-primary/50"
-                                )}
-                              >
-                                <div className="font-medium text-sm">{option.label}</div>
-                                {option.description && (
-                                  <div className="text-xs text-muted-foreground mt-1">
-                                    {option.description}
-                                  </div>
-                                )}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Custom text input */}
-                        {showCustomInput && (
-                          <div className="mb-4 space-y-2">
-                            <Input
-                              autoFocus
-                              value={customResponse}
-                              onChange={(e) => setCustomResponse(e.target.value)}
-                              placeholder="Type your response..."
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' && customResponse.trim()) {
-                                  handlePermissionResponse(true);
-                                }
-                              }}
-                            />
-                            <button
-                              onClick={() => {
-                                setShowCustomInput(false);
-                                setCustomResponse('');
-                              }}
-                              className="text-xs text-muted-foreground hover:text-foreground"
-                            >
-                              ← Back to options
-                            </button>
-                          </div>
-                        )}
-                      </>
-                    )}
-
-                    {/* Standard tool UI (non-file, non-question) */}
-                    {permissionRequest.type === 'tool' && (
-                      <>
-                        <p className="text-sm text-muted-foreground mb-4">
-                          Allow {permissionRequest.toolName}?
-                        </p>
-                        {permissionRequest.toolName && (
-                          <div className="mb-4 p-3 rounded-lg bg-muted text-xs font-mono overflow-x-auto">
-                            <p className="text-muted-foreground mb-1">Tool: {permissionRequest.toolName}</p>
-                            <pre className="text-foreground">
-                              {JSON.stringify(permissionRequest.toolInput, null, 2)}
-                            </pre>
-                          </div>
-                        )}
-                      </>
-                    )}
-
-                    <div className="flex gap-3">
-                      <Button
-                        variant="outline"
-                        onClick={() => handlePermissionResponse(false)}
-                        className="flex-1"
-                        data-testid="permission-deny-button"
-                      >
-                        {permissionRequest.type === 'question' ? 'Cancel' : 'Deny'}
-                      </Button>
-                      <Button
-                        onClick={() => handlePermissionResponse(true)}
-                        className={cn(
-                          "flex-1",
-                          isDeleteOperation(permissionRequest) && "bg-red-600 hover:bg-red-700 text-white"
-                        )}
-                        data-testid="permission-allow-button"
-                        disabled={
-                          permissionRequest.type === 'question' &&
-                          !showCustomInput &&
-                          permissionRequest.options &&
-                          selectedOptions.length === 0
-                        }
-                      >
-                        {isDeleteOperation(permissionRequest)
-                          ? getDisplayFilePaths(permissionRequest).length > 1
-                            ? 'Delete All'
-                            : 'Delete'
-                          : permissionRequest.type === 'question'
-                            ? 'Submit'
-                            : 'Allow'}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Persistent Input Bar */}
       {!permissionRequest && (
@@ -1321,6 +1061,27 @@ export default function ExecutionPage() {
                   onRemove={removeAttachment}
                   onRetry={handleRetry}
                 />
+              )}
+
+              {/* Selected image tags */}
+              {selectedImages.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pb-2">
+                  {selectedImages.map((img) => (
+                    <span
+                      key={img.label}
+                      className="inline-flex items-center gap-1 bg-primary/10 text-primary text-sm px-2 py-0.5 rounded-md"
+                    >
+                      <span className="font-medium">{img.label}</span>
+                      <button
+                        onClick={() => deselectImage(img.label)}
+                        className="hover:text-destructive transition-colors"
+                        title={`Remove image ${img.label}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
               )}
               
               <div className="flex gap-3">
@@ -1515,6 +1276,10 @@ interface MessageBubbleProps {
   continueLabel?: string;
   onContinue?: () => void;
   isLoading?: boolean;
+  /** Enable image selection for this message */
+  imageSelectable?: boolean;
+  /** Callback when an image is selected */
+  onImageSelect?: (label: string, url: string, index: number) => void;
 }
 
 // Get the next message from a flat list given current message
@@ -1578,15 +1343,28 @@ const ActivityBullet = memo(function ActivityBullet({
 
 // Intermediate assistant message - shows thinking/reasoning as plain text
 // No longer collapsible - streams and stays visible
+// Now uses RichContentRenderer for consistent image handling and selection
 const IntermediateMessage = memo(function IntermediateMessage({ 
   content,
   isRunning = false,
-  isLastMessage = false 
+  isLastMessage = false,
+  imageSelectable = false,
+  onImageSelect,
 }: { 
   content: string;
   isRunning?: boolean;
   isLastMessage?: boolean;
+  imageSelectable?: boolean;
+  onImageSelect?: (label: string, url: string, index: number) => void;
 }) {
+  const proseClasses = cn(
+    'text-sm prose prose-sm max-w-none',
+    'prose-p:my-1 prose-p:leading-relaxed',
+    'prose-headings:text-foreground',
+    'prose-strong:text-foreground',
+    'prose-code:text-xs prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded'
+  );
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }}
@@ -1594,9 +1372,14 @@ const IntermediateMessage = memo(function IntermediateMessage({
       transition={springs.gentle}
       className="flex items-start gap-3 py-1"
     >
-      {/* Thinking content rendered as markdown */}
-      <div className="flex-1 text-sm text-foreground/90 prose prose-sm max-w-none prose-p:my-1 prose-p:leading-relaxed prose-headings:text-foreground prose-strong:text-foreground prose-code:text-xs prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+      {/* Content rendered with RichContentRenderer for image support */}
+      <div className="flex-1 text-foreground/90">
+        <RichContentRenderer 
+          content={content}
+          className={proseClasses}
+          imageSelectable={imageSelectable}
+          onImageSelect={onImageSelect}
+        />
       </div>
       {/* Loading spinner for active thinking */}
       {isLastMessage && isRunning && (
@@ -1605,6 +1388,95 @@ const IntermediateMessage = memo(function IntermediateMessage({
     </motion.div>
   );
 });
+
+/**
+ * Helper to extract text content from React children
+ */
+function extractTextFromChildren(children: React.ReactNode): string {
+  if (typeof children === 'string') return children;
+  if (typeof children === 'number') return String(children);
+  if (!children) return '';
+  
+  if (Array.isArray(children)) {
+    return children.map(extractTextFromChildren).join('');
+  }
+  
+  if (typeof children === 'object' && 'props' in children) {
+    return extractTextFromChildren((children as { props: { children: React.ReactNode } }).props.children);
+  }
+  
+  return '';
+}
+
+/**
+ * CodeBlock component with always-visible copy button
+ */
+function CodeBlock({ children, className }: { children: React.ReactNode; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  
+  const handleCopy = useCallback(() => {
+    const text = extractTextFromChildren(children);
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [children]);
+  
+  return (
+    <div className={cn(
+      "relative group my-3 rounded-lg overflow-x-auto bg-muted/50 border border-border",
+      className
+    )}>
+      <pre className="whitespace-pre-wrap break-words text-sm p-4 m-0">
+        {children}
+      </pre>
+      <button
+        onClick={handleCopy}
+        className="absolute top-2 right-2 p-1.5 rounded bg-background/80 hover:bg-background border border-border/50 text-muted-foreground hover:text-foreground transition-colors"
+        title={copied ? "Copied!" : "Copy to clipboard"}
+      >
+        {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Renders user message content with inline image thumbnails for image references like [A], [B], [C]
+ */
+function renderContentWithImagePreviews(
+  content: string,
+  imageReferences?: Array<{ label: string; url: string }>
+): React.ReactNode {
+  if (!imageReferences || imageReferences.length === 0) {
+    return content;
+  }
+
+  // Create a map of label -> url
+  const refMap = new Map(imageReferences.map(ref => [ref.label, ref.url]));
+
+  // Split content by image tag pattern [A], [B], [C], etc.
+  const parts = content.split(/(\[[A-Z]\])/g);
+
+  return parts.map((part, index) => {
+    const match = part.match(/^\[([A-Z])\]$/);
+    if (match) {
+      const label = match[1];
+      const url = refMap.get(label);
+      if (url) {
+        return (
+          <span key={index} className="inline-flex items-center align-middle mx-0.5">
+            <img
+              src={url}
+              alt={`Image ${label}`}
+              className="w-10 h-10 rounded object-cover border border-primary-foreground/30"
+            />
+          </span>
+        );
+      }
+    }
+    return <span key={index}>{part}</span>;
+  });
+}
 
 // Memoized MessageBubble to prevent unnecessary re-renders and markdown re-parsing
 const MessageBubble = memo(function MessageBubble({ 
@@ -1617,15 +1489,27 @@ const MessageBubble = memo(function MessageBubble({
   showContinueButton = false, 
   continueLabel, 
   onContinue, 
-  isLoading = false 
+  isLoading = false,
+  imageSelectable = false,
+  onImageSelect
 }: MessageBubbleProps) {
   // Track whether streaming animation has completed
   // Initialized to false so streaming can start, will be set true when animation finishes or shouldStream becomes false
   const [streamComplete, setStreamComplete] = useState(false);
+  const [contentCopied, setContentCopied] = useState(false);
   const isUser = message.type === 'user';
   const isTool = message.type === 'tool';
   const isSystem = message.type === 'system';
   const isAssistant = message.type === 'assistant';
+  
+  // Handle copying assistant message content
+  const handleCopyContent = useCallback(() => {
+    if (message.content) {
+      navigator.clipboard.writeText(message.content);
+      setContentCopied(true);
+      setTimeout(() => setContentCopied(false), 2000);
+    }
+  }, [message.content]);
 
   // Check if this should be rendered as a bullet or full bubble
   const shouldRenderAsBullet = !isFinalResponse(message, isLastAssistantMessage, nextMessage);
@@ -1638,13 +1522,13 @@ const MessageBubble = memo(function MessageBubble({
   }, [shouldStream]);
 
   const proseClasses = cn(
-    'text-sm prose prose-sm max-w-none',
+    'text-sm prose prose-sm max-w-full',
     'prose-headings:text-foreground',
     'prose-p:text-foreground prose-p:my-2',
     'prose-strong:text-foreground prose-strong:font-semibold',
     'prose-em:text-foreground',
-    'prose-code:text-foreground prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs',
-    'prose-pre:bg-muted prose-pre:text-foreground prose-pre:p-3 prose-pre:rounded-lg',
+    'prose-code:text-foreground prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:break-all',
+    'prose-pre:bg-muted prose-pre:text-foreground prose-pre:p-3 prose-pre:rounded-lg prose-pre:overflow-x-auto prose-pre:max-w-full prose-pre:whitespace-pre-wrap',
     'prose-ul:text-foreground prose-ol:text-foreground',
     'prose-li:text-foreground prose-li:my-1',
     'prose-a:text-primary prose-a:underline',
@@ -1663,13 +1547,15 @@ const MessageBubble = memo(function MessageBubble({
     );
   }
 
-  // Render intermediate assistant messages as simple italic text
+  // Render intermediate assistant messages with RichContentRenderer
   if (isAssistant && shouldRenderAsBullet) {
     return (
       <IntermediateMessage 
         content={message.content || ''} 
         isRunning={isRunning}
         isLastMessage={isLastMessage}
+        imageSelectable={imageSelectable}
+        onImageSelect={onImageSelect}
       />
     );
   }
@@ -1684,7 +1570,7 @@ const MessageBubble = memo(function MessageBubble({
     >
       <div
         className={cn(
-          'max-w-[85%] rounded-2xl px-4 py-3 transition-all duration-150',
+          'max-w-[85%] min-w-0 rounded-2xl px-4 py-3 transition-all duration-150',
           isUser
             ? 'bg-primary text-primary-foreground'
             : isSystem
@@ -1735,7 +1621,7 @@ const MessageBubble = memo(function MessageBubble({
                   'text-primary-foreground'
                 )}
               >
-                {message.content}
+                {renderContentWithImagePreviews(message.content, message.imageReferences)}
               </p>
             )}
           </div>
@@ -1751,6 +1637,40 @@ const MessageBubble = memo(function MessageBubble({
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
+                    // Render images inline with proper styling
+                    img: ({ src, alt }) => {
+                      if (!src) return null;
+                      return (
+                        <img 
+                          src={src} 
+                          alt={alt || 'Image'} 
+                          className="max-w-[600px] w-full h-auto rounded-lg border border-border shadow-sm my-2"
+                          loading="lazy"
+                        />
+                      );
+                    },
+                    // Fallback: convert image links to images if pre-processing missed any
+                    a: ({ href, children }) => {
+                      if (!href) return <span>{children}</span>;
+                      const isImageLink = /\.(png|jpg|jpeg|gif|webp|svg|bmp|avif)(\?|$)/i.test(href);
+                      if (isImageLink) {
+                        return (
+                          <span className="block my-4">
+                            <img 
+                              src={href} 
+                              alt={String(children) || 'Image'} 
+                              className="max-w-[600px] w-full h-auto rounded-lg border border-border shadow-sm"
+                              loading="lazy"
+                            />
+                          </span>
+                        );
+                      }
+                      return (
+                        <a href={href} target="_blank" rel="noopener noreferrer" className="text-foreground underline hover:text-foreground/80">
+                          {children}
+                        </a>
+                      );
+                    },
                     table: ({ children }) => (
                       <div className="overflow-x-auto my-4">
                         <table className="min-w-full border-collapse border border-border rounded-lg">
@@ -1777,15 +1697,46 @@ const MessageBubble = memo(function MessageBubble({
                         {children}
                       </td>
                     ),
+                    // Code block with copy button
+                    pre: ({ children }) => (
+                      <CodeBlock className="bg-muted text-foreground p-3 rounded-lg">
+                        {children}
+                      </CodeBlock>
+                    ),
                   }}
                 >
-                  {streamedText}
+                  {preprocessImageLinks(streamedText)}
                 </ReactMarkdown>
               </div>
             )}
           </StreamingText>
         ) : (
-          <RichContentRenderer content={message.content} className={proseClasses} />
+          <RichContentRenderer 
+            content={message.content} 
+            className={proseClasses}
+            imageSelectable={imageSelectable}
+            onImageSelect={onImageSelect}
+          />
+        )}
+        {/* Copy button for assistant messages */}
+        {isAssistant && message.content && (
+          <button
+            onClick={handleCopyContent}
+            className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            title={contentCopied ? "Copied!" : "Copy message"}
+          >
+            {contentCopied ? (
+              <>
+                <Check className="h-3.5 w-3.5 text-green-500" />
+                <span className="text-green-500">Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="h-3.5 w-3.5" />
+                <span>Copy</span>
+              </>
+            )}
+          </button>
         )}
         {/* Only show timestamp on the final assistant message */}
         {isLastAssistantMessage && (

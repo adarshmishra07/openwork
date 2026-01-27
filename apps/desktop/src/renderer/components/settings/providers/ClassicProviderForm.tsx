@@ -29,6 +29,7 @@ const PROVIDER_LOGOS: Record<string, string> = {
   xai: xaiLogo,
   deepseek: deepseekLogo,
   zai: zaiLogo,
+  kimi: '', // Text-only, no logo needed
 };
 
 interface ClassicProviderFormProps {

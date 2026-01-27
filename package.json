@@ -10,9 +10,9 @@
     "url": "https://github.com/shopos/brandwork.git"
   },
   "scripts": {
-    "dev": "pnpm -F @brandwork/desktop dev",
+    "dev": "pnpm -F @shopos/desktop dev",
     "build": "pnpm -r build",
-    "build:desktop": "pnpm -F @brandwork/desktop build",
+    "build:desktop": "pnpm -F @shopos/desktop build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "clean": "pnpm -r clean && rm -rf node_modules"

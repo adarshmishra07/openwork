@@ -2,7 +2,7 @@
  * Provider and model configuration types for multi-provider support
  */
 
-export type ProviderType = 'anthropic' | 'openai' | 'openrouter' | 'google' | 'xai' | 'ollama' | 'deepseek' | 'zai' | 'custom' | 'bedrock' | 'litellm';
+export type ProviderType = 'anthropic' | 'openai' | 'openrouter' | 'google' | 'xai' | 'ollama' | 'deepseek' | 'zai' | 'custom' | 'kimi' | 'litellm';
 
 export interface ProviderConfig {
   id: ProviderType;
@@ -262,10 +262,21 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     ],
   },
   {
-    id: 'bedrock',
-    name: 'Amazon Bedrock',
-    requiresApiKey: false, // Uses AWS credentials
-    models: [], // Now fetched dynamically from AWS API
+    id: 'kimi',
+    name: 'Kimi',
+    requiresApiKey: true,
+    apiKeyEnvVar: 'MOONSHOT_API_KEY',
+    baseUrl: 'https://api.moonshot.ai',
+    models: [
+      {
+        id: 'kimi-k2.5',
+        displayName: 'Kimi K2.5',
+        provider: 'kimi',
+        fullId: 'kimi/kimi-k2.5',
+        contextWindow: 128000,
+        supportsVision: true,
+      },
+    ],
   },
 ];
 

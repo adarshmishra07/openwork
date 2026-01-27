@@ -8,7 +8,7 @@ export type ProviderId =
   | 'deepseek'
   | 'zai'
   | 'glm'
-  | 'bedrock'
+  | 'kimi'
   | 'ollama'
   | 'openrouter'
   | 'litellm';
@@ -32,7 +32,7 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
   deepseek: { id: 'deepseek', name: 'DeepSeek', category: 'classic', label: 'Service', logoKey: 'Deepseek', helpUrl: 'https://platform.deepseek.com/api_keys' },
   zai: { id: 'zai', name: 'Z-AI', category: 'classic', label: 'Service', logoKey: 'z-ai' },
   glm: { id: 'glm', name: 'GLM (Zhipu)', category: 'classic', label: 'Service', logoKey: 'zhipu', helpUrl: 'https://open.bigmodel.cn/usercenter/apikeys' },
-  bedrock: { id: 'bedrock', name: 'AWS Bedrock', category: 'aws', label: 'Service', logoKey: 'aws-bedrock' },
+  kimi: { id: 'kimi', name: 'Kimi', category: 'classic', label: 'Service', logoKey: 'kimi', helpUrl: 'https://platform.moonshot.cn/console/api-keys' },
   ollama: { id: 'ollama', name: 'Ollama', category: 'local', label: 'Local Models', logoKey: 'olama' },
   openrouter: { id: 'openrouter', name: 'OpenRouter', category: 'proxy', label: 'Service', logoKey: 'open-router', helpUrl: 'https://openrouter.ai/keys' },
   litellm: { id: 'litellm', name: 'LiteLLM', category: 'hybrid', label: 'Service', logoKey: 'liteLLM' },
@@ -45,12 +45,9 @@ export interface ApiKeyCredentials {
   keyPrefix: string;
 }
 
-export interface BedrockProviderCredentials {
-  type: 'bedrock';
-  authMethod: 'accessKey' | 'profile';
-  region: string;
-  accessKeyIdPrefix?: string;
-  profileName?: string;
+export interface KimiCredentials {
+  type: 'kimi';
+  keyPrefix: string;
 }
 
 export interface OllamaCredentials {
@@ -80,7 +77,7 @@ export interface SubscriptionCredentials {
 
 export type ProviderCredentials =
   | ApiKeyCredentials
-  | BedrockProviderCredentials
+  | KimiCredentials
   | OllamaCredentials
   | OpenRouterCredentials
   | LiteLLMCredentials
@@ -125,7 +122,7 @@ export const DEFAULT_MODELS: Partial<Record<ProviderId, string>> = {
   openai: 'openai/gpt-5-codex',
   google: 'google/gemini-3-pro-preview',
   xai: 'xai/grok-4',
-  bedrock: 'amazon-bedrock/anthropic.claude-sonnet-4-5-20251001-v1:0',
+  kimi: 'kimi/kimi-k2.5',
   zai: 'zai/glm-4.7-flashx',
   deepseek: 'deepseek/deepseek-chat',
 };

@@ -11,7 +11,7 @@
 import path from 'path';
 import { app } from 'electron';
 import { getSkillsPath } from '../opencode/config-generator';
-import { getAllApiKeys, getBedrockCredentials } from '../store/secureStorage';
+import { getAllApiKeys } from '../store/secureStorage';
 import { generateBrandContext } from '../store/brandMemory';
 import { getActiveProviderModel } from '../store/providerSettings';
 import { getSelectedModel } from '../store/appSettings';
@@ -137,10 +137,12 @@ export async function getModelForSdk(): Promise<string | undefined> {
       }
       return model;
     
-    case 'bedrock':
-      // Bedrock models need region prefix
-      const region = getBedrockCredentials()?.region || 'us-east-1';
-      return `bedrock/${region}/${model}`;
+    case 'kimi':
+      // Kimi/Moonshot models use kimi/ prefix
+      if (model.startsWith('kimi/')) {
+        return model;
+      }
+      return `kimi/${model}`;
     
     case 'glm':
       // GLM/Zhipu models use glm/ prefix
@@ -253,21 +255,9 @@ export async function buildEnvironment(): Promise<Record<string, string>> {
     env.LITELLM_API_KEY = apiKeys.litellm;
   }
   
-  // Bedrock credentials
-  const bedrockCredentials = getBedrockCredentials();
-  if (bedrockCredentials) {
-    if (bedrockCredentials.authType === 'accessKeys') {
-      env.AWS_ACCESS_KEY_ID = bedrockCredentials.accessKeyId || '';
-      env.AWS_SECRET_ACCESS_KEY = bedrockCredentials.secretAccessKey || '';
-      if (bedrockCredentials.sessionToken) {
-        env.AWS_SESSION_TOKEN = bedrockCredentials.sessionToken;
-      }
-    } else if (bedrockCredentials.authType === 'profile' && bedrockCredentials.profileName) {
-      env.AWS_PROFILE = bedrockCredentials.profileName;
-    }
-    if (bedrockCredentials.region) {
-      env.AWS_REGION = bedrockCredentials.region;
-    }
+  // Kimi (Moonshot)
+  if (apiKeys.kimi) {
+    env.MOONSHOT_API_KEY = apiKeys.kimi;
   }
   
   // Provider-specific base URLs

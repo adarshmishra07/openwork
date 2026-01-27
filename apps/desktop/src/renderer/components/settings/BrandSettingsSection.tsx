@@ -187,6 +187,16 @@ export function BrandSettingsSection({ onBrandUpdated }: BrandSettingsSectionPro
         <BrandVoiceEditor brand={brand} onSave={saveBrand} saving={saving} />
       </CollapsibleSection>
 
+      {/* Brand Rules */}
+      <CollapsibleSection
+        title="Brand Rules"
+        icon={CheckCircle2}
+        expanded={expandedSection === 'rules'}
+        onToggle={() => toggleSection('rules')}
+      >
+        <BrandRulesEditor brand={brand} onSave={saveBrand} saving={saving} />
+      </CollapsibleSection>
+
       {/* Visual Assets */}
       <CollapsibleSection
         title="Visual Assets"
@@ -758,6 +768,164 @@ function BrandVoiceEditor({ brand, onSave, saving }: EditorProps) {
             ))}
           </div>
         </div>
+      </div>
+
+      {hasChanges && (
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        >
+          {saving ? 'Saving...' : 'Save Changes'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Brand Rules Editor
+function BrandRulesEditor({ brand, onSave, saving }: EditorProps) {
+  const [doStatements, setDoStatements] = useState<string[]>(brand.rules?.doStatements || []);
+  const [dontStatements, setDontStatements] = useState<string[]>(brand.rules?.dontStatements || []);
+  const [legalDisclaimer, setLegalDisclaimer] = useState(brand.rules?.legalDisclaimer || '');
+  const [newDo, setNewDo] = useState('');
+  const [newDont, setNewDont] = useState('');
+
+  const hasChanges = 
+    JSON.stringify(doStatements) !== JSON.stringify(brand.rules?.doStatements || []) ||
+    JSON.stringify(dontStatements) !== JSON.stringify(brand.rules?.dontStatements || []) ||
+    legalDisclaimer !== (brand.rules?.legalDisclaimer || '');
+
+  const handleSave = () => {
+    onSave({
+      rules: {
+        doStatements,
+        dontStatements,
+        legalDisclaimer: legalDisclaimer || undefined,
+      },
+      memory: {
+        ...brand.memory,
+        name: brand.name,
+        rules: {
+          doStatements: doStatements.length > 0 ? doStatements : undefined,
+          dontStatements: dontStatements.length > 0 ? dontStatements : undefined,
+          legalDisclaimer: legalDisclaimer || undefined,
+        },
+      },
+    });
+  };
+
+  const addDo = () => {
+    if (newDo.trim() && !doStatements.includes(newDo.trim())) {
+      setDoStatements(prev => [...prev, newDo.trim()]);
+      setNewDo('');
+    }
+  };
+
+  const addDont = () => {
+    if (newDont.trim() && !dontStatements.includes(newDont.trim())) {
+      setDontStatements(prev => [...prev, newDont.trim()]);
+      setNewDont('');
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Do Statements */}
+      <div>
+        <label className="text-sm font-medium text-green-600 dark:text-green-400 flex items-center gap-2 mb-1.5">
+          <CheckCircle2 className="w-4 h-4" />
+          Do's - Things your brand should always do
+        </label>
+        <div className="flex gap-1.5 mb-2">
+          <input
+            type="text"
+            value={newDo}
+            onChange={(e) => setNewDo(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addDo()}
+            placeholder="e.g., Always use inclusive language"
+            className="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+          />
+          <button onClick={addDo} className="px-2 rounded-md bg-muted hover:bg-muted/80">
+            <Plus className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {doStatements.length === 0 ? (
+            <p className="text-sm text-muted-foreground italic">No do's added yet</p>
+          ) : (
+            doStatements.map((statement, index) => (
+              <span 
+                key={index} 
+                className="px-2.5 py-1 rounded-lg bg-green-500/20 text-green-700 dark:text-green-300 text-xs flex items-center gap-1.5"
+              >
+                {statement}
+                <button 
+                  onClick={() => setDoStatements(prev => prev.filter((_, i) => i !== index))}
+                  className="hover:bg-green-500/30 rounded p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Don't Statements */}
+      <div>
+        <label className="text-sm font-medium text-red-600 dark:text-red-400 flex items-center gap-2 mb-1.5">
+          <XCircle className="w-4 h-4" />
+          Don'ts - Things your brand should never do
+        </label>
+        <div className="flex gap-1.5 mb-2">
+          <input
+            type="text"
+            value={newDont}
+            onChange={(e) => setNewDont(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addDont()}
+            placeholder="e.g., Never use slang or profanity"
+            className="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+          />
+          <button onClick={addDont} className="px-2 rounded-md bg-muted hover:bg-muted/80">
+            <Plus className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {dontStatements.length === 0 ? (
+            <p className="text-sm text-muted-foreground italic">No don'ts added yet</p>
+          ) : (
+            dontStatements.map((statement, index) => (
+              <span 
+                key={index} 
+                className="px-2.5 py-1 rounded-lg bg-red-500/20 text-red-700 dark:text-red-300 text-xs flex items-center gap-1.5"
+              >
+                {statement}
+                <button 
+                  onClick={() => setDontStatements(prev => prev.filter((_, i) => i !== index))}
+                  className="hover:bg-red-500/30 rounded p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Legal Disclaimer */}
+      <div>
+        <label className="block text-sm font-medium mb-1.5">Legal Disclaimer (Optional)</label>
+        <p className="text-xs text-muted-foreground mb-1.5">
+          Text to append to product descriptions for compliance
+        </p>
+        <textarea
+          value={legalDisclaimer}
+          onChange={(e) => setLegalDisclaimer(e.target.value)}
+          placeholder="e.g., Results may vary. Not intended to diagnose, treat, or cure any disease."
+          rows={3}
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
+        />
       </div>
 
       {hasChanges && (

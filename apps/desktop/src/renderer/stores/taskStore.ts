@@ -24,6 +24,12 @@ interface SetupProgressEvent {
   message?: string;
 }
 
+// Selected image reference for chat input
+interface SelectedImage {
+  label: string;  // A, B, C, etc.
+  url: string;
+}
+
 interface TaskState {
   // Current task
   currentTask: Task | null;
@@ -46,10 +52,16 @@ interface TaskState {
   openLauncher: () => void;
   closeLauncher: () => void;
 
+  // Image selection for chat input
+  selectedImages: SelectedImage[];
+  selectImage: (label: string, url: string) => void;
+  deselectImage: (label: string) => void;
+  clearSelectedImages: () => void;
+
   // Actions
   startTask: (config: TaskConfig) => Promise<Task | null>;
   setSetupProgress: (taskId: string | null, message: string | null) => void;
-  sendFollowUp: (message: string, attachments?: Array<{ filename: string; contentType: string; url: string; size: number }>) => Promise<void>;
+  sendFollowUp: (message: string, attachments?: Array<{ filename: string; contentType: string; url: string; size: number }>, imageReferences?: Array<{ label: string; url: string }>) => Promise<void>;
   cancelTask: () => Promise<void>;
   interruptTask: () => Promise<void>;
   setPermissionRequest: (request: PermissionRequest | null) => void;
@@ -78,6 +90,29 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   setupProgress: null,
   setupProgressTaskId: null,
   setupDownloadStep: 1,
+  
+  // Image selection state
+  selectedImages: [],
+  
+  selectImage: (label: string, url: string) => {
+    set((state) => {
+      // Don't add duplicates
+      if (state.selectedImages.some((img) => img.label === label)) {
+        return state;
+      }
+      return { selectedImages: [...state.selectedImages, { label, url }] };
+    });
+  },
+  
+  deselectImage: (label: string) => {
+    set((state) => ({
+      selectedImages: state.selectedImages.filter((img) => img.label !== label),
+    }));
+  },
+  
+  clearSelectedImages: () => {
+    set({ selectedImages: [] });
+  },
   isLauncherOpen: false,
 
   setSetupProgress: (taskId: string | null, message: string | null) => {
@@ -137,7 +172,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }
   },
 
-  sendFollowUp: async (message: string, attachments?: Array<{ filename: string; contentType: string; url: string; size: number }>) => {
+  sendFollowUp: async (message: string, attachments?: Array<{ filename: string; contentType: string; url: string; size: number }>, imageReferences?: Array<{ label: string; url: string }>) => {
     const accomplish = getAccomplish();
     const { currentTask, startTask } = get();
     if (!currentTask) {
@@ -186,6 +221,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       content: message,
       timestamp: new Date().toISOString(),
       attachments: messageAttachments,
+      imageReferences,
     };
 
     // Optimistically add user message and set status to running
@@ -370,10 +406,38 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         );
       }
 
+      // Clear permission request when task completes, fails, or is interrupted
+      // EXCEPT: Keep question permission requests visible so user can still answer
+      // (late responses will trigger session resume)
+      const currentPermission = get().permissionRequest;
+      const isQuestionPermission = currentPermission?.type === 'question';
+      
+      // If task is "completing" but there's a pending question, override to waiting_permission
+      // This prevents the UI from showing "Completed" while user still needs to answer
+      let effectiveStatus: TaskStatus | null = newStatus;
+      if (newStatus === 'completed' && isQuestionPermission && isCurrentTask) {
+        const overrideStatus: TaskStatus = 'waiting_permission';
+        effectiveStatus = overrideStatus;
+        // Also update the task object with the overridden status
+        if (updatedCurrentTask) {
+          updatedCurrentTask = { ...updatedCurrentTask, status: overrideStatus };
+        }
+        // Update in tasks list too
+        updatedTasks = state.tasks.map((t): Task =>
+          t.id === event.taskId ? { ...t, status: overrideStatus } : t
+        );
+      }
+      
+      const shouldClearPermission = effectiveStatus && isCurrentTask && 
+        (effectiveStatus === 'completed' || effectiveStatus === 'failed' || effectiveStatus === 'interrupted') &&
+        !isQuestionPermission; // Don't clear questions - user can still answer
+
       return {
         currentTask: updatedCurrentTask,
         tasks: updatedTasks,
         isLoading: false,
+        // Clear permission request if task is done (but not questions)
+        ...(shouldClearPermission ? { permissionRequest: null } : {}),
       };
     });
   },
@@ -517,5 +581,50 @@ if (typeof window !== 'undefined' && window.accomplish) {
   // Subscribe to task summary updates
   window.accomplish.onTaskSummary?.(( data: { taskId: string; summary: string }) => {
     useTaskStore.getState().setTaskSummary(data.taskId, data.summary);
+  });
+
+  // Subscribe to late question responses
+  // This fires when user answers a question after the MCP timeout expired
+  // We need to resume the session with their answer
+  window.accomplish.onQuestionLateResponse?.((data: { taskId: string; sessionId: string; answer: string }) => {
+    const accomplish = getAccomplish();
+    void accomplish.logEvent({
+      level: 'info',
+      message: 'Late question response received - resuming session',
+      context: { taskId: data.taskId, sessionId: data.sessionId },
+    });
+    
+    const state = useTaskStore.getState();
+    
+    // Update task status back to "running", add answer to chat, and clear the question UI
+    // This ensures the UI shows the correct controls (pause/interrupt instead of follow-up)
+    if (state.currentTask?.id === data.taskId) {
+      // Add the user's answer to chat history as a visible message
+      const answerMessage: TaskMessage = {
+        id: createMessageId(),
+        type: 'user',
+        content: data.answer,
+        timestamp: new Date().toISOString(),
+      };
+      
+      useTaskStore.setState({
+        currentTask: { 
+          ...state.currentTask, 
+          status: 'running' as TaskStatus,
+          messages: [...state.currentTask.messages, answerMessage],
+        },
+        tasks: state.tasks.map(t => 
+          t.id === data.taskId ? { ...t, status: 'running' as TaskStatus } : t
+        ),
+        isLoading: true,
+        permissionRequest: null,
+      });
+    } else {
+      // Just clear permission if not current task
+      useTaskStore.getState().setPermissionRequest(null);
+    }
+    
+    // Resume the session with the user's answer
+    void accomplish.resumeSession(data.sessionId, data.answer, data.taskId);
   });
 }
