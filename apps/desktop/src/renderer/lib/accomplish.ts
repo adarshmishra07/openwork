@@ -170,8 +170,8 @@ interface AccomplishAPI {
   // Event subscriptions
   onTaskUpdate(callback: (event: TaskUpdateEvent) => void): () => void;
   onTaskUpdateBatch?(callback: (event: { taskId: string; messages: TaskMessage[] }) => void): () => void;
-  onTaskTextDelta?(callback: (event: { taskId: string; text: string }) => void): () => void;
-  onTaskStreamComplete?(callback: (event: { taskId: string }) => void): () => void;
+  onTaskTextDelta?(callback: (event: { taskId: string; messageId: string; text: string }) => void): () => void;
+  onTaskStreamComplete?(callback: (event: { taskId: string; messageId: string }) => void): () => void;
   onPermissionRequest(callback: (request: PermissionRequest) => void): () => void;
   onTaskProgress(callback: (progress: TaskProgress) => void): () => void;
   onDebugLog(callback: (log: unknown) => void): () => void;

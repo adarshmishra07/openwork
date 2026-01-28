@@ -87,6 +87,7 @@ interface SessionInfo {
   lastTextLength: number;  // Track last text length for computing deltas
   isStreaming: boolean;
   messageRoles: Map<string, string>;  // messageID -> role (user/assistant)
+  activeToolCalls: Set<string>;      // Track currently running tool calls
 }
 
 /**
@@ -263,6 +264,7 @@ export class OpenCodeServerAdapter extends EventEmitter<ServerAdapterEvents> {
         lastTextLength: 0,
         isStreaming: false,
         messageRoles: new Map(),
+        activeToolCalls: new Set(),
       });
       this.sessionToTask.set(config.sessionId, taskId);
       
@@ -303,6 +305,7 @@ export class OpenCodeServerAdapter extends EventEmitter<ServerAdapterEvents> {
       lastTextLength: 0,  // Track last text length for computing deltas
       isStreaming: false,
       messageRoles: new Map(),
+      activeToolCalls: new Set(),
     });
     this.sessionToTask.set(sessionId, taskId);
     console.log(`[ServerAdapter] Session ${sessionId} tracked. Current sessions:`, Array.from(this.sessions.keys()));
@@ -689,16 +692,13 @@ User's request: ${text}`;
           
         } else if (part.type === 'step-finish') {
           console.log(`[ServerAdapter:STEP] Step finished`);
-          // Step finished - mark streaming as complete
-          this.emit('stream-complete', { sessionId, messageId: part.messageID });
+          // NOTE: Don't emit stream-complete here!
+          // Multiple steps can occur during a single response (e.g., thinking + tool use + response)
+          // We only want to mark streaming complete when the session actually completes (idle status)
+          // This prevents premature completion and duplicate messages
           
-          // Reset text tracking for next message
-          const session = this.sessions.get(sessionId);
-          if (session) {
-            console.log(`[ServerAdapter:STEP] Resetting session text tracking`);
-            session.lastTextLength = 0;
-            session.currentMessageId = null;
-          }
+          // Don't reset text tracking either - the same message may continue after step-finish
+          // session.lastTextLength and currentMessageId will be reset naturally when a new message starts
           
         } else if (part.type === 'tool' || part.type === 'tool-call') {
           // Tool usage
@@ -708,11 +708,27 @@ User's request: ${text}`;
           const status = part.state?.status || 'running';
           const output = part.state?.output;
 
-          console.log(`[ServerAdapter] Tool ${tool} status: ${status}`);
+          console.log(`[ServerAdapter:TOOL] ${tool} [${status}] callId=${callId}`);
+          
+          const session = this.sessions.get(sessionId);
+          if (session) {
+            if (status === 'running') {
+              session.activeToolCalls.add(callId);
+            } else if (status === 'completed' || status === 'error') {
+              session.activeToolCalls.delete(callId);
+            }
+          }
+
+          if (status === 'completed' || status === 'error') {
+            const outputPreview = typeof output === 'string' 
+              ? output.substring(0, 200) 
+              : JSON.stringify(output)?.substring(0, 200);
+            console.log(`[ServerAdapter:TOOL] ${tool} output: ${outputPreview}${output?.length > 200 ? '...' : ''}`);
+          }
 
           this.emit('tool-use', { sessionId, tool, input, callId });
 
-          // If completed or error, emit result
+          // If completed or error, emit result AND the permanent message bubble
           if (status === 'completed' || status === 'error') {
             this.emit('tool-result', {
               sessionId,
@@ -720,28 +736,28 @@ User's request: ${text}`;
               output: output || '',
               isError: status === 'error',
             });
-          }
 
-          // Also emit as OpenCodeMessage
-          const openCodeMessage: OpenCodeMessage = {
-            type: 'tool_use',
-            timestamp: Date.now(),
-            sessionID: sessionId,
-            part: {
-              id: part.id,
+            // Emit as OpenCodeMessage ONLY when final to prevent duplication
+            const openCodeMessage: OpenCodeMessage = {
+              type: 'tool_use',
+              timestamp: Date.now(),
               sessionID: sessionId,
-              messageID: part.messageID,
-              type: 'tool',
-              callID: callId,
-              tool: tool,
-              state: {
-                status: status,
-                input: input,
-                output: output,
+              part: {
+                id: callId, // Use callId as stable message ID
+                sessionID: sessionId,
+                messageID: part.messageID,
+                type: 'tool',
+                callID: callId,
+                tool: tool,
+                state: {
+                  status: status,
+                  input: input,
+                  output: output,
+                },
               },
-            },
-          } as any;
-          this.emit('message', openCodeMessage);
+            } as any;
+            this.emit('message', openCodeMessage);
+          }
         }
         break;
       }
@@ -765,20 +781,37 @@ User's request: ${text}`;
 
         // Handle completion
         if (statusType === 'idle') {
-          // Session is idle - task completed
-          console.log(`[ServerAdapter] Session ${sessionId} completed (idle state)`);
+          const session = this.sessions.get(sessionId);
           
-          this.emit('complete', {
-            sessionId,
-            result: {
-              status: 'success',
+          // Check if session went idle while tools were still 'running'
+          const hasStuckTools = session && session.activeToolCalls.size > 0;
+          
+          if (hasStuckTools) {
+            console.warn(`[ServerAdapter] Session ${sessionId} went idle with stuck tools:`, Array.from(session.activeToolCalls));
+            this.emit('error', {
               sessionId,
-            },
-          });
-          
-          // DON'T delete session mappings - we may want to resume later
-          // The session still exists on the server and can receive more messages
-          // Clean up will happen when a new task takes over this mapping or app closes
+              error: 'Browser or Tool operation timed out. Please try again.',
+            });
+          } else {
+            console.log(`[ServerAdapter] Session ${sessionId} completed successfully (idle state)`);
+            
+            // Mark any streaming message as complete
+            if (session?.currentMessageId) {
+              console.log(`[ServerAdapter] Emitting stream-complete for message ${session.currentMessageId}`);
+              this.emit('stream-complete', { sessionId, messageId: session.currentMessageId });
+              // Reset tracking for next message
+              session.lastTextLength = 0;
+              session.currentMessageId = null;
+            }
+            
+            this.emit('complete', {
+              sessionId,
+              result: {
+                status: 'success',
+                sessionId,
+              },
+            });
+          }
         }
         break;
       }

@@ -113,6 +113,7 @@ async function shopifyFetch<T>(endpoint: string, options: RequestInit = {}): Pro
 // ============================================================================
 
 const SHOPIFY_PERMISSION_API_URL = 'http://localhost:9228/shopify-permission';
+const TASK_ID = process.env.ACCOMPLISH_TASK_ID;
 
 type ShopifyOperationType = 'create' | 'update' | 'delete';
 type ShopifyResourceType = 'product' | 'variant' | 'inventory';
@@ -139,7 +140,12 @@ async function requestPermission(
     const response = await fetch(SHOPIFY_PERMISSION_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ operation, resource, details }),
+      body: JSON.stringify({ 
+        operation, 
+        resource, 
+        details,
+        taskId: TASK_ID, // Pass task ID to main process for correct routing
+      }),
     });
     
     if (!response.ok) {

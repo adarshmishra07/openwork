@@ -16,6 +16,7 @@ import {
 
 const QUESTION_API_PORT = process.env.QUESTION_API_PORT || '9227';
 const QUESTION_API_URL = `http://localhost:${QUESTION_API_PORT}/question`;
+const TASK_ID = process.env.ACCOMPLISH_TASK_ID;
 
 // Logging helper - uses stderr so it doesn't interfere with MCP stdio
 const log = (msg: string, data?: unknown) => {
@@ -160,6 +161,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToo
           header: question.header,
           options: question.options,
           multiSelect: question.multiSelect,
+          taskId: TASK_ID, // Pass task ID to main process for correct routing
         }),
         signal: controller.signal,
       });

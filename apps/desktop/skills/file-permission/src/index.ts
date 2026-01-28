@@ -18,6 +18,7 @@ import {
 const PERMISSION_API_PORT = process.env.PERMISSION_API_PORT || '9226';
 const PERMISSION_API_URL = `http://localhost:${PERMISSION_API_PORT}/permission`;
 const UPLOAD_TO_S3_URL = `http://localhost:${PERMISSION_API_PORT}/upload-to-s3`;
+const TASK_ID = process.env.ACCOMPLISH_TASK_ID;
 
 interface FilePermissionInput {
   operation: 'create' | 'delete' | 'rename' | 'move' | 'modify' | 'overwrite';
@@ -114,7 +115,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToo
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           file_path: args.file_path,
-          task_id: args.task_id,
+          task_id: args.task_id || TASK_ID, // Use provided task ID or current task ID
         }),
       });
 
@@ -177,6 +178,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToo
         filePaths,
         targetPath,
         contentPreview: contentPreview?.substring(0, 500), // Truncate preview
+        taskId: TASK_ID, // Pass task ID to main process for correct routing
       }),
     });
 

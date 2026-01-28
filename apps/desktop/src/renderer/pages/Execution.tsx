@@ -1625,13 +1625,10 @@ const MessageBubble = memo(function MessageBubble({
               </p>
             )}
           </div>
-        ) : isAssistant && shouldStream && !streamComplete ? (
+        ) : isAssistant && (message.isStreaming || (shouldStream && !streamComplete)) ? (
           <StreamingText
             text={message.content}
-            speed={120}
-            isComplete={streamComplete}
             isStreaming={message.isStreaming}
-            onComplete={() => setStreamComplete(true)}
           >
             {(streamedText) => (
               <div className={proseClasses}>

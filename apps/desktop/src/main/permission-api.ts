@@ -326,15 +326,24 @@ async function handleUploadToS3(req: IncomingMessage, res: ServerResponse): Prom
   }
 
   try {
+    // Resolve real path (handle symlinks like /tmp -> /private/tmp on macOS)
+    let finalPath = data.file_path;
+    try {
+      finalPath = fs.realpathSync(data.file_path);
+      console.log('[Permission API] Resolved real path for upload:', finalPath);
+    } catch (err) {
+      console.log('[Permission API] realpath failed, using original path');
+    }
+
     // Check if file exists
-    if (!fs.existsSync(data.file_path)) {
+    if (!fs.existsSync(finalPath)) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: `File not found: ${data.file_path}` }));
+      res.end(JSON.stringify({ success: false, error: `File not found: ${finalPath}` }));
       return;
     }
 
     // Read file and convert to base64
-    const fileBuffer = fs.readFileSync(data.file_path);
+    const fileBuffer = fs.readFileSync(finalPath);
     
     // Validate file size (must be > 10KB for a real image)
     if (fileBuffer.length < 10000) {
@@ -419,6 +428,7 @@ export function startPermissionApiServer(): http.Server {
       filePaths?: string[];
       targetPath?: string;
       contentPreview?: string;
+      taskId?: string; // Optional task ID from MCP
     };
 
     try {
@@ -451,7 +461,8 @@ export function startPermissionApiServer(): http.Server {
       return;
     }
 
-    const taskId = getActiveTaskId();
+    // Prioritize task ID from request, fall back to active task
+    const taskId = data.taskId || getActiveTaskId();
     if (!taskId) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'No active task' }));
@@ -556,6 +567,7 @@ export function startQuestionApiServer(): http.Server {
       header?: string;
       options?: Array<{ label: string; description?: string }>;
       multiSelect?: boolean;
+      taskId?: string; // Optional task ID from MCP
     };
 
     try {
@@ -563,7 +575,8 @@ export function startQuestionApiServer(): http.Server {
       console.log('[Question API] Parsed request data:', { 
         question: data.question?.substring(0, 50), 
         optionCount: data.options?.length,
-        header: data.header 
+        header: data.header,
+        taskId: data.taskId
       });
     } catch {
       console.error('[Question API] Invalid JSON in request body');
@@ -588,7 +601,8 @@ export function startQuestionApiServer(): http.Server {
       return;
     }
 
-    const taskId = getActiveTaskId();
+    // Prioritize task ID from request, fall back to active task
+    const taskId = data.taskId || getActiveTaskId();
     if (!taskId) {
       console.error('[Question API] No active task');
       res.writeHead(400, { 'Content-Type': 'application/json' });

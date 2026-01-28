@@ -19,8 +19,12 @@ import {
   updateTaskSessionId,
   updateTaskSummary,
   addTaskMessage,
+  getKeyAssets,
+  addKeyAsset,
   deleteTask,
   clearHistory,
+  setMaxHistoryItems,
+  flushPendingTasks, // Import flushPendingTasks
 } from '../store/taskHistory';
 import { generateTaskSummary } from '../services/summarizer';
 import {
@@ -141,6 +145,10 @@ interface MessageBatcher {
 }
 
 const messageBatchers = new Map<string, MessageBatcher>();
+
+// Track streaming text deltas to persist them when complete
+// Map: taskId -> { messageId -> accumulatedText }
+const streamingTextMap = new Map<string, Map<string, string>>();
 
 function createMessageBatcher(
   taskId: string,
@@ -389,23 +397,58 @@ export function registerIPCHandlers(): void {
       },
 
       // Real-time text streaming (from server adapter)
-      onTextDelta: (text: string) => {
+      onTextDelta: (text: string, messageId: string) => {
+        // Accumulate text for persistence
+        if (!streamingTextMap.has(taskId)) {
+          streamingTextMap.set(taskId, new Map());
+        }
+        const taskMap = streamingTextMap.get(taskId)!;
+        const currentText = taskMap.get(messageId) || '';
+        taskMap.set(messageId, currentText + text);
+
         console.log(`[IPC:onTextDelta] Forwarding to renderer:`, {
           taskId,
+          messageId,
           textLength: text.length,
           textPreview: text.substring(0, 30),
         });
-        // Forward text delta to renderer for real-time display
+        // Forward text delta to renderer for real-time display with messageId for tracking
         forwardToRenderer('task:text-delta', {
           taskId,
+          messageId,
           text,
         });
       },
 
       // Streaming complete - mark the current streaming message as done
-      onStreamComplete: () => {
-        console.log(`[IPC:onStreamComplete] Forwarding to renderer:`, { taskId });
-        forwardToRenderer('task:stream-complete', { taskId });
+      onStreamComplete: (messageId: string) => {
+        console.log(`[IPC:onStreamComplete] Finalizing streaming message:`, { taskId, messageId });
+        
+        // Persist the accumulated text to history
+        const taskMap = streamingTextMap.get(taskId);
+        if (taskMap && taskMap.has(messageId)) {
+          const finalContent = taskMap.get(messageId)!;
+          console.log(`[IPC:onStreamComplete] Persisting accumulated text (${finalContent.length} chars)`);
+          
+          const assistantMessage: TaskMessage = {
+            id: messageId,
+            type: 'assistant',
+            content: finalContent,
+            timestamp: new Date().toISOString(),
+          };
+          addTaskMessage(taskId, assistantMessage);
+          
+          // Force flush to ensure persistence even if app reloads immediately
+          flushPendingTasks();
+          
+          // Clean up
+          taskMap.delete(messageId);
+          if (taskMap.size === 0) {
+            streamingTextMap.delete(taskId);
+          }
+        }
+
+        forwardToRenderer('task:stream-complete', { taskId, messageId });
       },
 
       onProgress: (progress: { stage: string; message?: string }) => {
@@ -790,23 +833,58 @@ export function registerIPCHandlers(): void {
       },
 
       // Real-time text streaming (from server adapter)
-      onTextDelta: (text: string) => {
+      onTextDelta: (text: string, messageId: string) => {
+        // Accumulate text for persistence
+        if (!streamingTextMap.has(taskId)) {
+          streamingTextMap.set(taskId, new Map());
+        }
+        const taskMap = streamingTextMap.get(taskId)!;
+        const currentText = taskMap.get(messageId) || '';
+        taskMap.set(messageId, currentText + text);
+
         console.log(`[IPC:session:resume:onTextDelta] Forwarding to renderer:`, {
           taskId,
+          messageId,
           textLength: text.length,
           textPreview: text.substring(0, 30),
         });
-        // Forward text delta to renderer for real-time display
+        // Forward text delta to renderer for real-time display with messageId for tracking
         forwardToRenderer('task:text-delta', {
           taskId,
+          messageId,
           text,
         });
       },
 
       // Streaming complete - mark the current streaming message as done
-      onStreamComplete: () => {
-        console.log(`[IPC:session:resume:onStreamComplete] Forwarding to renderer:`, { taskId });
-        forwardToRenderer('task:stream-complete', { taskId });
+      onStreamComplete: (messageId: string) => {
+        console.log(`[IPC:session:resume:onStreamComplete] Finalizing streaming message:`, { taskId, messageId });
+        
+        // Persist the accumulated text to history
+        const taskMap = streamingTextMap.get(taskId);
+        if (taskMap && taskMap.has(messageId)) {
+          const finalContent = taskMap.get(messageId)!;
+          console.log(`[IPC:session:resume:onStreamComplete] Persisting accumulated text (${finalContent.length} chars)`);
+          
+          const assistantMessage: TaskMessage = {
+            id: messageId,
+            type: 'assistant',
+            content: finalContent,
+            timestamp: new Date().toISOString(),
+          };
+          addTaskMessage(taskId, assistantMessage);
+          
+          // Force flush to ensure persistence even if app reloads immediately
+          flushPendingTasks();
+          
+          // Clean up
+          taskMap.delete(messageId);
+          if (taskMap.size === 0) {
+            streamingTextMap.delete(taskId);
+          }
+        }
+
+        forwardToRenderer('task:stream-complete', { taskId, messageId });
       },
 
       onProgress: (progress: { stage: string; message?: string }) => {
@@ -1835,9 +1913,17 @@ export function registerIPCHandlers(): void {
     const path = await import('path');
     
     try {
-      const buffer = fs.readFileSync(filePath);
-      const ext = path.extname(filePath).toLowerCase();
-      const fileName = path.basename(filePath);
+      // Resolve real path (handle symlinks like /tmp -> /private/tmp on macOS)
+      let finalPath = filePath;
+      try {
+        finalPath = fs.realpathSync(filePath);
+      } catch (err) {
+        // Fallback to original path
+      }
+
+      const buffer = fs.readFileSync(finalPath);
+      const ext = path.extname(finalPath).toLowerCase();
+      const fileName = path.basename(finalPath);
       
       // Determine MIME type
       const mimeTypes: Record<string, string> = {

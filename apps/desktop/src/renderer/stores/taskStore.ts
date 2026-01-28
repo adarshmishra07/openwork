@@ -362,9 +362,27 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
       // Handle message events - only if viewing this task
       if (event.type === 'message' && event.message && isCurrentTask && state.currentTask) {
+        const messages = [...state.currentTask.messages];
+        const existingIndex = messages.findIndex(m => m.id === event.message!.id);
+        
+        if (existingIndex !== -1) {
+          // Update existing message (e.g. tool status change)
+          console.log(`[TaskStore:addTaskUpdate] Updating existing message: ${event.message.id}`);
+          messages[existingIndex] = {
+            ...messages[existingIndex],
+            ...event.message,
+            // Preserve content if the update has no content (common for status updates)
+            content: event.message.content || messages[existingIndex].content
+          };
+        } else {
+          // Append new message
+          console.log(`[TaskStore:addTaskUpdate] Appending new message: ${event.message.id}`);
+          messages.push(event.message);
+        }
+
         updatedCurrentTask = {
           ...state.currentTask,
-          messages: [...state.currentTask.messages, event.message],
+          messages,
         };
       }
 
@@ -589,11 +607,16 @@ if (typeof window !== 'undefined' && window.accomplish) {
     }
   });
 
+  // Track streaming messages by messageId to handle tool messages interspersed with text
+  // Map: messageId -> index in messages array
+  const streamingMessageMap = new Map<string, number>();
+  
   // Subscribe to real-time text streaming (from server adapter SSE)
   // This provides true streaming - text arrives as model generates it
-  window.accomplish.onTaskTextDelta?.((event: { taskId: string; text: string }) => {
+  window.accomplish.onTaskTextDelta?.((event: { taskId: string; messageId: string; text: string }) => {
     console.log(`[TaskStore:onTaskTextDelta] Received:`, {
       taskId: event.taskId,
+      messageId: event.messageId,
       textLength: event.text.length,
       textPreview: event.text.substring(0, 30),
     });
@@ -609,33 +632,57 @@ if (typeof window !== 'undefined' && window.accomplish) {
     }
 
     const messages = [...state.currentTask.messages];
-    const lastMsg = messages[messages.length - 1];
     
+    // Check if we already have a message for this messageId
+    let existingIndex = streamingMessageMap.get(event.messageId);
+    
+    // If not in map, search messages array by ID (to prevent double bubbles if onTaskUpdate fired first)
+    if (existingIndex === undefined) {
+      const foundIndex = messages.findIndex(m => m.id === event.messageId);
+      if (foundIndex !== -1) {
+        console.log(`[TaskStore:onTaskTextDelta] Found existing message for ID ${event.messageId} in messages array`);
+        existingIndex = foundIndex;
+        streamingMessageMap.set(event.messageId, existingIndex);
+      }
+    }
+    
+    // SMOOTH STREAMING: If messageId is new, check if we should merge with the last assistant bubble
+    if (existingIndex === undefined && messages.length > 0) {
+      const lastIndex = messages.length - 1;
+      const lastMsg = messages[lastIndex];
+      
+      // If the last message is an assistant message and was streaming, we can merge
+      // this new segment into it for a smoother experience
+      if (lastMsg.type === 'assistant' && (lastMsg.isStreaming || lastMsg.id.startsWith('msg_c0'))) {
+        console.log(`[TaskStore:onTaskTextDelta] Merging new messageId ${event.messageId} into existing last message`);
+        existingIndex = lastIndex;
+        streamingMessageMap.set(event.messageId, existingIndex);
+      }
+    }
+
     console.log(`[TaskStore:onTaskTextDelta] Processing:`, {
       messageCount: messages.length,
-      lastMsgType: lastMsg?.type,
-      lastMsgIsStreaming: lastMsg?.isStreaming,
-      lastMsgContentLength: lastMsg?.content?.length,
+      messageId: event.messageId,
+      existingIndex,
     });
 
-    // Check if we should append to existing streaming message
-    if (lastMsg?.type === 'assistant' && lastMsg.isStreaming) {
-      // Append text to existing streaming message
-      const newContent = (lastMsg.content || '') + event.text;
-      console.log(`[TaskStore:onTaskTextDelta] Appending to existing streaming message:`, {
-        oldLength: lastMsg.content?.length || 0,
-        appendLength: event.text.length,
-        newLength: newContent.length,
-      });
-      messages[messages.length - 1] = {
-        ...lastMsg,
+    if (existingIndex !== undefined && existingIndex < messages.length) {
+      // Append to existing message
+      const existingMsg = messages[existingIndex];
+      const newContent = (existingMsg.content || '') + event.text;
+      
+      messages[existingIndex] = {
+        ...existingMsg,
         content: newContent,
+        isStreaming: true, // Ensure it stays in streaming state
       };
     } else {
-      // Create new streaming message
-      console.log(`[TaskStore:onTaskTextDelta] Creating new streaming message`);
+      // Create new streaming message and track it
+      const newIndex = messages.length;
+      streamingMessageMap.set(event.messageId, newIndex);
+      console.log(`[TaskStore:onTaskTextDelta] Creating new streaming message at index ${newIndex} for messageId ${event.messageId}`);
       messages.push({
-        id: `msg_stream_${Date.now()}`,
+        id: event.messageId,
         type: 'assistant',
         content: event.text,
         timestamp: new Date().toISOString(),
@@ -653,8 +700,8 @@ if (typeof window !== 'undefined' && window.accomplish) {
   });
   
   // Subscribe to stream complete events
-  window.accomplish.onTaskStreamComplete?.((event: { taskId: string }) => {
-    console.log(`[TaskStore:onTaskStreamComplete] Received:`, { taskId: event.taskId });
+  window.accomplish.onTaskStreamComplete?.((event: { taskId: string; messageId: string }) => {
+    console.log(`[TaskStore:onTaskStreamComplete] Received:`, { taskId: event.taskId, messageId: event.messageId });
     
     const state = useTaskStore.getState();
     if (!state.currentTask || state.currentTask.id !== event.taskId) {
@@ -662,24 +709,56 @@ if (typeof window !== 'undefined' && window.accomplish) {
     }
 
     const messages = [...state.currentTask.messages];
-    const lastMsg = messages[messages.length - 1];
     
-    // Mark the streaming message as complete
-    if (lastMsg?.type === 'assistant' && lastMsg.isStreaming) {
-      console.log(`[TaskStore:onTaskStreamComplete] Marking message as complete:`, {
-        contentLength: lastMsg.content?.length,
-      });
-      messages[messages.length - 1] = {
-        ...lastMsg,
-        isStreaming: false,
-      };
-      
-      useTaskStore.setState({
-        currentTask: {
-          ...state.currentTask,
-          messages,
-        },
-      });
+    // Find the message by messageId
+    const messageIndex = streamingMessageMap.get(event.messageId);
+    
+    if (messageIndex !== undefined && messageIndex < messages.length) {
+      const msg = messages[messageIndex];
+      if (msg.isStreaming) {
+        console.log(`[TaskStore:onTaskStreamComplete] Marking message at index ${messageIndex} as complete:`, {
+          messageId: event.messageId,
+          contentLength: msg.content?.length,
+        });
+        messages[messageIndex] = {
+          ...msg,
+          isStreaming: false,
+        };
+        
+        // Remove from tracking map
+        streamingMessageMap.delete(event.messageId);
+        
+        useTaskStore.setState({
+          currentTask: {
+            ...state.currentTask,
+            messages,
+          },
+        });
+      }
+    } else {
+      // Fallback: mark last streaming assistant message as complete
+      // Find last streaming assistant message (loop backwards for ES2022 compatibility)
+      let lastStreamingIndex = -1;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].type === 'assistant' && messages[i].isStreaming) {
+          lastStreamingIndex = i;
+          break;
+        }
+      }
+      if (lastStreamingIndex !== -1) {
+        console.log(`[TaskStore:onTaskStreamComplete] Fallback: marking last streaming message at index ${lastStreamingIndex} as complete`);
+        messages[lastStreamingIndex] = {
+          ...messages[lastStreamingIndex],
+          isStreaming: false,
+        };
+        
+        useTaskStore.setState({
+          currentTask: {
+            ...state.currentTask,
+            messages,
+          },
+        });
+      }
     }
   });
 

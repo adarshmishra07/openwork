@@ -89,6 +89,8 @@ CRITICAL: You CAN and SHOULD browse the internet! You have a real Chrome browser
 - You CAN take screenshots, click buttons, fill forms
 - You CAN download images and work with them
 
+ALWAYS use your skills, spaces, and MCP tools whenever possible to achieve the user's goals. This is your primary way of working. Do not try to simulate actions or give vague advice when a tool is available (e.g., use dev-browser to find real data, space_* tools for image generation, shopify_* for store updates). You are an AGENT, not just a chatbot - use your tools!
+
 NEVER say "I can't access websites" or "I can't browse the internet" - YOU CAN!
 When a task requires finding something online, USE THE BROWSER via the dev-browser skill.
 </identity>
@@ -959,6 +961,8 @@ Text descriptions alone are NOT sufficient. Gemini needs the actual images.
 - Instead, just mention the file path in your response text
 - Example: "I've generated the image and saved it to /tmp/matcha_product.png"
 - The app automatically detects /tmp/*.png paths, uploads them to S3, and displays them
+- **ALWAYS save generated images to /tmp/ and verify they are >10KB using \`ls -la\` before reporting completion.**
+- **ALWAYS provide the full absolute path in your response (e.g., /tmp/image.png).**
 - You do NOT need to do anything special - just include the path in your message
 
 **AFTER GENERATING - Verify:**
@@ -1509,6 +1513,7 @@ NEVER use placeholder domains like "yourstore.myshopify.com" - always use the ac
         enabled: true,
         environment: {
           PERMISSION_API_PORT: String(PERMISSION_API_PORT),
+          ACCOMPLISH_TASK_ID: process.env.ACCOMPLISH_TASK_ID || 'default',
         },
         timeout: 10000,
       },
@@ -1518,6 +1523,7 @@ NEVER use placeholder domains like "yourstore.myshopify.com" - always use the ac
         enabled: true,
         environment: {
           QUESTION_API_PORT: String(QUESTION_API_PORT),
+          ACCOMPLISH_TASK_ID: process.env.ACCOMPLISH_TASK_ID || 'default',
         },
         timeout: 300000,  // 5 minutes - questions need user interaction time
       },
@@ -1526,7 +1532,10 @@ NEVER use placeholder domains like "yourstore.myshopify.com" - always use the ac
         type: 'local',
         command: ['npx', 'tsx', path.join(skillsPath, 'dev-browser-mcp', 'src', 'index.ts')],
         enabled: true,
-        timeout: 30000,  // Longer timeout for browser operations
+        environment: {
+          ACCOMPLISH_TASK_ID: process.env.ACCOMPLISH_TASK_ID || 'default',
+        },
+        timeout: 60000,  // Increased timeout for browser operations
       },
       // Space runtime for AI image workflows (our feature)
       'space-runtime': {
@@ -1537,6 +1546,7 @@ NEVER use placeholder domains like "yourstore.myshopify.com" - always use the ac
           // Old API Gateway URL (30s timeout limit): https://8yivyeg6kd.execute-api.ap-south-1.amazonaws.com
           // Using Lambda Function URL for no timeout limit
           SPACE_RUNTIME_URL: process.env.SPACE_RUNTIME_URL || 'https://mp3a5rmdpmpqphordszcahy5bm0okvjt.lambda-url.ap-south-1.on.aws',
+          ACCOMPLISH_TASK_ID: process.env.ACCOMPLISH_TASK_ID || 'default',
         },
         timeout: 180000, // 3 minutes - spaces can take 60-90s plus network variance
       },
@@ -1550,6 +1560,13 @@ NEVER use placeholder domains like "yourstore.myshopify.com" - always use the ac
         },
         timeout: 10000,
       },
+      // Task Todo management
+      'task-todo': {
+        type: 'local',
+        command: ['node', path.join(skillsPath, 'task-todo', 'src', 'index.js')],
+        enabled: true,
+        timeout: 10000,
+      },
     },
   };
 
@@ -1561,6 +1578,7 @@ NEVER use placeholder domains like "yourstore.myshopify.com" - always use the ac
       enabled: true,
       environment: {
         SHOPIFY_CREDENTIALS: JSON.stringify(shopifyCredentials),
+        ACCOMPLISH_TASK_ID: process.env.ACCOMPLISH_TASK_ID || 'default',
       },
       timeout: 300000,  // 5 minutes - Shopify write operations need user permission
     };

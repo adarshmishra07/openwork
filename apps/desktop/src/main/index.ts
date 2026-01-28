@@ -130,8 +130,23 @@ function createWindow() {
       preload: preloadPath,
       nodeIntegration: false,
       contextIsolation: true,
+      webSecurity: true, // Keep security on, but we'll modify headers
     },
   });
+
+  // Set CSP headers for the session to allow unsafe-eval and web sockets in development
+  if (!app.isPackaged) {
+    mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [
+            "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: http: local-media:; media-src 'self' data: https: http: local-media:; frame-src 'self' https: http:; connect-src 'self' https: http: ws: wss: https://www.google-analytics.com https://www.googletagmanager.com https://analytics.google.com https://*.google-analytics.com https://*.analytics.google.com;"
+          ],
+        },
+      });
+    });
+  }
 
   // Open external links in browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -220,20 +235,27 @@ if (!gotTheLock) {
         
         // Check if file exists (try both the normalized path and with /private prefix on macOS)
         let finalPath = normalizedPath;
-        if (!fs.existsSync(finalPath)) {
-          // On macOS, /var, /tmp, etc. are symlinks to /private/var, /private/tmp
-          if (process.platform === 'darwin' && !normalizedPath.startsWith('/private')) {
+        try {
+          console.log('[Protocol] Attempting to resolve path:', normalizedPath);
+          // Use realpathSync to resolve symlinks like /tmp -> /private/tmp on macOS
+          // This ensures we always point to the actual physical file
+          if (fs.existsSync(normalizedPath)) {
+            finalPath = fs.realpathSync(normalizedPath);
+          } else if (process.platform === 'darwin' && !normalizedPath.startsWith('/private')) {
+            // Fallback for macOS if path doesn't exist but might with /private prefix
             const privatePath = `/private${normalizedPath}`;
-            console.log('[Protocol] Trying /private prefix:', privatePath);
             if (fs.existsSync(privatePath)) {
-              finalPath = privatePath;
+              finalPath = fs.realpathSync(privatePath);
             }
           }
+          console.log('[Protocol] Resolved real path:', finalPath);
+        } catch (err) {
+          console.error('[Protocol] realpath resolution failed:', err);
         }
         
         if (!fs.existsSync(finalPath)) {
-          console.warn('[Protocol] File not found:', finalPath);
-          return new Response('Not Found', { status: 404 });
+          console.warn('[Protocol] File DOES NOT EXIST on disk:', finalPath);
+          return new Response(`Not Found: ${finalPath}`, { status: 404 });
         }
         
         console.log('[Protocol] Serving file from:', finalPath);

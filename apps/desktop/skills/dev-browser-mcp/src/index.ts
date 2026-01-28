@@ -198,112 +198,34 @@ const SHOPOS_GLOW_SCRIPT = `
           position: fixed !important;
           top: 0 !important;
           left: 0 !important;
-          width: 100vw !important;
-          height: 100vh !important;
-          margin: 0 !important;
-          padding: 0 !important;
+          width: 100% !important;
+          height: 100% !important;
           pointer-events: none !important;
-          z-index: 2147483647 !important;
-          animation: shopos-glow-wave 3s ease-in-out infinite;
-          border: 2px solid rgba(155, 48, 255, 0.5) !important;
+          z-index: 2147483647 !important; /* Maximum possible z-index */
+          border: 8px solid transparent !important; /* Thicker border */
+          animation: shopos-glow-wave 2s infinite ease-in-out !important;
           box-sizing: border-box !important;
-          overflow: hidden !important;
-        }
-        
-        #shopos-ai-indicator {
-          position: fixed !important;
-          top: 8px !important;
-          left: 50% !important;
-          transform: translateX(-50%) !important;
-          z-index: 2147483647 !important;
-          pointer-events: none !important;
-          display: flex !important;
-          align-items: center !important;
-          gap: 6px !important;
-          background: rgba(255, 255, 255, 0.95) !important;
-          backdrop-filter: blur(8px) !important;
-          padding: 6px 12px !important;
-          border-radius: 16px !important;
-          box-shadow: 0 2px 8px rgba(155, 48, 255, 0.3) !important;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-          font-size: 12px !important;
-          font-weight: 500 !important;
-          color: #1a1a1a !important;
-          margin: 0 !important;
-          line-height: 1 !important;
-        }
-        
-        #shopos-ai-indicator svg {
-          width: 14px !important;
-          height: 14px !important;
-          color: #9B30FF !important;
-          flex-shrink: 0 !important;
-        }
-        
-        #shopos-ai-indicator .pulse-dot {
-          width: 6px !important;
-          height: 6px !important;
-          border-radius: 50% !important;
-          background: #9B30FF !important;
-          animation: shopos-dot-pulse 1s ease-in-out infinite;
-          flex-shrink: 0 !important;
-        }
-        
-        @keyframes shopos-dot-pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
         }
       \`;
-      (document.head || target).appendChild(style);
+      document.head.appendChild(style);
     }
     
-    // Create overlay
-    const overlay = document.createElement('div');
-    overlay.id = 'shopos-ai-glow-overlay';
-    target.appendChild(overlay);
-    
-    // Create indicator pill
-    const indicator = document.createElement('div');
-    indicator.id = 'shopos-ai-indicator';
-    indicator.innerHTML = \`
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"></circle>
-        <line x1="2" y1="12" x2="22" y2="12"></line>
-        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-      </svg>
-      <span>AI is controlling this browser</span>
-      <div class="pulse-dot"></div>
-    \`;
-    target.appendChild(indicator);
-  }
-  
-  // Handle early injection (before DOM is ready)
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', injectGlow);
-  } else {
-    injectGlow();
-  }
-  
-  // Re-inject if overlay gets removed (SPAs, dynamic content changes)
-  // Use a MutationObserver to watch for removal
-  const observer = new MutationObserver(function() {
+    // Create overlay if not exists
     if (!document.getElementById('shopos-ai-glow-overlay')) {
-      injectGlow();
+      const overlay = document.createElement('div');
+      overlay.id = 'shopos-ai-glow-overlay';
+      (document.documentElement || document.body).appendChild(overlay);
     }
+  }
+
+  // Inject immediately
+  injectGlow();
+  
+  // Also inject on DOM changes to ensure it stays on top
+  const observer = new MutationObserver(() => {
+    injectGlow();
   });
-  
-  // Start observing once DOM is ready
-  function startObserver() {
-    if (document.documentElement) {
-      observer.observe(document.documentElement, { childList: true, subtree: true });
-    }
-  }
-  
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', startObserver);
-  } else {
-    startObserver();
-  }
+  observer.observe(document.documentElement, { childList: true, subtree: true });
 })();
 `;
 

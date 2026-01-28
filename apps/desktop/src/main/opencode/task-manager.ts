@@ -155,16 +155,31 @@ async function installPlaywrightChromium(
 
 /**
  * Check if the dev-browser server is running and ready
+ * Performs a strict check of both HTTP and CDP endpoints
  */
 async function isDevBrowserServerReady(): Promise<boolean> {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1000);
+    const timeout = setTimeout(() => controller.abort(), 2000); // 2s timeout
+    
+    // 1. Check HTTP Server
     const res = await fetch(`http://localhost:${DEV_BROWSER_PORT}`, {
       signal: controller.signal,
     });
+    if (!res.ok) {
+      clearTimeout(timeout);
+      return false;
+    }
+
+    // 2. Check CDP Endpoint stability
+    const info = await res.json() as { wsEndpoint: string };
+    if (!info.wsEndpoint) {
+      clearTimeout(timeout);
+      return false;
+    }
+
     clearTimeout(timeout);
-    return res.ok;
+    return true;
   } catch {
     return false;
   }
@@ -177,24 +192,57 @@ async function waitForDevBrowserServer(maxWaitMs = 15000, pollIntervalMs = 500):
   const startTime = Date.now();
   while (Date.now() - startTime < maxWaitMs) {
     if (await isDevBrowserServerReady()) {
-      console.log('[TaskManager] Dev-browser server is ready');
+      console.log('[TaskManager] Dev-browser server is ready and responsive');
       return true;
     }
     await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
   }
-  console.log('[TaskManager] Dev-browser server not ready after waiting');
+  console.log('[TaskManager] Dev-browser server not ready or unresponsive after waiting');
   return false;
 }
 
 /**
  * Ensure the dev-browser server is running.
- * Called before starting tasks to pre-warm the browser.
- *
- * If neither system Chrome nor Playwright is installed, downloads Playwright first.
+ * Performs aggressive cleanup if the server is unresponsive.
  */
 async function ensureDevBrowserServer(
   onProgress?: (progress: { stage: string; message?: string }) => void
 ): Promise<void> {
+  // Check if server is already running and responsive
+  if (await isDevBrowserServerReady()) {
+    console.log('[TaskManager] Dev-browser server already running and responsive');
+    return;
+  }
+
+  console.log('[TaskManager] Dev-browser server not running or unresponsive. Starting/Restarting...');
+
+  if (onProgress) {
+    onProgress({ stage: 'browser', message: 'Starting browser automation server...' });
+  }
+
+  // Aggressive cleanup on macOS/Linux
+  if (process.platform !== 'win32') {
+    try {
+      // Kill anything on 9224/9225
+      console.log('[TaskManager] Cleaning up ports 9224/9225...');
+      spawn('lsof', ['-ti', ':9224,9225', '|', 'xargs', 'kill', '-9'], { shell: true });
+      
+      // Manually remove Chrome profile lock file on macOS
+      if (process.platform === 'darwin') {
+        const homeDir = process.env.HOME || '';
+        const lockPath = path.join(homeDir, 'Library/Application Support/Accomplish/dev-browser/profiles/chrome-profile/SingletonLock');
+        if (fs.existsSync(lockPath)) {
+          console.log('[TaskManager] Removing stale Chrome lock file...');
+          fs.unlinkSync(lockPath);
+        }
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    } catch (err) {
+      console.warn('[TaskManager] Cleanup failed, attempting to start anyway');
+    }
+  }
+
   // Check if we have a browser available
   const hasChrome = isSystemChromeInstalled();
   const hasPlaywright = isPlaywrightInstalled();
@@ -219,11 +267,22 @@ async function ensureDevBrowserServer(
     }
   }
 
-  // Check if server is already running (skip on macOS to avoid Local Network permission dialog)
-  if (process.platform !== 'darwin') {
-    if (await isDevBrowserServerReady()) {
-      console.log('[TaskManager] Dev-browser server already running');
-      return;
+  // Check if server is already running and responsive
+  if (await isDevBrowserServerReady()) {
+    console.log('[TaskManager] Dev-browser server already running and responsive');
+    return;
+  }
+
+  console.log('[TaskManager] Dev-browser server not running or unresponsive. Starting/Restarting...');
+
+  // If on macOS, we might need to kill a "zombie" server process on port 9224
+  if (process.platform === 'darwin') {
+    try {
+      // Find and kill whatever is on port 9224
+      spawn('lsof', ['-ti', ':9224', '-sTCP:LISTEN', '|', 'xargs', 'kill', '-9'], { shell: true });
+      await new Promise(resolve => setTimeout(resolve, 500));
+    } catch (err) {
+      // Ignore errors
     }
   }
 
@@ -273,8 +332,8 @@ async function ensureDevBrowserServer(
  */
 export interface TaskCallbacks {
   onMessage: (message: OpenCodeMessage) => void;
-  onTextDelta?: (text: string) => void;  // Real-time text streaming (incremental)
-  onStreamComplete?: () => void;  // Called when streaming message is complete
+  onTextDelta?: (text: string, messageId: string) => void;  // Real-time text streaming (incremental)
+  onStreamComplete?: (messageId: string) => void;  // Called when streaming message is complete
   onProgress: (progress: { stage: string; message?: string }) => void;
   onPermissionRequest: (request: PermissionRequest) => void;
   onComplete: (result: TaskResult) => void;
@@ -327,6 +386,7 @@ export class TaskManager {
   private useServerMode: boolean = true;
   private serverInitialized: boolean = false;
   private serverInitPromise: Promise<void> | null = null;
+  private lastStartedTaskId: string | null = null; // Track most recently started task for routing
 
   constructor(options?: { maxConcurrentTasks?: number }) {
     this.maxConcurrentTasks = options?.maxConcurrentTasks ?? DEFAULT_MAX_CONCURRENT_TASKS;
@@ -376,12 +436,13 @@ export class TaskManager {
   private setupServerEventHandlers(): void {
     if (!this.serverAdapter) return;
 
-    // Real-time text streaming
-    this.serverAdapter.on('text-delta', ({ sessionId, text }) => {
+    // Real-time text streaming - forward to task callbacks with messageId for tracking
+    this.serverAdapter.on('text-delta', ({ sessionId, text, messageId }) => {
       const taskId = this.serverAdapter?.getTaskIdForSession(sessionId);
       console.log(`[TaskManager:EVENT] text-delta received:`, {
         sessionId,
         taskId,
+        messageId,
         textLength: text.length,
         textPreview: text.substring(0, 30),
       });
@@ -392,23 +453,23 @@ export class TaskManager {
 
       const managedTask = this.activeTasks.get(taskId);
       if (managedTask?.callbacks.onTextDelta) {
-        console.log(`[TaskManager:EVENT] Forwarding text-delta to callback`);
-        managedTask.callbacks.onTextDelta(text);
+        console.log(`[TaskManager:EVENT] Forwarding text-delta to callback with messageId`);
+        managedTask.callbacks.onTextDelta(text, messageId);
       } else {
         console.log(`[TaskManager:EVENT] No onTextDelta callback for task ${taskId}`);
       }
     });
 
-    // Stream complete - mark streaming message as done
-    this.serverAdapter.on('stream-complete', ({ sessionId }) => {
+    // Stream complete - mark streaming message as done (only emitted on session.status: idle)
+    this.serverAdapter.on('stream-complete', ({ sessionId, messageId }) => {
       const taskId = this.serverAdapter?.getTaskIdForSession(sessionId);
-      console.log(`[TaskManager:EVENT] stream-complete received:`, { sessionId, taskId });
+      console.log(`[TaskManager:EVENT] stream-complete received:`, { sessionId, taskId, messageId });
       if (!taskId) return;
 
       const managedTask = this.activeTasks.get(taskId);
       if (managedTask?.callbacks.onStreamComplete) {
-        console.log(`[TaskManager:EVENT] Forwarding stream-complete to callback`);
-        managedTask.callbacks.onStreamComplete();
+        console.log(`[TaskManager:EVENT] Forwarding stream-complete to callback with messageId`);
+        managedTask.callbacks.onStreamComplete(messageId);
       }
     });
 
@@ -468,10 +529,12 @@ export class TaskManager {
     // Completion
     this.serverAdapter.on('complete', ({ sessionId, result }) => {
       const taskId = this.serverAdapter?.getTaskIdForSession(sessionId);
+      console.log(`[TaskManager:EVENT:COMPLETE] Received complete event for session ${sessionId}, task ${taskId}`, result);
       if (!taskId) return;
 
       const managedTask = this.activeTasks.get(taskId);
       if (managedTask) {
+        console.log(`[TaskManager:EVENT:COMPLETE] Calling onComplete for task ${taskId}`);
         managedTask.callbacks.onComplete(result);
         this.cleanupTask(taskId);
         this.processQueue();
@@ -580,6 +643,7 @@ export class TaskManager {
     const usingServer = this.useServerMode && this.serverAdapter?.isRunning();
 
     console.log(`[TaskManager] Using ${usingServer ? 'Server' : 'PTY'} mode for task ${taskId}`);
+    this.lastStartedTaskId = taskId; // Set as most recent task
 
     // Create task object immediately so UI can navigate
     const task: Task = {
@@ -622,12 +686,12 @@ export class TaskManager {
 
     console.log(`[TaskManager] Executing task ${taskId} with server. Active tasks: ${this.activeTasks.size}`);
 
-    // Start session asynchronously (browser will be started lazily when needed by tools)
+    // Start browser setup and session asynchronously
     (async () => {
       try {
-        // NOTE: Don't call ensureDevBrowserServer() here anymore!
-        // The browser will be started lazily when the agent actually uses browser tools.
-        // This prevents Chrome from opening for simple text-only tasks like "hi there".
+        // Ensure browser server is ready BEFORE creating the session
+        // This ensures tool calls like browser_navigate don't fail due to connection errors
+        await ensureDevBrowserServer(callbacks.onProgress);
         
         // Create session and send initial message
         const sessionId = await this.serverAdapter!.createSession(taskId, config);
@@ -716,11 +780,10 @@ export class TaskManager {
 
     console.log(`[TaskManager] Executing task ${taskId} with PTY. Active tasks: ${this.activeTasks.size}`);
 
-    // Start agent asynchronously (browser will be started lazily when needed by tools)
+    // Start browser setup and agent asynchronously
     (async () => {
       try {
-        // NOTE: Don't call ensureDevBrowserServer() here anymore!
-        // The browser will be started lazily when the agent actually uses browser tools.
+        // NOTE: ensureDevBrowserServer is now lazy
         await adapter.startTask({ ...config, taskId });
       } catch (error) {
         callbacks.onError(error instanceof Error ? error : new Error(String(error)));
@@ -906,9 +969,15 @@ export class TaskManager {
 
   /**
    * Get the currently running task ID (not queued)
-   * Returns the first active task if multiple are running
+   * Prioritizes the most recently started task for correct UI routing
    */
   getActiveTaskId(): string | null {
+    // If we have a most recently started task and it's still active, return it
+    if (this.lastStartedTaskId && this.activeTasks.has(this.lastStartedTaskId)) {
+      return this.lastStartedTaskId;
+    }
+    
+    // Fallback to first active task
     const firstActive = this.activeTasks.keys().next();
     return firstActive.done ? null : firstActive.value;
   }
