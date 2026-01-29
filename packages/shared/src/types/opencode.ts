@@ -156,7 +156,3 @@ export interface NormalizedMessage {
     };
   };
 }
-
-// Re-export as ClaudeMessage for backward compatibility during migration
-export type ClaudeMessage = OpenCodeMessage;
-export type ClaudeMessageBase = OpenCodeMessageBase;

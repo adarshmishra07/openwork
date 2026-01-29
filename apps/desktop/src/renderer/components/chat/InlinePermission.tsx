@@ -16,6 +16,7 @@ import {
   ShieldCheck, 
   AlertTriangle, 
   File, 
+  Eye,
   Trash2,
   Edit,
   FolderInput,
@@ -87,6 +88,7 @@ const riskConfig: Record<RiskLevel, {
 
 // File operation icons
 const operationIcons: Record<FileOperation, typeof File> = {
+  read: Eye,
   create: FilePlus,
   delete: Trash2,
   rename: Edit,
@@ -97,6 +99,7 @@ const operationIcons: Record<FileOperation, typeof File> = {
 
 // Operation labels
 const operationLabels: Record<FileOperation, string> = {
+  read: 'Read',
   create: 'Create',
   delete: 'Delete',
   rename: 'Rename',

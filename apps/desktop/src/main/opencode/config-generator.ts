@@ -12,7 +12,7 @@ import type { ProviderId } from '@shopos/shared';
 /**
  * Agent name used by Accomplish
  */
-export const ACCOMPLISH_AGENT_NAME = 'accomplish';
+export const ACCOMPLISH_AGENT_NAME = 'shopos';
 
 /**
  * System prompt for the Accomplish agent.
@@ -81,7 +81,7 @@ Never assume Node.js is installed system-wide. Always use the bundled version.
 
 
 const ACCOMPLISH_SYSTEM_PROMPT_TEMPLATE = `<identity>
-You are Accomplish, an AI assistant with FULL WEB BROWSER ACCESS.
+You are ShopOS, an AI assistant with FULL WEB BROWSER ACCESS.
 
 CRITICAL: You CAN and SHOULD browse the internet! You have a real Chrome browser you control.
 - You CAN visit any website (Google, Amazon, Unsplash, Adidas, etc.)
@@ -125,6 +125,20 @@ This applies to EVERYTHING, not just browser tasks.
 {{BRAND_CONTEXT}}
 
 {{SHOPIFY_CONTEXT}}
+
+<critical-instruction name="web-data-efficiency">
+##############################################################################
+# CRITICAL: WEB DATA EFFICIENCY - AVOID HTML BLOAT
+##############################################################################
+When using the \`webfetch\` tool:
+1. ALWAYS use \`format: "markdown"\`.
+2. NEVER use \`format: "html"\` unless explicitly required for code analysis.
+3. Markdown is ~90% smaller and prevents "brain freeze" (context window saturation).
+
+If you mistakenly fetch HTML and it is very large, do NOT try to read it all.
+Instead, re-fetch in markdown format or use search tools to find specific parts.
+##############################################################################
+</critical-instruction>
 
 <critical-instruction name="task-completion-mandate">
 ##############################################################################
@@ -260,20 +274,25 @@ SKIP research only for simple, reversible actions.
 # CRITICAL: FILE PERMISSION WORKFLOW - NEVER SKIP
 ##############################################################################
 
-BEFORE using Write, Edit, Bash (with file ops), or ANY tool that touches files:
-1. FIRST: Call request_file_permission tool and wait for response
-2. ONLY IF response is "allowed": Proceed with the file operation
-3. IF "denied": Stop and inform the user
+BEFORE using Read, Write, Edit, Bash (with file ops), or ANY tool that touches files:
+1. FIRST: Call request_file_permission tool and wait for response.
+2. EXCEPTIONS: You may skip requesting permission ONLY for files located in the system temporary directory (e.g., /tmp, /var/folders/...).
+3. ONLY IF response is "allowed": Proceed with the file operation.
+4. IF "denied": Stop and inform the user.
 
 WRONG (never do this):
-  Write({ path: "/tmp/file.txt", content: "..." })  ← NO! Permission not requested!
+  Read({ path: "/Users/user/Downloads/data.csv" })  ← NO! Permission not requested!
 
 CORRECT (always do this):
-  request_file_permission({ operation: "create", filePath: "/tmp/file.txt" })
+  request_file_permission({ operation: "read", filePath: "/Users/user/Downloads/data.csv" })
   → Wait for "allowed"
-  Write({ path: "/tmp/file.txt", content: "..." })  ← OK after permission granted
+  Read({ path: "/Users/user/Downloads/data.csv" })  ← OK after permission granted
+
+CORRECT (Safe path):
+  Write({ path: "/tmp/generated_image.png", content: "..." }) ← OK, /tmp is safe.
 
 This applies to ALL file operations:
+- Reading files (Read tool, bash cat/head/tail, grep, etc.)
 - Creating files (Write tool, bash echo/cat, scripts that output files)
 - Renaming files (bash mv, rename commands)
 - Deleting files (bash rm, delete commands)
@@ -287,13 +306,14 @@ Use this MCP tool to request user permission before performing file operations.
 <parameters>
 Input:
 {
-  "operation": "create" | "delete" | "rename" | "move" | "modify" | "overwrite",
+  "operation": "read" | "create" | "delete" | "rename" | "move" | "modify" | "overwrite",
   "filePath": "/absolute/path/to/file",
   "targetPath": "/new/path",       // Required for rename/move
   "contentPreview": "file content" // Optional preview for create/modify/overwrite
 }
 
 Operations:
+- read: Reading file content or listing directory contents
 - create: Creating a new file
 - delete: Deleting an existing file or folder
 - rename: Renaming a file (provide targetPath)
@@ -306,8 +326,8 @@ Returns: "allowed" or "denied" - proceed only if allowed
 
 <example>
 request_file_permission({
-  operation: "create",
-  filePath: "/Users/john/Desktop/report.txt"
+  operation: "read",
+  filePath: "/Users/john/Downloads/invoice.pdf"
 })
 // Wait for response, then proceed only if "allowed"
 </example>
@@ -1295,44 +1315,54 @@ NEVER use placeholder domains like "yourstore.myshopify.com" - always use the ac
   }
 
   // Configure Kimi if connected (check new settings first, then legacy)
-  const kimiProvider = providerSettings.connectedProviders.kimi;
-  if (kimiProvider?.connectionStatus === 'connected') {
-    // New provider settings: Kimi is connected
-    const modelId = kimiProvider.selectedModelId?.replace('kimi/', '') || 'kimi-k2.5';
-    providerConfig.kimi = {
-      npm: '@ai-sdk/openai-compatible',
-      name: 'Kimi (Moonshot)',
-      options: {
+    const kimiProvider = providerSettings.connectedProviders.kimi;
+    if (kimiProvider?.connectionStatus === 'connected') {
+      // New provider settings: Kimi is connected
+      const modelId = kimiProvider.selectedModelId?.replace('kimi/', '') || 'kimi-k2.5';
+      
+      const options: { baseURL: string; apiKey?: string } = {
         baseURL: 'https://api.moonshot.ai/v1',
-      },
-      models: {
-        [modelId]: {
-          name: modelId,
-          tools: true,
-        },
-      },
-    };
-    console.log('[OpenCode Config] Kimi configured from new settings:', modelId);
-  } else {
-    // Legacy fallback: use old Kimi/Moonshot config if API key exists
-    const kimiKey = getApiKey('kimi');
-    if (kimiKey) {
+      };
+      
+      // Explicitly pass apiKey if available (needed because @ai-sdk/openai-compatible doesn't automatically check MOONSHOT_API_KEY)
+      const kimiKey = getApiKey('kimi');
+      if (kimiKey) {
+        options.apiKey = kimiKey;
+      }
+      
       providerConfig.kimi = {
         npm: '@ai-sdk/openai-compatible',
         name: 'Kimi (Moonshot)',
-        options: {
-          baseURL: 'https://api.moonshot.ai/v1',
-        },
+        options,
         models: {
-          'kimi-k2.5': {
-            name: 'Kimi K2.5',
+          [modelId]: {
+            name: modelId,
             tools: true,
           },
         },
       };
-      console.log('[OpenCode Config] Kimi configured from legacy API key');
+      console.log('[OpenCode Config] Kimi configured from new settings:', modelId);
+    } else {
+      // Legacy fallback: use old Kimi/Moonshot config if API key exists
+      const kimiKey = getApiKey('kimi');
+      if (kimiKey) {
+        providerConfig.kimi = {
+          npm: '@ai-sdk/openai-compatible',
+          name: 'Kimi (Moonshot)',
+          options: {
+            baseURL: 'https://api.moonshot.ai/v1',
+            apiKey: kimiKey,
+          },
+          models: {
+            'kimi-k2.5': {
+              name: 'Kimi K2.5',
+              tools: true,
+            },
+          },
+        };
+        console.log('[OpenCode Config] Kimi configured from legacy API key');
+      }
     }
-  }
 
   // Configure LiteLLM if connected (check new settings first, then legacy)
   const litellmProvider = providerSettings.connectedProviders.litellm;

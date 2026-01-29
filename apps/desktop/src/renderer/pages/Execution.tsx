@@ -11,7 +11,7 @@ import { hasAnyReadyProvider, getAcceptedFileTypes } from '@shopos/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { XCircle, X, CornerDownLeft, ArrowLeft, CheckCircle2, AlertCircle, Terminal, Wrench, FileText, Search, Code, Brain, Clock, Square, Play, Download, Bug, ChevronUp, ChevronDown, Trash2, Check, Sparkles, BookOpen, Palette, Globe, Copy } from 'lucide-react';
+import { XCircle, X, CornerDownLeft, ArrowLeft, CheckCircle2, AlertCircle, Terminal, Wrench, FileText, Search, Code, Brain, Clock, Square, Play, Download, Bug, ChevronUp, ChevronDown, Trash2, Check, Sparkles, BookOpen, Palette, Globe, Copy, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
@@ -1628,7 +1628,7 @@ const MessageBubble = memo(function MessageBubble({
         ) : isAssistant && shouldStream && !streamComplete ? (
           <StreamingText
             text={message.content}
-            speed={120}
+            speed={350}
             isComplete={streamComplete}
             onComplete={() => setStreamComplete(true)}
           >

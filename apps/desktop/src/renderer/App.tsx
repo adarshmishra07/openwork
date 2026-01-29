@@ -5,7 +5,6 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { isRunningInElectron, getAccomplish } from './lib/accomplish';
 import { springs, variants } from './lib/animations';
-import { analytics } from './lib/analytics';
 import type { BrandProfile } from '@shopos/shared';
 
 // Pages
@@ -31,11 +30,6 @@ export default function App() {
 
   // Get launcher actions
   const { openLauncher } = useTaskStore();
-
-  // Track page views on route changes
-  useEffect(() => {
-    analytics.trackPageView(location.pathname);
-  }, [location.pathname]);
 
   // Cmd+K keyboard shortcut
   useEffect(() => {
@@ -64,19 +58,16 @@ export default function App() {
         const onboardingComplete = await accomplish.getOnboardingComplete();
         
         if (onboardingComplete) {
-          // Load saved brand profile from storage
           const savedProfile = await accomplish.getActiveBrandProfile() as BrandProfile | null;
           if (savedProfile) {
             setBrandProfile(savedProfile);
           }
           setStatus('ready');
         } else {
-          // Show brand onboarding
           setStatus('onboarding');
         }
       } catch (error) {
         console.error('Failed to initialize app:', error);
-        // Show onboarding if we can't determine status
         setStatus('onboarding');
       }
     };
@@ -87,38 +78,33 @@ export default function App() {
   const handleOnboardingComplete = async (profile: BrandProfile) => {
     try {
       const accomplish = getAccomplish();
-      // Save brand profile to SQLite
       await accomplish.saveBrandProfile(profile);
       await accomplish.setActiveBrandProfile(profile.id);
       setBrandProfile(profile);
       await accomplish.setOnboardingComplete(true);
       setStatus('ready');
-      console.log('Brand onboarding complete:', profile);
     } catch (error) {
       console.error('Failed to complete onboarding:', error);
-      // Still proceed to app
       setBrandProfile(profile);
       setStatus('ready');
     }
   };
 
-  // Loading state
   if (status === 'loading') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex min-h-screen items-center justify-center bg-background text-primary">
+        <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
   }
 
-  // Error state
   if (status === 'error') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-8">
         <div className="max-w-md text-center">
           <div className="mb-6 flex justify-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
-              <AlertTriangle className="h-8 w-8 text-destructive" />
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+              <AlertTriangle className="h-8 w-8" />
             </div>
           </div>
           <h1 className="mb-2 text-xl font-semibold text-foreground">Unable to Start</h1>
@@ -128,18 +114,15 @@ export default function App() {
     );
   }
 
-  // Onboarding state
   if (status === 'onboarding') {
     return <BrandOnboarding onComplete={handleOnboardingComplete} />;
   }
 
-  // Ready - render the app with sidebar
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      {/* Invisible drag region for window dragging (macOS hiddenInset titlebar) */}
       <div className="drag-region fixed top-0 left-0 right-0 h-10 z-50 pointer-events-none" />
       <Sidebar />
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 overflow-hidden relative">
         <AnimatePresence mode="wait">
           <Routes location={location} key={location.pathname}>
             <Route

@@ -40,20 +40,28 @@ if (process.argv.includes('--e2e-mock-tasks') || process.env.E2E_MOCK_TASK_EVENT
 }
 
 // Clean mode - wipe all stored data for a fresh start
-// Use CLEAN_START env var since CLI args don't pass through vite to Electron
-if (process.env.CLEAN_START === '1') {
+// Use CLEAN_START env var or --clean-start flag
+if (process.env.CLEAN_START === '1' || process.argv.includes('--clean-start')) {
   const userDataPath = app.getPath('userData');
   console.log('[Clean Mode] Clearing userData directory:', userDataPath);
   try {
     if (fs.existsSync(userDataPath)) {
-      fs.rmSync(userDataPath, { recursive: true, force: true });
-      console.log('[Clean Mode] Successfully cleared userData');
+      // On some platforms, rmSync may fail if files are locked. 
+      // We try to delete as much as possible.
+      const files = fs.readdirSync(userDataPath);
+      for (const file of files) {
+        if (file === 'SingletonLock' || file === 'SingletonSocket') continue;
+        try {
+          fs.rmSync(path.join(userDataPath, file), { recursive: true, force: true });
+        } catch (e) {
+          console.warn(`[Clean Mode] Could not remove ${file}:`, e);
+        }
+      }
+      console.log('[Clean Mode] Successfully cleared userData (mostly)');
     }
   } catch (err) {
     console.error('[Clean Mode] Failed to clear userData:', err);
   }
-  // Note: Secure storage (API keys, auth tokens) is stored in electron-store
-  // which lives in userData, so it gets cleared with the directory above
 }
 
 // Set app name before anything else (affects deep link dialogs)
@@ -144,11 +152,6 @@ function createWindow() {
   mainWindow.maximize();
 
   // DevTools can be opened manually with Cmd+Option+I (Mac) or Ctrl+Shift+I (Windows/Linux)
-  // Auto-open DevTools in dev mode:
-  const isE2EMode = (global as Record<string, unknown>).E2E_SKIP_AUTH === true;
-  if (!app.isPackaged && !isE2EMode) {
-    mainWindow.webContents.openDevTools({ mode: 'right' });
-  }
 
   // Load the local UI
   if (VITE_DEV_SERVER_URL) {

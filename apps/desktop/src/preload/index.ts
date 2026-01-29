@@ -80,6 +80,10 @@ const accomplishAPI = {
   setOnboardingComplete: (complete: boolean): Promise<void> =>
     ipcRenderer.invoke('onboarding:set-complete', complete),
 
+  // App Factory Reset
+  factoryReset: (): Promise<void> =>
+    ipcRenderer.invoke('app:factory-reset'),
+
   // OpenCode CLI status
   checkOpenCodeCli: (): Promise<{
     installed: boolean;
@@ -165,12 +169,6 @@ const accomplishAPI = {
     ipcRenderer.invoke('provider-settings:set-debug', enabled),
   getProviderDebugMode: (): Promise<boolean> =>
     ipcRenderer.invoke('provider-settings:get-debug'),
-
-  // Claude SDK Settings (Experimental)
-  getUseClaudeSdk: (): Promise<boolean> =>
-    ipcRenderer.invoke('settings:get-use-claude-sdk'),
-  setUseClaudeSdk: (enabled: boolean): Promise<{ success: boolean }> =>
-    ipcRenderer.invoke('settings:set-use-claude-sdk', enabled),
 
   // Shopify
   connectShopify: (credentials: { shopDomain: string; accessToken: string }): Promise<{ success: boolean; shopDomain: string }> =>

@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, shell, app } from 'electron';
+import { ipcMain, BrowserWindow, shell, app, dialog } from 'electron';
 import type { IpcMainInvokeEvent } from 'electron';
 import { URL } from 'url';
 import {
@@ -96,6 +96,7 @@ import {
   detectScenarioFromPrompt,
 } from '../test-utils/mock-task-flow';
 import { uploadGeneratedImage } from '../spaces/space-runtime-client';
+import { clearPreviousInstallData } from '../store/freshInstallCleanup';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -1630,23 +1631,6 @@ export function registerIPCHandlers(): void {
   });
 
   // ============================================
-  // App Settings Handlers
-  // ============================================
-
-  // Get Claude SDK setting
-  handle('settings:get-use-claude-sdk', async () => {
-    const { getUseClaudeSdk } = await import('../store/appSettings');
-    return getUseClaudeSdk();
-  });
-
-  // Set Claude SDK setting
-  handle('settings:set-use-claude-sdk', async (_event: IpcMainInvokeEvent, enabled: boolean) => {
-    const { setUseClaudeSdk } = await import('../store/appSettings');
-    setUseClaudeSdk(enabled);
-    return { success: true };
-  });
-
-  // ============================================
   // Brand Memory Handlers
   // ============================================
 
@@ -1764,323 +1748,88 @@ export function registerIPCHandlers(): void {
     }
     
     const filePath = result.filePaths[0];
-    try {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      const data = JSON.parse(content);
-      return { canceled: false, filePath, data };
-    } catch (error) {
-      console.error('[Dialog] Failed to read JSON file:', error);
-      return { canceled: false, filePath, data: null, error: 'Failed to parse JSON file' };
-    }
-  });
-
-  // Shell: Open path with system default app
-  handle('shell:open-path', async (_event: IpcMainInvokeEvent, filePath: string) => {
-    return shell.openPath(filePath);
-  });
-
-  // Media: Load local file as data URL
-  handle('media:load-local-file', async (_event: IpcMainInvokeEvent, filePath: string) => {
-    const fs = await import('fs');
-    const path = await import('path');
+    const rawData = fs.readFileSync(filePath, 'utf-8');
+    const data = JSON.parse(rawData);
     
-    try {
-      const buffer = fs.readFileSync(filePath);
-      const ext = path.extname(filePath).toLowerCase();
-      const fileName = path.basename(filePath);
-      
-      // Determine MIME type
-      const mimeTypes: Record<string, string> = {
-        '.png': 'image/png',
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.gif': 'image/gif',
-        '.webp': 'image/webp',
-        '.svg': 'image/svg+xml',
-        '.mp4': 'video/mp4',
-        '.webm': 'video/webm',
-        '.mov': 'video/quicktime',
-        '.pdf': 'application/pdf',
-      };
-      
-      const mimeType = mimeTypes[ext] || 'application/octet-stream';
-      const base64 = buffer.toString('base64');
-      const dataUrl = `data:${mimeType};base64,${base64}`;
-      
-      return {
-        dataUrl,
-        mimeType,
-        size: buffer.length,
-        fileName,
-      };
-    } catch (error) {
-      console.error('[Media] Failed to load local file:', error);
-      throw new Error(`Failed to load file: ${filePath}`);
-    }
+    return { canceled: false, filePath, data };
   });
 
   // ============================================
   // Shopify Handlers
   // ============================================
 
-  // Shopify: Get connection status
-  handle('shopify:status', async () => {
-    const { getShopifyCredentials } = await import('../store/secureStorage');
-    const credentials = getShopifyCredentials();
-    if (credentials?.shopDomain && credentials?.accessToken) {
-      return { connected: true, shopDomain: credentials.shopDomain };
-    }
-    return { connected: false };
-  });
-
-  // Shopify: Connect (save credentials)
+  // Shopify: Connect store
   handle('shopify:connect', async (_event: IpcMainInvokeEvent, credentials: { shopDomain: string; accessToken: string }) => {
     const { storeShopifyCredentials } = await import('../store/secureStorage');
-    storeShopifyCredentials({ shopDomain: credentials.shopDomain, accessToken: credentials.accessToken });
+    storeShopifyCredentials(credentials);
     return { success: true, shopDomain: credentials.shopDomain };
   });
 
-  // Shopify: Disconnect (remove credentials)
+  // Shopify: Disconnect store
   handle('shopify:disconnect', async () => {
     const { deleteApiKey } = await import('../store/secureStorage');
     deleteApiKey('shopify');
     return { success: true };
   });
 
-  // Shopify: Test connection with provided or stored credentials
+  // Shopify: Get status
+  handle('shopify:status', async () => {
+    const { getShopifyCredentials } = await import('../store/secureStorage');
+    const credentials = getShopifyCredentials();
+    return {
+      connected: !!credentials,
+      shopDomain: credentials?.shopDomain,
+    };
+  });
+
+  // Shopify: Test connection
   handle('shopify:test-connection', async (_event: IpcMainInvokeEvent, credentials?: { shopDomain: string; accessToken: string }) => {
     const { getShopifyCredentials } = await import('../store/secureStorage');
+    const creds = credentials || getShopifyCredentials();
     
-    // Use provided credentials or fetch stored ones
-    let shopDomain: string;
-    let accessToken: string;
-    
-    if (credentials) {
-      shopDomain = credentials.shopDomain;
-      accessToken = credentials.accessToken;
-    } else {
-      const stored = getShopifyCredentials();
-      if (!stored?.shopDomain || !stored?.accessToken) {
-        return { success: false, error: 'No Shopify credentials configured' };
-      }
-      shopDomain = stored.shopDomain;
-      accessToken = stored.accessToken;
+    if (!creds) {
+      return { success: false, error: 'No Shopify credentials found' };
     }
 
     try {
-      // Test the connection by fetching shop info
-      const cleanDomain = shopDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
-      const response = await fetch(`https://${cleanDomain}/admin/api/2024-01/shop.json`, {
+      const { shopDomain, accessToken } = creds;
+      const response = await fetch(`https://${shopDomain}/admin/api/2024-01/shop.json`, {
         headers: {
           'X-Shopify-Access-Token': accessToken,
-          'Content-Type': 'application/json',
         },
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        return { success: false, error: `Shopify API error: ${response.status} - ${errorText}` };
+        throw new Error(`Shopify API error: ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json();
-      return {
-        success: true,
-        shop: {
-          name: data.shop?.name || 'Unknown',
-          domain: data.shop?.domain || cleanDomain,
-          email: data.shop?.email || '',
-        },
-      };
+      const data = (await response.json()) as { shop: { name: string; domain: string; email: string } };
+      return { success: true, shop: data.shop };
     } catch (error) {
-      return { success: false, error: `Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   });
 
-  // ============================================
-  // Space Runtime Handlers
-  // ============================================
-
-  // Space Runtime: Match prompt to space
-  handle('space-runtime:match', async (_event: IpcMainInvokeEvent, prompt: string) => {
-    const { matchPromptToSpaceAsync } = await import('../spaces/space-selector');
-    return matchPromptToSpaceAsync(prompt);
-  });
-
-  // Space Runtime: Get suggestions for a prompt
-  handle('space-runtime:suggestions', async (_event: IpcMainInvokeEvent, prompt: string) => {
-    const { getSuggestedSpaces } = await import('../spaces/space-selector');
-    return getSuggestedSpaces(prompt);
-  });
-
-  // Space Runtime: Check if runtime is available
-  handle('space-runtime:is-available', async () => {
-    const { isSpaceRuntimeAvailable } = await import('../spaces/space-runtime-client');
-    return isSpaceRuntimeAvailable();
-  });
-
-  // Space Runtime: List spaces from remote
-  handle('space-runtime:list-remote', async () => {
-    const { listSpacesFromRuntime } = await import('../spaces/space-runtime-client');
-    return listSpacesFromRuntime();
-  });
-
-  // Space Runtime: Execute a space
-  handle('space-runtime:execute', async (_event: IpcMainInvokeEvent, spaceId: string, inputs: Record<string, unknown>) => {
-    const { executeSpace } = await import('../spaces/space-runtime-client');
-    return executeSpace(spaceId, inputs);
-  });
-
-  // Space Runtime: Get local registry
-  handle('space-runtime:registry', async () => {
-    const { SPACE_REGISTRY } = await import('../spaces/space-registry');
-    return SPACE_REGISTRY;
-  });
-
-  // ============================================
-  // Brand Asset Upload Handlers
-  // ============================================
-
-  // Brand: Upload asset (logo, character, scene, site-image) to S3
-  handle('brand:upload-asset', async (
-    _event: IpcMainInvokeEvent,
-    brandId: string,
-    assetType: 'logos' | 'characters' | 'scenes' | 'site-images',
-    filename: string,
-    contentType: string,
-    imageBase64: string
-  ) => {
-    const { uploadBrandAsset } = await import('../spaces/space-runtime-client');
-    return uploadBrandAsset({
-      brandId,
-      assetType,
-      filename,
-      contentType,
-      imageBase64,
+  // App: Factory Reset (clear all data and restart)
+  handle('app:factory-reset', async () => {
+    console.log('[IPC] Factory reset requested');
+    const { app } = await import('electron');
+    
+    // Clear all data
+    try {
+      clearPreviousInstallData();
+    } catch (err) {
+      console.error('[IPC] Failed during data cleanup:', err);
+    }
+    
+    // Relaunch app with a clean start flag
+    app.relaunch({
+      args: process.argv.slice(1).concat(['--clean-start']),
     });
-  });
-
-  // ============================================
-  // Chat Attachment Upload Handlers
-  // ============================================
-
-  // Attachment: Upload chat attachment to S3 (from file path)
-  handle('attachment:upload', async (
-    _event: IpcMainInvokeEvent,
-    taskId: string,
-    filePath: string
-  ) => {
-    const fs = await import('fs');
-    const path = await import('path');
-    const { uploadChatAttachment } = await import('../spaces/space-runtime-client');
+    app.exit(0);
     
-    try {
-      const buffer = fs.readFileSync(filePath);
-      const base64Data = buffer.toString('base64');
-      const filename = path.basename(filePath);
-      const ext = path.extname(filePath).toLowerCase();
-      
-      // Determine MIME type
-      const mimeTypes: Record<string, string> = {
-        '.png': 'image/png',
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.gif': 'image/gif',
-        '.webp': 'image/webp',
-        '.svg': 'image/svg+xml',
-        '.pdf': 'application/pdf',
-        '.json': 'application/json',
-        '.md': 'text/markdown',
-        '.txt': 'text/plain',
-        '.csv': 'text/csv',
-      };
-      const contentType = mimeTypes[ext] || 'application/octet-stream';
-      
-      return uploadChatAttachment({
-        taskId,
-        filename,
-        contentType,
-        base64Data,
-      });
-    } catch (error) {
-      console.error('[Attachment] Failed to upload file:', error);
-      return {
-        success: false,
-        error: `Failed to upload file: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      };
-    }
+    return { success: true };
   });
-
-  // Attachment: Upload chat attachment to S3 (from base64 data)
-  handle('attachment:upload-base64', async (
-    _event: IpcMainInvokeEvent,
-    taskId: string,
-    filename: string,
-    contentType: string,
-    base64Data: string
-  ) => {
-    const { uploadChatAttachment } = await import('../spaces/space-runtime-client');
-    
-    try {
-      const base64Size = base64Data.length;
-      console.log(`[Attachment] Uploading ${filename} (${contentType}), base64 size: ${(base64Size / 1024 / 1024).toFixed(2)}MB`);
-      
-      // Check if payload might exceed Lambda limit (6MB for sync, but we use ~4MB as safe limit)
-      const MAX_PAYLOAD_SIZE = 4 * 1024 * 1024; // 4MB
-      if (base64Size > MAX_PAYLOAD_SIZE) {
-        console.error(`[Attachment] File too large for upload: ${(base64Size / 1024 / 1024).toFixed(2)}MB exceeds ${MAX_PAYLOAD_SIZE / 1024 / 1024}MB limit`);
-        return {
-          success: false,
-          error: `File too large for upload. Maximum size is ~3MB (your file is ${(base64Size / 1024 / 1024).toFixed(1)}MB after encoding). Please use a smaller image.`,
-        };
-      }
-      
-      const result = await uploadChatAttachment({
-        taskId,
-        filename,
-        contentType,
-        base64Data,
-      });
-      
-      console.log(`[Attachment] Upload result for ${filename}:`, result.success ? 'success' : result.error);
-      return result;
-    } catch (error) {
-      console.error('[Attachment] Failed to upload base64 data:', error);
-      return {
-        success: false,
-        error: `Failed to upload: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      };
-    }
-  });
-
-  // Attachment: Upload generated image to S3 for persistence
-  handle('generated-image:upload', async (
-    _event: IpcMainInvokeEvent,
-    taskId: string,
-    localPath: string
-  ) => {
-    const fs = await import('fs');
-    const path = await import('path');
-    const { uploadGeneratedImage } = await import('../spaces/space-runtime-client');
-    
-    try {
-      const buffer = fs.readFileSync(localPath);
-      const base64Data = buffer.toString('base64');
-      const filename = path.basename(localPath);
-      
-      return uploadGeneratedImage({
-        taskId,
-        filename,
-        base64Data,
-      });
-    } catch (error) {
-      console.error('[GeneratedImage] Failed to upload:', error);
-      return {
-        success: false,
-        error: `Failed to upload generated image: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      };
-    }
-  });
-
 }
 
 function createTaskId(): string {

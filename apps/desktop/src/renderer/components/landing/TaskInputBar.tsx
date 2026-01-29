@@ -2,7 +2,6 @@
 
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { getAccomplish } from '../../lib/accomplish';
-import { analytics } from '../../lib/analytics';
 import { ArrowUp, Loader2, Store, Check } from 'lucide-react';
 import { AttachmentButton, AttachmentList, AttachmentDropzone } from '../attachments';
 import { useAttachmentStore } from '../../stores/attachmentStore';
@@ -155,7 +154,6 @@ export default function TaskInputBar({
       return;
     }
 
-    analytics.trackSubmitTask();
     accomplish.logEvent({
       level: 'info',
       message: 'Task input submit clicked',

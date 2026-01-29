@@ -5,7 +5,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTaskStore } from '@/stores/taskStore';
 import { getAccomplish } from '@/lib/accomplish';
-import { analytics } from '@/lib/analytics';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import SettingsDialog from './SettingsDialog';
@@ -46,7 +45,6 @@ export default function Sidebar() {
   }, [updateTaskStatus, addTaskUpdate, accomplish]);
 
   const handleNewConversation = () => {
-    analytics.trackNewTask();
     navigate('/');
   };
 
@@ -120,10 +118,7 @@ export default function Sidebar() {
             variant="ghost"
             size="sm"
             className="w-full justify-start gap-2 rounded-xl h-10 text-muted-foreground hover:text-foreground"
-            onClick={() => {
-              analytics.trackOpenSettings();
-              setShowSettings(true);
-            }}
+            onClick={() => setShowSettings(true)}
           >
             <Settings className="h-4 w-4" />
             Settings

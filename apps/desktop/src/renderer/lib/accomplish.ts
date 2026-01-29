@@ -71,7 +71,10 @@ interface AccomplishAPI {
   getOnboardingComplete(): Promise<boolean>;
   setOnboardingComplete(complete: boolean): Promise<void>;
 
-  // Claude CLI
+  // App Factory Reset
+  factoryReset(): Promise<void>;
+
+  // OpenCode CLI
   checkClaudeCli(): Promise<{ installed: boolean; version: string | null; installCommand: string }>;
   getClaudeVersion(): Promise<string | null>;
 
@@ -162,10 +165,6 @@ interface AccomplishAPI {
   updateProviderModel(providerId: ProviderId, modelId: string | null): Promise<void>;
   setProviderDebugMode(enabled: boolean): Promise<void>;
   getProviderDebugMode(): Promise<boolean>;
-
-  // Claude SDK Settings (Experimental)
-  getUseClaudeSdk(): Promise<boolean>;
-  setUseClaudeSdk(enabled: boolean): Promise<{ success: boolean }>;
 
   // Event subscriptions
   onTaskUpdate(callback: (event: TaskUpdateEvent) => void): () => void;

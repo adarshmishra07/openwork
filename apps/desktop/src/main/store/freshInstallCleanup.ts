@@ -4,6 +4,7 @@ import path from 'path';
 import { clearAppSettings } from './appSettings';
 import { clearTaskHistoryStore } from './taskHistory';
 import { clearSecureStorage } from './secureStorage';
+import { closeDatabase } from './brandMemory';
 
 /**
  * Fresh Install Cleanup
@@ -133,8 +134,15 @@ function hasExistingUserData(): boolean {
 /**
  * Clear all user data from previous installation
  */
-function clearPreviousInstallData(): void {
+export function clearPreviousInstallData(): void {
   console.log('[FreshInstall] Clearing data from previous installation...');
+
+  // Close database connection before deleting files
+  try {
+    closeDatabase();
+  } catch (err) {
+    console.error('[FreshInstall] Failed to close database:', err);
+  }
 
   // Clear electron-store data using the store APIs
   // This is important because stores are already initialized in memory
@@ -152,9 +160,10 @@ function clearPreviousInstallData(): void {
     console.error('[FreshInstall]   - Failed to clear task history:', err);
   }
 
-  // Also delete any other config files that might exist
+  // Also delete any other config files and data directories that might exist
   const userDataPath = app.getPath('userData');
-  const filesToRemove = ['config.json', '.install-marker.json'];
+  const filesToRemove = ['config.json', '.install-marker.json', 'brand-memory.db', 'brand-memory.db-journal', 'brand-memory.db-shm', 'brand-memory.db-wal'];
+  const dirsToRemove = ['opencode', 'opencode-data-home'];
 
   for (const file of filesToRemove) {
     const filePath = path.join(userDataPath, file);
@@ -165,6 +174,18 @@ function clearPreviousInstallData(): void {
       }
     } catch (err) {
       console.error(`[FreshInstall]   - Failed to remove ${file}:`, err);
+    }
+  }
+
+  for (const dir of dirsToRemove) {
+    const dirPath = path.join(userDataPath, dir);
+    try {
+      if (fs.existsSync(dirPath)) {
+        fs.rmSync(dirPath, { recursive: true, force: true });
+        console.log(`[FreshInstall]   - Removed directory: ${dir}`);
+      }
+    } catch (err) {
+      console.error(`[FreshInstall]   - Failed to remove directory ${dir}:`, err);
     }
   }
 

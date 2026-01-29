@@ -10,9 +10,11 @@ import http from 'http';
 import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import type { BrowserWindow } from 'electron';
 import type { PermissionRequest, FileOperation, RiskLevel, ShopifyOperation, ShopifyResource } from '@shopos/shared';
 import { uploadGeneratedImage } from './spaces/space-runtime-client';
+import { getPermissionPreferences } from './store/permissionPreferences';
 
 export const PERMISSION_API_PORT = 9226;
 export const QUESTION_API_PORT = 9227;
@@ -225,14 +227,21 @@ export function classifyRiskLevel(
 ): RiskLevel {
   const paths = filePaths || (filePath ? [filePath] : []);
   const pathCount = paths.length;
+  const tmpDir = os.tmpdir();
   
   // Helper to check if all paths are in /tmp or other safe directories
   const allInSafeDir = paths.every(p => 
+    p.startsWith(tmpDir) || 
     p.startsWith('/tmp') || 
     p.startsWith('/var/tmp') ||
     p.includes('/tmp/')
   );
   
+  // Read operations: Low risk if in safe dir, Medium otherwise
+  if (operation === 'read') {
+    return allInSafeDir ? 'low' : 'medium';
+  }
+
   // Critical: Delete operations outside safe directories or bulk deletes
   if (operation === 'delete') {
     if (pathCount > 5) return 'critical';
@@ -257,14 +266,13 @@ export function classifyRiskLevel(
   // Low-Medium: Move/rename operations
   if (operation === 'move' || operation === 'rename') {
     if (pathCount > 3) return 'medium';
-    return 'low';
+    return allInSafeDir ? 'low' : 'medium';
   }
   
   // Low: Create new files (generally safe)
   if (operation === 'create') {
     if (pathCount > 10) return 'medium';
-    if (allInSafeDir) return 'low';
-    return 'low';
+    return allInSafeDir ? 'low' : 'medium';
   }
   
   // Default to medium for unknown operations
@@ -437,7 +445,7 @@ export function startPermissionApiServer(): http.Server {
     }
 
     // Validate operation type
-    const validOperations = ['create', 'delete', 'rename', 'move', 'modify', 'overwrite'];
+    const validOperations = ['read', 'create', 'delete', 'rename', 'move', 'modify', 'overwrite'];
     if (!validOperations.includes(data.operation)) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: `Invalid operation. Must be one of: ${validOperations.join(', ')}` }));
@@ -462,6 +470,15 @@ export function startPermissionApiServer(): http.Server {
     const operation = data.operation as FileOperation;
     const riskLevel = classifyRiskLevel(operation, data.filePath, data.filePaths);
     const pathCount = (data.filePaths?.length || 0) + (data.filePath ? 1 : 0);
+
+    // Auto-approve low-risk operations if enabled
+    const prefs = getPermissionPreferences();
+    if (riskLevel === 'low' && prefs.autoApproveLowRisk) {
+      console.log(`[Permission API] Auto-approving low-risk operation: ${operation} (Affected: ${pathCount})`);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ allowed: true }));
+      return;
+    }
 
     // Create permission request for the UI
     const permissionRequest: PermissionRequest = {

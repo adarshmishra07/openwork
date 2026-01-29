@@ -1,27 +1,38 @@
 /**
- * System PATH utilities for macOS packaged apps
+ * System PATH utilities for packaged apps (macOS and Windows)
  *
  * macOS GUI apps launched from /Applications don't inherit the user's terminal PATH.
+ * Windows apps may also need extended PATH for Node.js discovery.
+ *
  * This module provides utilities to build a proper PATH without loading shell profiles,
  * which avoids triggering macOS folder access permissions (TCC).
  *
- * We use two approaches:
- * 1. /usr/libexec/path_helper - macOS official utility that reads /etc/paths and /etc/paths.d
- * 2. Common Node.js installation paths - covers NVM, Volta, asdf, Homebrew, etc.
+ * We use platform-specific approaches:
+ * - macOS: /usr/libexec/path_helper + common paths (NVM, Volta, asdf, Homebrew)
+ * - Windows: Common paths (nvm-windows, Program Files, AppData)
  */
 
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// Platform-aware PATH separator
+const PATH_SEP = process.platform === 'win32' ? ';' : ':';
+
 /**
  * Get NVM Node.js version paths.
- * NVM stores versions in ~/.nvm/versions/node/vX.X.X/bin/
+ * - macOS/Linux: ~/.nvm/versions/node/vX.X.X/bin/
+ * - Windows (nvm-windows): %APPDATA%\nvm\vX.X.X\
  * Returns paths sorted by version (newest first).
  */
 function getNvmNodePaths(): string[] {
-  const home = process.env.HOME || '';
-  const nvmVersionsDir = path.join(home, '.nvm', 'versions', 'node');
+  const isWindows = process.platform === 'win32';
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+
+  // Windows: nvm-windows uses APPDATA
+  const nvmVersionsDir = isWindows
+    ? path.join(process.env.APPDATA || '', 'nvm')
+    : path.join(home, '.nvm', 'versions', 'node');
 
   if (!fs.existsSync(nvmVersionsDir)) {
     return [];
@@ -39,7 +50,11 @@ function getNvmNodePaths(): string[] {
         return parseVersion(b) - parseVersion(a);
       });
 
-    return versions.map(v => path.join(nvmVersionsDir, v, 'bin'));
+    // Windows nvm-windows doesn't have /bin subfolder
+    return versions.map(v => isWindows
+      ? path.join(nvmVersionsDir, v)
+      : path.join(nvmVersionsDir, v, 'bin')
+    );
   } catch {
     return [];
   }
@@ -48,9 +63,11 @@ function getNvmNodePaths(): string[] {
 /**
  * Get fnm Node.js version paths.
  * fnm stores versions in ~/.fnm/node-versions/vX.X.X/installation/bin/
+ * On Windows: %LOCALAPPDATA%\fnm_multishells\ or %USERPROFILE%\.fnm\
  */
 function getFnmNodePaths(): string[] {
-  const home = process.env.HOME || '';
+  const isWindows = process.platform === 'win32';
+  const home = process.env.HOME || process.env.USERPROFILE || '';
   const fnmVersionsDir = path.join(home, '.fnm', 'node-versions');
 
   if (!fs.existsSync(fnmVersionsDir)) {
@@ -68,7 +85,10 @@ function getFnmNodePaths(): string[] {
         return parseVersion(b) - parseVersion(a);
       });
 
-    return versions.map(v => path.join(fnmVersionsDir, v, 'installation', 'bin'));
+    return versions.map(v => isWindows
+      ? path.join(fnmVersionsDir, v, 'installation')
+      : path.join(fnmVersionsDir, v, 'installation', 'bin')
+    );
   } catch {
     return [];
   }

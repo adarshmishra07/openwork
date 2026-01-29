@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { getAccomplish } from '@/lib/accomplish';
-import { analytics } from '@/lib/analytics';
 import {
   Dialog,
   DialogContent,
@@ -74,8 +73,6 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
   const [loadingKeys, setLoadingKeys] = useState(true);
   const [debugMode, setDebugMode] = useState(false);
   const [loadingDebug, setLoadingDebug] = useState(true);
-  const [useClaudeSdk, setUseClaudeSdk] = useState(false);
-  const [loadingClaudeSdk, setLoadingClaudeSdk] = useState(true);
   const [appVersion, setAppVersion] = useState('');
   const [selectedModel, setSelectedModel] = useState<SelectedModel | null>(null);
   const [loadingModel, setLoadingModel] = useState(true);
@@ -171,17 +168,6 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
       }
     };
 
-    const fetchClaudeSdkSetting = async () => {
-      try {
-        const enabled = await accomplish.getUseClaudeSdk();
-        setUseClaudeSdk(enabled);
-      } catch (err) {
-        console.error('Failed to fetch Claude SDK setting:', err);
-      } finally {
-        setLoadingClaudeSdk(false);
-      }
-    };
-
     const fetchVersion = async () => {
       try {
         const version = await accomplish.getVersion();
@@ -259,7 +245,6 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
 
     fetchKeys();
     fetchDebugSetting();
-    fetchClaudeSdkSetting();
     fetchVersion();
     fetchSelectedModel();
     fetchOllamaConfig();
@@ -287,7 +272,6 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
     const accomplish = getAccomplish();
     const newValue = !debugMode;
     setDebugMode(newValue);
-    analytics.trackToggleDebugMode(newValue);
     try {
       await accomplish.setDebugMode(newValue);
     } catch (err) {
@@ -296,24 +280,11 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
     }
   };
 
-  const handleClaudeSdkToggle = async () => {
-    const accomplish = getAccomplish();
-    const newValue = !useClaudeSdk;
-    setUseClaudeSdk(newValue);
-    try {
-      await accomplish.setUseClaudeSdk(newValue);
-    } catch (err) {
-      console.error('Failed to save Claude SDK setting:', err);
-      setUseClaudeSdk(!newValue);
-    }
-  };
-
   const handleModelChange = async (fullId: string) => {
     const accomplish = getAccomplish();
     const allModels = DEFAULT_PROVIDERS.flatMap((p) => p.models);
     const model = allModels.find((m) => m.fullId === fullId);
     if (model) {
-      analytics.trackSelectModel(model.displayName);
       const newSelection: SelectedModel = {
         provider: model.provider,
         model: model.fullId,
@@ -380,8 +351,7 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
       if (!settings.activeProviderId) {
         await accomplish.setActiveProvider(providerId);
       }
-      
-      analytics.trackSaveApiKey(currentProvider.name);
+
       setApiKey('');
       setStatusMessage(`${currentProvider.name} API key saved and connected.`);
       setSavedKeys((prev) => {
@@ -1369,10 +1339,7 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
                     {API_KEY_PROVIDERS.map((p) => (
                       <button
                         key={p.id}
-                        onClick={() => {
-                          analytics.trackSelectProvider(p.name);
-                          setProvider(p.id);
-                        }}
+                        onClick={() => setProvider(p.id)}
                         className={`rounded-xl border p-4 text-center transition-all duration-200 ease-accomplish ${provider === p.id
                             ? 'border-primary bg-muted'
                             : 'border-border hover:border-ring'
@@ -1673,49 +1640,6 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
                   </p>
                 </div>
               )}
-
-              {/* Claude SDK Toggle */}
-              <div className="mt-6 pt-6 border-t border-border">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="font-medium text-foreground flex items-center gap-2">
-                      Claude Agent SDK
-                      <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                        Experimental
-                      </span>
-                    </div>
-                    <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
-                      Use Claude&apos;s native Agent SDK for Anthropic models. Provides better streaming
-                      and tool execution. Only works with Anthropic provider.
-                    </p>
-                  </div>
-                  <div className="ml-4">
-                    {loadingClaudeSdk ? (
-                      <div className="h-6 w-11 animate-pulse rounded-full bg-muted" />
-                    ) : (
-                      <button
-                        data-testid="settings-claude-sdk-toggle"
-                        onClick={handleClaudeSdkToggle}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-accomplish ${useClaudeSdk ? 'bg-primary' : 'bg-muted'
-                          }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform duration-200 ease-accomplish ${useClaudeSdk ? 'translate-x-6' : 'translate-x-1'
-                            }`}
-                        />
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {useClaudeSdk && (
-                  <div className="mt-4 rounded-xl bg-primary/10 p-3.5">
-                    <p className="text-sm text-primary">
-                      Claude Agent SDK is enabled. When using Anthropic models, tasks will use
-                      the native SDK. Other providers will use the standard adapter.
-                    </p>
-                  </div>
-                )}
-              </div>
             </div>
           </section>
 

@@ -223,6 +223,8 @@ export interface BrandProfile {
  */
 export type OnboardingStep = 
   | 'welcome'
+  | 'beta-info'
+  | 'api-setup'
   | 'brand-basics'
   | 'brand-voice'
   | 'brand-style'

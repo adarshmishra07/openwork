@@ -13,12 +13,10 @@
  */
 
 import { OpenCodeAdapter, isOpenCodeCliInstalled, OpenCodeCliNotFoundError } from './adapter';
-import { ClaudeAgentAdapter, createClaudeAgentAdapter } from '../claude-sdk/adapter';
-import type { NormalizedEvent } from '../claude-sdk/types';
 import { getSkillsPath } from './config-generator';
 import { getNpxPath, getBundledNodePaths } from '../utils/bundled-node';
 import { getActiveProviderModel } from '../store/providerSettings';
-import { getSelectedModel, getUseClaudeSdk } from '../store/appSettings';
+import { getSelectedModel } from '../store/appSettings';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -33,46 +31,8 @@ import {
   type PermissionRequest,
 } from '@shopos/shared';
 
-// Feature flag for SDK adapter - can be enabled via:
-// 1. UI Settings toggle (stored in appSettings)
-// 2. Environment variable USE_CLAUDE_SDK=true (for dev/testing)
-const USE_CLAUDE_SDK_ENV = process.env.USE_CLAUDE_SDK === 'true';
-
-/**
- * Determine if we should use the Claude SDK adapter
- * Only use SDK for Anthropic models - other providers need OpenCode CLI
- */
-function shouldUseSdkAdapter(): boolean {
-  // Check settings first, then env var as fallback
-  const sdkEnabledInSettings = getUseClaudeSdk();
-  const sdkEnabled = sdkEnabledInSettings || USE_CLAUDE_SDK_ENV;
-  
-  if (!sdkEnabled) {
-    return false;
-  }
-  
-  // Check current provider - SDK only works with Anthropic
-  // Prefer selectedModel from app-settings (user's explicit choice)
-  const appSelectedModel = getSelectedModel();
-  const providerModel = getActiveProviderModel();
-  const selectedModel = appSelectedModel || providerModel;
-  
-  if (!selectedModel?.provider) {
-    // Default to SDK if no provider set (will use default Anthropic)
-    return true;
-  }
-  
-  // SDK only supports Anthropic models
-  const sdkSupportedProviders = ['anthropic'];
-  const useSdk = sdkSupportedProviders.includes(selectedModel.provider);
-  
-  console.log(`[TaskManager] Provider: ${selectedModel.provider}, Model: ${selectedModel.model}, SDK enabled: ${sdkEnabled}, Use SDK: ${useSdk}`);
-  
-  return useSdk;
-}
-
-// Adapter type union
-type AgentAdapter = OpenCodeAdapter | ClaudeAgentAdapter;
+// Adapter type
+type AgentAdapter = OpenCodeAdapter;
 
 /**
  * Check if system Chrome is installed
@@ -257,12 +217,10 @@ async function ensureDevBrowserServer(
     }
   }
 
-  // Check if server is already running (skip on macOS to avoid Local Network permission dialog)
-  if (process.platform !== 'darwin') {
-    if (await isDevBrowserServerReady()) {
-      console.log('[TaskManager] Dev-browser server already running');
-      return;
-    }
+  // Check if server is already running
+  if (await isDevBrowserServerReady()) {
+    console.log('[TaskManager] Dev-browser server already running');
+    return;
   }
 
   // Now start the server
@@ -328,7 +286,7 @@ interface ManagedTask {
   callbacks: TaskCallbacks;
   cleanup: () => void;
   createdAt: Date;
-  usingSdk: boolean; // Track which adapter is being used
+  lastActivityAt: Date;
 }
 
 /**
@@ -348,6 +306,9 @@ interface QueuedTask {
 // Max concurrent tasks - reduced from 10 to 4 to prevent overwhelming API rate limits
 const DEFAULT_MAX_CONCURRENT_TASKS = 4;
 
+// Maximum time (ms) a task can be inactive before being auto-cancelled
+const INACTIVITY_TIMEOUT_MS = 300000; // 5 minutes
+
 /**
  * TaskManager manages OpenCode CLI task executions with parallel execution
  *
@@ -358,9 +319,38 @@ export class TaskManager {
   private activeTasks: Map<string, ManagedTask> = new Map();
   private taskQueue: QueuedTask[] = [];
   private maxConcurrentTasks: number;
+  private timeoutCheckInterval: NodeJS.Timeout | null = null;
 
   constructor(options?: { maxConcurrentTasks?: number }) {
     this.maxConcurrentTasks = options?.maxConcurrentTasks ?? DEFAULT_MAX_CONCURRENT_TASKS;
+    this.startInactivityChecker();
+  }
+
+  /**
+   * Start background timer to detect and cancel hung tasks
+   */
+  private startInactivityChecker() {
+    if (this.timeoutCheckInterval) return;
+    
+    this.timeoutCheckInterval = setInterval(() => {
+      const now = new Date();
+      for (const [taskId, managedTask] of this.activeTasks.entries()) {
+        const inactiveTime = now.getTime() - managedTask.lastActivityAt.getTime();
+        
+        if (inactiveTime > INACTIVITY_TIMEOUT_MS) {
+          console.log(`[TaskManager] Task ${taskId} timed out after ${inactiveTime}ms of inactivity. Auto-cancelling.`);
+          
+          // Notify the UI
+          managedTask.callbacks.onError(new Error('Task timed out due to 5 minutes of inactivity. The AI might be stuck or processing a very large amount of data.'));
+          
+          // Force cleanup
+          this.cancelTask(taskId).catch(err => {
+            console.error(`[TaskManager] Failed to cancel timed out task ${taskId}:`, err);
+            this.cleanupTask(taskId);
+          });
+        }
+      }
+    }, 30000); // Check every 30 seconds
   }
 
   /**
@@ -437,41 +427,23 @@ export class TaskManager {
     config: TaskConfig,
     callbacks: TaskCallbacks
   ): Promise<Task> {
-    // Determine which adapter to use (SDK only works with Anthropic)
-    const usingSdk = shouldUseSdkAdapter();
-    
-    // Create adapter instance based on feature flag
-    const adapter: AgentAdapter = usingSdk 
-      ? createClaudeAgentAdapter(taskId)
-      : new OpenCodeAdapter(taskId);
+    // Create adapter instance
+    const adapter = new OpenCodeAdapter(taskId);
 
-    console.log(`[TaskManager] Using ${usingSdk ? 'Claude SDK' : 'PTY'} adapter for task ${taskId}`);
+    console.log(`[TaskManager] Using PTY adapter for task ${taskId}`);
 
-    // Wire up event listeners - different for SDK vs PTY adapter
-    // Using 'any' type here because the two adapters emit different event types
-    // and TypeScript can't unify them properly
-    let onMessage: (message: any) => void;
-    
-    if (usingSdk) {
-      // SDK adapter emits NormalizedEvent, transform to OpenCodeMessage
-      onMessage = (event: NormalizedEvent) => {
-        const message = this.normalizedEventToOpenCodeMessage(event);
-        if (message) {
-          callbacks.onMessage(message);
-        }
-      };
-    } else {
-      // PTY adapter emits OpenCodeMessage directly
-      onMessage = (message: OpenCodeMessage) => {
-        callbacks.onMessage(message);
-      };
-    }
+    const onMessage = (message: OpenCodeMessage) => {
+      this.updateActivity(taskId);
+      callbacks.onMessage(message);
+    };
 
     const onProgress = (progress: { stage: string; message?: string }) => {
+      this.updateActivity(taskId);
       callbacks.onProgress(progress);
     };
 
     const onPermissionRequest = (request: PermissionRequest) => {
+      this.updateActivity(taskId);
       callbacks.onPermissionRequest(request);
     };
 
@@ -494,18 +466,18 @@ export class TaskManager {
     };
 
     // Attach listeners
-    adapter.on('message', onMessage as any);
+    adapter.on('message', onMessage);
     adapter.on('progress', onProgress);
-    adapter.on('permission-request', onPermissionRequest as any);
+    adapter.on('permission-request', onPermissionRequest);
     adapter.on('complete', onComplete);
     adapter.on('error', onError);
     adapter.on('debug', onDebug);
 
     // Create cleanup function
     const cleanup = () => {
-      adapter.off('message', onMessage as any);
+      adapter.off('message', onMessage);
       adapter.off('progress', onProgress);
-      adapter.off('permission-request', onPermissionRequest as any);
+      adapter.off('permission-request', onPermissionRequest);
       adapter.off('complete', onComplete);
       adapter.off('error', onError);
       adapter.off('debug', onDebug);
@@ -513,13 +485,14 @@ export class TaskManager {
     };
 
     // Register the managed task
+    const now = new Date();
     const managedTask: ManagedTask = {
       taskId,
       adapter,
       callbacks,
       cleanup,
-      createdAt: new Date(),
-      usingSdk,
+      createdAt: now,
+      lastActivityAt: now,
     };
     this.activeTasks.set(taskId, managedTask);
 
@@ -539,7 +512,6 @@ export class TaskManager {
     (async () => {
       try {
         // Ensure browser is available (may download Playwright if needed)
-        // SDK adapter handles browser via MCP servers, but still good to pre-warm
         await ensureDevBrowserServer(callbacks.onProgress);
 
         // Now start the agent
@@ -556,84 +528,12 @@ export class TaskManager {
   }
 
   /**
-   * Convert SDK NormalizedEvent to OpenCodeMessage format
-   * This maintains backwards compatibility with the existing UI
+   * Update the activity timestamp for a task to prevent timeout
    */
-  private normalizedEventToOpenCodeMessage(event: NormalizedEvent): OpenCodeMessage | null {
-    const baseId = `sdk_${Date.now()}`;
-    const sessionId = event.sessionId || '';
-    
-    switch (event.type) {
-      case 'text':
-      case 'text_delta':
-        return {
-          type: 'text',
-          part: {
-            id: baseId,
-            sessionID: sessionId,
-            messageID: baseId,
-            type: 'text',
-            text: event.content || '',
-          },
-        };
-      
-      case 'thinking':
-        // Thinking content is sent as regular text.
-        // The UI will detect this as thinking when followed by a tool call message
-        return {
-          type: 'text',
-          part: {
-            id: baseId,
-            sessionID: sessionId,
-            messageID: baseId,
-            type: 'text',
-            text: event.content || '',
-          },
-        };
-      
-      case 'tool_use_start':
-        return {
-          type: 'tool_use',
-          part: {
-            id: event.toolCallId || baseId,
-            sessionID: sessionId,
-            messageID: baseId,
-            type: 'tool',
-            tool: event.toolName || 'unknown',
-            state: {
-              status: 'running',
-              input: event.toolInput,
-            },
-          },
-        };
-      
-      case 'tool_use_result':
-        return {
-          type: 'tool_result',
-          part: {
-            id: baseId,
-            sessionID: sessionId,
-            messageID: baseId,
-            type: 'tool-result',
-            toolCallID: event.toolCallId || baseId,
-            output: event.toolResult || '',
-            isError: event.isError,
-          },
-        };
-      
-      case 'error':
-        return {
-          type: 'error',
-          error: event.error || 'Unknown error',
-        };
-      
-      case 'session_init':
-      case 'done':
-        // These don't need to be forwarded as messages
-        return null;
-      
-      default:
-        return null;
+  private updateActivity(taskId: string) {
+    const managedTask = this.activeTasks.get(taskId);
+    if (managedTask) {
+      managedTask.lastActivityAt = new Date();
     }
   }
 
@@ -821,6 +721,11 @@ export class TaskManager {
    */
   dispose(): void {
     console.log(`[TaskManager] Disposing all tasks (${this.activeTasks.size} active, ${this.taskQueue.length} queued)`);
+
+    if (this.timeoutCheckInterval) {
+      clearInterval(this.timeoutCheckInterval);
+      this.timeoutCheckInterval = null;
+    }
 
     // Clear the queue
     this.taskQueue = [];
