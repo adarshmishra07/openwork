@@ -302,6 +302,9 @@ export default function ExecutionPage() {
     selectImage,
     deselectImage,
     clearSelectedImages,
+    // Intent analysis
+    intentAnalysisInProgress,
+    setIntentAnalysisInProgress,
   } = useTaskStore();
 
   // Debounced scroll function
@@ -391,12 +394,20 @@ export default function ExecutionPage() {
       }
     });
 
+    // Subscribe to intent analysis events
+    const unsubscribeIntentAnalysis = accomplish.onIntentAnalysis?.((data) => {
+      if (data.taskId === id) {
+        setIntentAnalysisInProgress(data.status === 'analyzing');
+      }
+    });
+
     return () => {
       unsubscribeTask();
       unsubscribeTaskBatch?.();
       unsubscribePermission();
       unsubscribeStatusChange?.();
       unsubscribeDebugLog();
+      unsubscribeIntentAnalysis?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, loadTaskById, addTaskUpdate, addTaskUpdateBatch, updateTaskStatus, setPermissionRequest]); // accomplish is stable singleton
@@ -998,8 +1009,23 @@ export default function ExecutionPage() {
               });
             })()}
 
+            {/* Intent Analysis Indicator */}
             <AnimatePresence>
-              {currentTask.status === 'running' && !permissionRequest && (
+              {intentAnalysisInProgress && (
+                <motion.div
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -8 }}
+                  transition={springs.gentle}
+                  data-testid="execution-intent-indicator"
+                >
+                  <ProgressIndicator activity="Understanding Intent" />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+              {currentTask.status === 'running' && !permissionRequest && !intentAnalysisInProgress && (
                 <motion.div
                   initial={{ opacity: 0, x: -8 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -1008,12 +1034,12 @@ export default function ExecutionPage() {
                   data-testid="execution-thinking-indicator"
                 >
                   <ProgressIndicator
-                    activity={currentTool 
+                    activity={currentTool
                       ? (() => {
                           const activity = getActivityInfo(currentTool, currentToolInput);
                           const description = (currentToolInput as { description?: string })?.description;
-                          return activity.detail 
-                            ? `${activity.label}: ${activity.detail}` 
+                          return activity.detail
+                            ? `${activity.label}: ${activity.detail}`
                             : (description || activity.label);
                         })()
                       : 'Thinking'}

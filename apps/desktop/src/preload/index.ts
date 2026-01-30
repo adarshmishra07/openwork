@@ -57,6 +57,10 @@ const accomplishAPI = {
     ipcRenderer.invoke('settings:debug-mode'),
   setDebugMode: (enabled: boolean): Promise<void> =>
     ipcRenderer.invoke('settings:set-debug-mode', enabled),
+  getIntentAnalysisEnabled: (): Promise<boolean> =>
+    ipcRenderer.invoke('settings:intent-analysis-enabled'),
+  setIntentAnalysisEnabled: (enabled: boolean): Promise<void> =>
+    ipcRenderer.invoke('settings:set-intent-analysis-enabled', enabled),
   getAppSettings: (): Promise<{ debugMode: boolean; onboardingComplete: boolean }> =>
     ipcRenderer.invoke('settings:app-settings'),
 
@@ -233,6 +237,22 @@ const accomplishAPI = {
     const listener = (_: unknown, data: { taskId: string; sessionId: string; answer: string }) => callback(data);
     ipcRenderer.on('question:late-response', listener);
     return () => ipcRenderer.removeListener('question:late-response', listener);
+  },
+  // Intent analysis status updates
+  onIntentAnalysis: (
+    callback: (data: {
+      taskId: string;
+      status: 'analyzing' | 'complete';
+      result?: unknown;
+      error?: string;
+    }) => void
+  ) => {
+    const listener = (
+      _: unknown,
+      data: { taskId: string; status: 'analyzing' | 'complete'; result?: unknown; error?: string }
+    ) => callback(data);
+    ipcRenderer.on('task:intent-analysis', listener);
+    return () => ipcRenderer.removeListener('task:intent-analysis', listener);
   },
 
   logEvent: (payload: { level?: string; message: string; context?: Record<string, unknown> }) =>

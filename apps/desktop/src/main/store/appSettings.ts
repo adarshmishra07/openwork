@@ -15,6 +15,8 @@ interface AppSettingsSchema {
   ollamaConfig: OllamaConfig | null;
   /** LiteLLM proxy configuration */
   litellmConfig: LiteLLMConfig | null;
+  /** Enable intent analysis pre-processing with Gemini Flash */
+  intentAnalysisEnabled: boolean;
 }
 
 const appSettingsStore = new Store<AppSettingsSchema>({
@@ -28,6 +30,7 @@ const appSettingsStore = new Store<AppSettingsSchema>({
     },
     ollamaConfig: null,
     litellmConfig: null,
+    intentAnalysisEnabled: true,
   },
 });
 
@@ -111,6 +114,7 @@ export function getAppSettings(): AppSettingsSchema {
     selectedModel: appSettingsStore.get('selectedModel'),
     ollamaConfig: appSettingsStore.get('ollamaConfig') ?? null,
     litellmConfig: appSettingsStore.get('litellmConfig') ?? null,
+    intentAnalysisEnabled: appSettingsStore.get('intentAnalysisEnabled'),
   };
 }
 
@@ -120,4 +124,18 @@ export function getAppSettings(): AppSettingsSchema {
  */
 export function clearAppSettings(): void {
   appSettingsStore.clear();
+}
+
+/**
+ * Get intent analysis enabled setting
+ */
+export function getIntentAnalysisEnabled(): boolean {
+  return appSettingsStore.get('intentAnalysisEnabled');
+}
+
+/**
+ * Set intent analysis enabled setting
+ */
+export function setIntentAnalysisEnabled(enabled: boolean): void {
+  appSettingsStore.set('intentAnalysisEnabled', enabled);
 }

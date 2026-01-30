@@ -47,6 +47,9 @@ interface TaskState {
   setupProgressTaskId: string | null;
   setupDownloadStep: number; // 1=Chromium, 2=FFMPEG, 3=Headless Shell
 
+  // Intent analysis progress
+  intentAnalysisInProgress: boolean;
+
   // Task launcher
   isLauncherOpen: boolean;
   openLauncher: () => void;
@@ -75,6 +78,7 @@ interface TaskState {
   deleteTask: (taskId: string) => Promise<void>;
   clearHistory: () => Promise<void>;
   reset: () => void;
+  setIntentAnalysisInProgress: (inProgress: boolean) => void;
 }
 
 function createMessageId(): string {
@@ -90,6 +94,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   setupProgress: null,
   setupProgressTaskId: null,
   setupDownloadStep: 1,
+  intentAnalysisInProgress: false,
   
   // Image selection state
   selectedImages: [],
@@ -545,7 +550,12 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       setupProgressTaskId: null,
       setupDownloadStep: 1,
       isLauncherOpen: false,
+      intentAnalysisInProgress: false,
     });
+  },
+
+  setIntentAnalysisInProgress: (inProgress: boolean) => {
+    set({ intentAnalysisInProgress: inProgress });
   },
 
   openLauncher: () => set({ isLauncherOpen: true }),

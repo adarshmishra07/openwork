@@ -53,6 +53,8 @@ interface AccomplishAPI {
   removeApiKey(id: string): Promise<void>;
   getDebugMode(): Promise<boolean>;
   setDebugMode(enabled: boolean): Promise<void>;
+  getIntentAnalysisEnabled(): Promise<boolean>;
+  setIntentAnalysisEnabled(enabled: boolean): Promise<void>;
   getAppSettings(): Promise<{ debugMode: boolean; onboardingComplete: boolean }>;
 
   // API Key management
@@ -176,6 +178,7 @@ interface AccomplishAPI {
   onTaskStatusChange?(callback: (data: { taskId: string; status: TaskStatus }) => void): () => void;
   onTaskSummary?(callback: (data: { taskId: string; summary: string }) => void): () => void;
   onQuestionLateResponse?(callback: (data: { taskId: string; sessionId: string; answer: string }) => void): () => void;
+  onIntentAnalysis?(callback: (data: { taskId: string; status: 'analyzing' | 'complete'; result?: unknown; error?: string }) => void): () => void;
 
   // Logging
   logEvent(payload: { level?: string; message: string; context?: Record<string, unknown> }): Promise<unknown>;

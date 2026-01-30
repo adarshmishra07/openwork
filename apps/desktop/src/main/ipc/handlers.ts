@@ -22,6 +22,11 @@ import {
   clearHistory,
 } from '../store/taskHistory';
 import { generateTaskSummary } from '../services/summarizer';
+import { analyzeIntent } from '../services/intent-analyzer';
+import {
+  getIntentAnalysisEnabled,
+  setIntentAnalysisEnabled,
+} from '../store/appSettings';
 import {
   storeApiKey,
   getApiKey,
@@ -358,6 +363,59 @@ export function registerIPCHandlers(): void {
       }
     };
 
+    // Intent analysis pre-processing
+    let effectivePrompt = validatedConfig.prompt;
+
+    if (getIntentAnalysisEnabled()) {
+      forwardToRenderer('task:intent-analysis', { taskId, status: 'analyzing' });
+
+      try {
+        // Determine attachment types for context
+        const attachmentTypes = validatedConfig.attachments
+          ?.map((a) => {
+            if (a.contentType.startsWith('image/')) return 'image';
+            if (a.contentType.includes('pdf')) return 'document';
+            return 'file';
+          })
+          .filter((v, i, arr) => arr.indexOf(v) === i); // unique
+
+        const intentResult = await analyzeIntent({
+          prompt: validatedConfig.prompt,
+          hasAttachments: !!validatedConfig.attachments?.length,
+          attachmentTypes,
+        });
+
+        if (intentResult && intentResult.confidence >= 0.8) {
+          effectivePrompt = intentResult.refinedPrompt;
+          console.log(
+            `[Intent] Using refined prompt (${intentResult.intent}, confidence: ${intentResult.confidence})`
+          );
+          console.log(`[Intent] Original: "${validatedConfig.prompt}"`);
+          console.log(`[Intent] Refined:  "${effectivePrompt}"`);
+        }
+
+        forwardToRenderer('task:intent-analysis', {
+          taskId,
+          status: 'complete',
+          result: intentResult,
+        });
+      } catch (error) {
+        console.warn('[Intent] Analysis failed, using original prompt:', error);
+        forwardToRenderer('task:intent-analysis', {
+          taskId,
+          status: 'complete',
+          result: null,
+          error: 'Analysis failed',
+        });
+      }
+    }
+
+    // Create effective config with potentially refined prompt
+    const effectiveConfig = {
+      ...validatedConfig,
+      prompt: effectivePrompt,
+    };
+
     // Create task-scoped callbacks for the TaskManager
     const callbacks: TaskCallbacks = {
       onMessage: (message: OpenCodeMessage) => {
@@ -468,7 +526,7 @@ export function registerIPCHandlers(): void {
     };
 
     // Start the task via TaskManager (creates isolated adapter or queues if busy)
-    const task = await taskManager.startTask(taskId, validatedConfig, callbacks);
+    const task = await taskManager.startTask(taskId, effectiveConfig, callbacks);
 
     // Convert attachments to TaskAttachment format for rendering
     const messageAttachments = validatedConfig.attachments?.map(a => ({
@@ -740,6 +798,53 @@ export function registerIPCHandlers(): void {
       }
     };
 
+    // Intent analysis pre-processing for follow-up messages
+    let effectivePrompt = validatedPrompt;
+
+    if (getIntentAnalysisEnabled()) {
+      forwardToRenderer('task:intent-analysis', { taskId, status: 'analyzing' });
+
+      try {
+        // Determine attachment types for context
+        const attachmentTypes = attachments
+          ?.map((a) => {
+            if (a.contentType.startsWith('image/')) return 'image';
+            if (a.contentType.includes('pdf')) return 'document';
+            return 'file';
+          })
+          .filter((v, i, arr) => arr.indexOf(v) === i); // unique
+
+        const intentResult = await analyzeIntent({
+          prompt: validatedPrompt,
+          hasAttachments: !!attachments?.length,
+          attachmentTypes,
+        });
+
+        if (intentResult && intentResult.confidence >= 0.8) {
+          effectivePrompt = intentResult.refinedPrompt;
+          console.log(
+            `[Intent] Follow-up: Using refined prompt (${intentResult.intent}, confidence: ${intentResult.confidence})`
+          );
+          console.log(`[Intent] Original: "${validatedPrompt}"`);
+          console.log(`[Intent] Refined:  "${effectivePrompt}"`);
+        }
+
+        forwardToRenderer('task:intent-analysis', {
+          taskId,
+          status: 'complete',
+          result: intentResult,
+        });
+      } catch (error) {
+        console.warn('[Intent] Follow-up analysis failed, using original prompt:', error);
+        forwardToRenderer('task:intent-analysis', {
+          taskId,
+          status: 'complete',
+          result: null,
+          error: 'Analysis failed',
+        });
+      }
+    }
+
     // Create task-scoped callbacks for the TaskManager (with batching for performance)
     const callbacks: TaskCallbacks = {
       onMessage: (message: OpenCodeMessage) => {
@@ -841,7 +946,7 @@ export function registerIPCHandlers(): void {
 
     // Start the task via TaskManager with sessionId for resume (creates isolated adapter or queues if busy)
     const task = await taskManager.startTask(taskId, {
-      prompt: validatedPrompt,
+      prompt: effectivePrompt,
       sessionId: validatedSessionId,
       taskId,
       attachments,
@@ -1539,6 +1644,25 @@ export function registerIPCHandlers(): void {
       win.webContents.send('settings:debug-mode-changed', { enabled });
     }
   });
+
+  // Settings: Get intent analysis enabled
+  handle(
+    'settings:intent-analysis-enabled',
+    async (_event: IpcMainInvokeEvent) => {
+      return getIntentAnalysisEnabled();
+    }
+  );
+
+  // Settings: Set intent analysis enabled
+  handle(
+    'settings:set-intent-analysis-enabled',
+    async (_event: IpcMainInvokeEvent, enabled: boolean) => {
+      if (typeof enabled !== 'boolean') {
+        throw new Error('Invalid intent analysis flag');
+      }
+      setIntentAnalysisEnabled(enabled);
+    }
+  );
 
   // Settings: Get all app settings
   handle('settings:app-settings', async (_event: IpcMainInvokeEvent) => {

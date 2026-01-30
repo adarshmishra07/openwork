@@ -92,7 +92,7 @@ export default function HomePage() {
   const [brandName, setBrandName] = useState<string | null>(null);
   // Task ID for attachment uploads - must match the ID used when starting the task
   const [currentTaskId, setCurrentTaskId] = useState(generateTaskId);
-  const { startTask, isLoading, addTaskUpdate, setPermissionRequest } = useTaskStore();
+  const { startTask, isLoading, addTaskUpdate, setPermissionRequest, setIntentAnalysisInProgress } = useTaskStore();
   const navigate = useNavigate();
   const accomplish = getAccomplish();
 
@@ -121,11 +121,20 @@ export default function HomePage() {
       setPermissionRequest(request);
     });
 
+    // Subscribe to intent analysis events - only set to true, never false
+    // Let Execution page handle clearing the state
+    const unsubscribeIntentAnalysis = accomplish.onIntentAnalysis?.((data) => {
+      if (data.status === 'analyzing') {
+        setIntentAnalysisInProgress(true);
+      }
+    });
+
     return () => {
       unsubscribeTask();
       unsubscribePermission();
+      unsubscribeIntentAnalysis?.();
     };
-  }, [addTaskUpdate, setPermissionRequest, accomplish]);
+  }, [addTaskUpdate, setPermissionRequest, setIntentAnalysisInProgress, accomplish]);
 
   // Store pending attachments for use in executeTask
   const [pendingAttachments, setPendingAttachments] = useState<FileAttachment[]>([]);
@@ -133,6 +142,10 @@ export default function HomePage() {
   const executeTask = useCallback(async (attachments?: FileAttachment[]) => {
     if (!prompt.trim() && (!attachments || attachments.length === 0)) return;
     if (isLoading) return;
+
+    // Set intent analysis in progress BEFORE starting task
+    // This ensures the UI shows it immediately on navigation
+    setIntentAnalysisInProgress(true);
 
     // Use the pre-generated task ID (same one used for attachment uploads)
     const taskId = currentTaskId;
@@ -155,7 +168,7 @@ export default function HomePage() {
       setCurrentTaskId(generateTaskId());
       navigate(`/execution/${task.id}`);
     }
-  }, [prompt, isLoading, startTask, navigate, currentTaskId]);
+  }, [prompt, isLoading, startTask, navigate, currentTaskId, setIntentAnalysisInProgress]);
 
   const handleSubmit = async (attachments?: FileAttachment[]) => {
     if (!prompt.trim() && (!attachments || attachments.length === 0)) return;

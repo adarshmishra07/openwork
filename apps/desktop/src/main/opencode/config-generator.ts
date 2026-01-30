@@ -804,7 +804,7 @@ Use Gemini API ONLY when space tools don't fit the task:
 # Generate a unique filename with timestamp
 OUTPUT_FILE="/tmp/generated_$(date +%Y%m%d_%H%M%S).png"
 
-curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=$GOOGLE_GENERATIVE_AI_API_KEY" \\
+curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=$GOOGLE_GENERATIVE_AI_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "contents": [{"parts": [{"text": "YOUR_PROMPT_HERE"}]}],
@@ -911,7 +911,7 @@ Text descriptions alone are NOT sufficient. Gemini needs the actual images.
    curl -sL "https://example.com/background.jpg" -o /tmp/background.jpg
    
    # Generate with BOTH images attached
-   curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=\$GOOGLE_GENERATIVE_AI_API_KEY" \\
+   curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=\$GOOGLE_GENERATIVE_AI_API_KEY" \\
      -H "Content-Type: application/json" \\
      -d '{
        "contents": [{"parts": [
@@ -956,7 +956,7 @@ Text descriptions alone are NOT sufficient. Gemini needs the actual images.
    PYEOF
    
    # Make API call with JSON file (curl -d @file avoids shell limits)
-   curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=$GOOGLE_GENERATIVE_AI_API_KEY" \\
+   curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=$GOOGLE_GENERATIVE_AI_API_KEY" \\
      -H "Content-Type: application/json" \\
      -d @/tmp/gemini_request.json | jq -r '.candidates[0].content.parts[] | select(.inlineData) | .inlineData.data' | base64 -d > /tmp/output.png
    \`\`\`
