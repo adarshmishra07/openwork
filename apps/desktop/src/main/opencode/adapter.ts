@@ -76,6 +76,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
   private toolCallCount: number = 0; // Track number of tool calls in this session
   private autoContinueCount: number = 0; // Prevent infinite auto-continue loops
   private static MAX_AUTO_CONTINUES = 3; // Max times to auto-continue
+  private lastAssistantMessage: string = ''; // Track last text for completion detection
 
   /**
    * Create a new OpenCodeAdapter instance
@@ -162,6 +163,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     this.lastErrorOutput = '';
     this.toolCallCount = 0; // Reset tool call counter for new task
     this.autoContinueCount = 0; // Reset auto-continue counter
+    this.lastAssistantMessage = ''; // Reset for completion detection
 
     // Start the log watcher to detect errors that aren't output as JSON
     if (this.logWatcher) {
@@ -169,11 +171,9 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     }
 
     // Sync API keys to OpenCode CLI's auth.json (for DeepSeek, Z.AI support)
-    // Skip if using subscription mode - we want to use global auth as-is
-    // In packaged builds, default to using OpenCode subscription
-    const useSubscription = app.isPackaged 
-      ? process.env.USE_OPENCODE_SUBSCRIPTION !== '0'  // Default ON in production
-      : process.env.USE_OPENCODE_SUBSCRIPTION === '1'; // Default OFF in dev
+    // Always use app-scoped data isolation to ensure we only use user-provided API keys
+    // Never use global OpenCode subscriptions - users must explicitly add API keys in ShopOS
+    const useSubscription = false;
     if (!useSubscription) {
       await syncApiKeysToOpenCodeAuth();
     } else {
@@ -435,15 +435,30 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
       ...process.env,
     };
 
-    // Check if user wants to use their OpenCode subscription instead of API keys
-    // In packaged builds, default to using OpenCode subscription (users with subscription can use it)
-    // Set USE_OPENCODE_SUBSCRIPTION=0 to explicitly disable and use API keys instead
-    const useSubscription = app.isPackaged 
-      ? process.env.USE_OPENCODE_SUBSCRIPTION !== '0'  // Default ON in production
-      : process.env.USE_OPENCODE_SUBSCRIPTION === '1'; // Default OFF in dev
-    
+    // Remove any inherited API keys to prevent global keys from leaking in
+    // We only want to use keys explicitly configured in ShopOS settings
+    const inheritedApiKeyVars = [
+      'ANTHROPIC_API_KEY',
+      'OPENAI_API_KEY',
+      'GOOGLE_GENERATIVE_AI_API_KEY',
+      'XAI_API_KEY',
+      'DEEPSEEK_API_KEY',
+      'ZAI_API_KEY',
+      'OPENROUTER_API_KEY',
+      'LITELLM_API_KEY',
+      'MOONSHOT_API_KEY',
+      'OPENCODE_CONFIG',  // Also prevent inherited config override
+    ];
+    for (const key of inheritedApiKeyVars) {
+      delete env[key];
+    }
+
+    // Always use app-scoped data isolation to ensure we only use user-provided API keys
+    // Never use global OpenCode subscriptions - users must explicitly add API keys in ShopOS
+    const useSubscription = false;
+
     if (useSubscription) {
-      // Use global OpenCode auth (user's subscription)
+      // Use global OpenCode auth (user's subscription) - disabled, always use app-scoped
       console.log('[OpenCode CLI] USE_OPENCODE_SUBSCRIPTION=1: Using global OpenCode auth (subscription)');
     } else {
       // Set app-scoped XDG_DATA_HOME so OpenCode uses isolated auth/data.
@@ -700,6 +715,11 @@ User's request: ${config.prompt}`;
         }
         this.emit('message', message);
 
+        // Store for completion detection
+        if (message.part.text) {
+          this.lastAssistantMessage = message.part.text;
+        }
+
         if (message.part.text) {
           const taskMessage: TaskMessage = {
             id: this.generateMessageId(),
@@ -809,24 +829,8 @@ User's request: ${config.prompt}`;
         // Only complete if reason is 'stop' or 'end_turn' (final completion)
         // 'tool_use' means there are more steps coming
         if (message.part.reason === 'stop' || message.part.reason === 'end_turn') {
-          // Auto-continue: If agent stopped without calling any tools, it likely just
-          // shared a plan without executing. Send a nudge to continue.
-          if (this.toolCallCount === 0 && 
-              this.autoContinueCount < OpenCodeAdapter.MAX_AUTO_CONTINUES &&
-              this.ptyProcess) {
-            this.autoContinueCount++;
-            console.log(`[OpenCode Adapter] Auto-continuing (${this.autoContinueCount}/${OpenCodeAdapter.MAX_AUTO_CONTINUES}) - agent stopped without tool calls`);
-            this.emit('debug', { 
-              type: 'info', 
-              message: `Auto-continuing: agent shared plan but didn't execute (attempt ${this.autoContinueCount})` 
-            });
-            // Send a nudge to continue executing
-            this.ptyProcess.write('Continue executing the plan. Start with the first step now.\n');
-            return; // Don't emit complete yet
-          }
-          
           this.hasCompleted = true;
-          
+
           // Delay completion (1s) to allow final text messages to be processed by frontend
           // This prevents the "Completed" state from appearing before the final text bubble
           setTimeout(() => {
@@ -839,7 +843,7 @@ User's request: ${config.prompt}`;
           }, 1000);
         } else if (message.part.reason === 'error') {
           this.hasCompleted = true;
-          
+
           // Delay completion (1s) for consistency and to allow any buffered logs to appear
           setTimeout(() => {
             if (!this.isDisposed) {
@@ -937,6 +941,27 @@ User's request: ${config.prompt}`;
 
   private generateRequestId(): string {
     return `req_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+  }
+
+  /**
+   * Check if the last assistant message indicates task completion
+   * Used to determine if auto-continue should be triggered
+   */
+  private checkLastTextForCompletion(): boolean {
+    const text = this.lastAssistantMessage.toLowerCase();
+    const completionIndicators = [
+      'task complete',
+      'task is complete',
+      'completed successfully',
+      'finished the task',
+      'all done',
+      "i've completed",
+      'i have completed',
+      'successfully completed',
+      'task has been completed',
+      'work is complete',
+    ];
+    return completionIndicators.some(indicator => text.includes(indicator));
   }
 
   /**

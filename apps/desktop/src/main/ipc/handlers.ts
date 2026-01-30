@@ -99,6 +99,7 @@ import { uploadGeneratedImage } from '../spaces/space-runtime-client';
 import { clearPreviousInstallData } from '../store/freshInstallCleanup';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 const MAX_TEXT_LENGTH = 8000;
 const ALLOWED_API_KEY_PROVIDERS = new Set(['anthropic', 'openai', 'openrouter', 'google', 'xai', 'deepseek', 'zai', 'custom', 'kimi', 'litellm']);
@@ -1976,18 +1977,35 @@ function sanitizeToolOutput(text: string, isError: boolean): string {
 }
 
 /**
- * Regex to detect local file paths for generated images in /tmp/
+ * Get regex to detect local file paths for generated images in temp directory.
+ * Platform-aware: matches /tmp/ on Unix, or Windows temp paths.
  * Matches patterns like: /tmp/generated_20240122_143052.png
  */
-const LOCAL_IMAGE_PATH_REGEX = /\/tmp\/[^\s"'<>]+\.(png|jpg|jpeg|gif|webp)/gi;
+function getLocalImagePathRegex(): RegExp {
+  const tempDir = os.tmpdir();
+  // Escape special regex characters in the temp directory path
+  const escapedTempDir = tempDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // On Windows, also match forward slashes (some tools output forward slashes)
+  const pathPattern = process.platform === 'win32'
+    ? `(?:${escapedTempDir}|${escapedTempDir.replace(/\\\\/g, '/')})[/\\\\][^\\s"'<>]+\\.(png|jpg|jpeg|gif|webp)`
+    : `${escapedTempDir}/[^\\s"'<>]+\\.(png|jpg|jpeg|gif|webp)`;
+  return new RegExp(pathPattern, 'gi');
+}
+
+// Also match explicit /tmp/ paths for backwards compatibility on Unix
+const UNIX_TMP_REGEX = /\/tmp\/[^\s"'<>]+\.(png|jpg|jpeg|gif|webp)/gi;
 
 /**
  * Process message content to upload local generated images to S3
  * Returns the content with local paths replaced by S3 URLs
  */
 async function processGeneratedImages(content: string, taskId: string): Promise<string> {
-  // Find all local image paths in the content
-  const matches = content.match(LOCAL_IMAGE_PATH_REGEX);
+  // Find all local image paths in the content (platform-aware + Unix /tmp/ fallback)
+  const localImageRegex = getLocalImagePathRegex();
+  const matches = [
+    ...(content.match(localImageRegex) || []),
+    ...(process.platform !== 'win32' ? (content.match(UNIX_TMP_REGEX) || []) : []),
+  ];
   if (!matches || matches.length === 0) {
     return content;
   }

@@ -753,12 +753,14 @@ function BetaInfoStep() {
 // API Setup Step
 // ============================================
 
-const PROVIDERS = [
+type ApiProvider = 'anthropic' | 'openai' | 'google' | 'xai';
+
+const PROVIDERS: { id: ApiProvider; name: string; description: string }[] = [
   { id: 'anthropic', name: 'Anthropic', description: 'Claude models' },
   { id: 'openai', name: 'OpenAI', description: 'GPT models' },
   { id: 'google', name: 'Google', description: 'Gemini models' },
   { id: 'xai', name: 'xAI', description: 'Grok models' },
-] as const;
+];
 
 interface ApiSetupStepProps {
   hasApiKey: boolean;
@@ -766,7 +768,7 @@ interface ApiSetupStepProps {
 }
 
 function ApiSetupStep({ onValidityChange }: ApiSetupStepProps) {
-  const [provider, setProvider] = useState<string>('anthropic');
+  const [provider, setProvider] = useState<ApiProvider>('anthropic');
   const [key, setKey] = useState('');
   const [saved, setSaved] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -822,6 +824,14 @@ function ApiSetupStep({ onValidityChange }: ApiSetupStepProps) {
       const settings = await accomplish.getProviderSettings();
       if (!settings.activeProviderId) {
         await accomplish.setActiveProvider(providerId);
+      }
+
+      // 5. Also set legacy selectedModel for Settings UI compatibility
+      if (defaultModel) {
+        await accomplish.setSelectedModel({
+          provider: providerId,
+          model: defaultModel,
+        });
       }
 
       // Update UI
@@ -907,8 +917,8 @@ function ApiSetupStep({ onValidityChange }: ApiSetupStepProps) {
 
       {/* Saved Keys */}
       {saved.length > 0 && (
-        <div className="p-4 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700">
-          <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-200">
+        <div className="p-4 rounded-lg bg-muted border border-border">
+          <div className="flex items-center gap-2 text-foreground">
             <CheckCircle2 className="w-5 h-5" />
             <span className="font-medium">
               {saved.length} provider{saved.length > 1 ? 's' : ''} connected
@@ -916,7 +926,7 @@ function ApiSetupStep({ onValidityChange }: ApiSetupStepProps) {
           </div>
           <div className="flex flex-wrap gap-2 mt-2">
             {saved.map((s) => (
-              <span key={s} className="px-2 py-1 rounded bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 text-xs font-medium capitalize">
+              <span key={s} className="px-2 py-1 rounded bg-foreground/10 text-foreground text-xs font-medium capitalize">
                 {s}
               </span>
             ))}

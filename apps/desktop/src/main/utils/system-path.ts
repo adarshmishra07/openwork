@@ -95,16 +95,42 @@ function getFnmNodePaths(): string[] {
 }
 
 /**
- * Common Node.js installation paths on macOS.
+ * Common Node.js installation paths.
  * These are checked in order of preference.
  */
 function getCommonNodePaths(): string[] {
-  const home = process.env.HOME || '';
+  const isWindows = process.platform === 'win32';
+  const home = process.env.HOME || process.env.USERPROFILE || '';
 
   // Get dynamic paths from version managers
   const nvmPaths = getNvmNodePaths();
   const fnmPaths = getFnmNodePaths();
 
+  if (isWindows) {
+    const appData = process.env.APPDATA || '';
+    const localAppData = process.env.LOCALAPPDATA || '';
+    const programFiles = process.env.ProgramFiles || 'C:\\Program Files';
+    const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+
+    return [
+      ...nvmPaths,
+      ...fnmPaths,
+      // npm global
+      path.join(appData, 'npm'),
+      path.join(localAppData, 'npm'),
+      // Standard Node.js installations
+      path.join(programFiles, 'nodejs'),
+      path.join(programFilesX86, 'nodejs'),
+      // Scoop
+      path.join(home, 'scoop', 'shims'),
+      // Chocolatey
+      'C:\\ProgramData\\chocolatey\\bin',
+      // Volta
+      path.join(localAppData, 'Volta', 'bin'),
+    ].filter(p => p && !p.includes('undefined'));
+  }
+
+  // macOS/Linux paths
   return [
     // Version managers (dynamic - most specific, checked first)
     ...nvmPaths,
@@ -173,20 +199,15 @@ function getSystemPathFromPathHelper(): string | null {
 export function getExtendedNodePath(basePath?: string): string {
   const base = basePath || process.env.PATH || '';
 
-  if (process.platform !== 'darwin') {
-    // On non-macOS, just return the base PATH
-    return base;
-  }
-
   // Start with common Node.js paths
   const nodePaths = getCommonNodePaths();
 
-  // Try to get system PATH from path_helper
+  // Try to get system PATH from path_helper (macOS only)
   const systemPath = getSystemPathFromPathHelper();
 
   // Build the final PATH:
   // 1. Common Node.js paths (highest priority - finds user's preferred Node)
-  // 2. System PATH from path_helper (includes /etc/paths.d entries)
+  // 2. System PATH from path_helper (macOS - includes /etc/paths.d entries)
   // 3. Base PATH (fallback)
   const pathParts: string[] = [];
 
@@ -197,7 +218,7 @@ export function getExtendedNodePath(basePath?: string): string {
     }
   }
 
-  // Add system PATH from path_helper
+  // Add system PATH from path_helper (macOS only, returns null on other platforms)
   if (systemPath) {
     for (const p of systemPath.split(':')) {
       if (p && !pathParts.includes(p)) {
@@ -207,13 +228,13 @@ export function getExtendedNodePath(basePath?: string): string {
   }
 
   // Add base PATH entries
-  for (const p of base.split(':')) {
+  for (const p of base.split(PATH_SEP)) {
     if (p && !pathParts.includes(p)) {
       pathParts.push(p);
     }
   }
 
-  return pathParts.join(':');
+  return pathParts.join(PATH_SEP);
 }
 
 /**
@@ -224,25 +245,34 @@ export function getExtendedNodePath(basePath?: string): string {
  * @returns The full path to the command if found, null otherwise
  */
 export function findCommandInPath(command: string, searchPath: string): string | null {
-  for (const dir of searchPath.split(':')) {
+  const isWindows = process.platform === 'win32';
+  // On Windows, also check for .exe, .cmd, .bat extensions
+  const extensions = isWindows ? ['', '.exe', '.cmd', '.bat'] : [''];
+
+  for (const dir of searchPath.split(PATH_SEP)) {
     if (!dir) continue;
 
-    const fullPath = `${dir}/${command}`;
-    try {
-      if (fs.existsSync(fullPath)) {
-        const stats = fs.statSync(fullPath);
-        if (stats.isFile()) {
-          // Check if executable
-          try {
-            fs.accessSync(fullPath, fs.constants.X_OK);
-            return fullPath;
-          } catch {
-            // Not executable, continue searching
+    for (const ext of extensions) {
+      const fullPath = path.join(dir, command + ext);
+      try {
+        if (fs.existsSync(fullPath)) {
+          const stats = fs.statSync(fullPath);
+          if (stats.isFile()) {
+            // On Windows, files are executable by extension; on Unix, check X_OK
+            if (isWindows) {
+              return fullPath;
+            }
+            try {
+              fs.accessSync(fullPath, fs.constants.X_OK);
+              return fullPath;
+            } catch {
+              // Not executable, continue searching
+            }
           }
         }
+      } catch {
+        // Directory doesn't exist or other error, continue
       }
-    } catch {
-      // Directory doesn't exist or other error, continue
     }
   }
 
