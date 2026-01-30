@@ -79,12 +79,19 @@ const USE_CASE_EXAMPLES = [
   },
 ];
 
+// Helper to generate a unique task ID
+function generateTaskId(): string {
+  return `task_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
 export default function HomePage() {
   const [prompt, setPrompt] = useState('');
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>(undefined);
   const [shopifyRefreshKey, setShopifyRefreshKey] = useState(0);
   const [brandName, setBrandName] = useState<string | null>(null);
+  // Task ID for attachment uploads - must match the ID used when starting the task
+  const [currentTaskId, setCurrentTaskId] = useState(generateTaskId);
   const { startTask, isLoading, addTaskUpdate, setPermissionRequest } = useTaskStore();
   const navigate = useNavigate();
   const accomplish = getAccomplish();
@@ -127,8 +134,9 @@ export default function HomePage() {
     if (!prompt.trim() && (!attachments || attachments.length === 0)) return;
     if (isLoading) return;
 
-    const taskId = `task_${Date.now()}`;
-    
+    // Use the pre-generated task ID (same one used for attachment uploads)
+    const taskId = currentTaskId;
+
     // Convert FileAttachment to TaskConfig.attachments format
     const taskAttachments = attachments?.filter(a => a.url).map(a => ({
       filename: a.filename,
@@ -137,15 +145,17 @@ export default function HomePage() {
       size: a.size,
     }));
 
-    const task = await startTask({ 
-      prompt: prompt.trim(), 
+    const task = await startTask({
+      prompt: prompt.trim(),
       taskId,
       attachments: taskAttachments,
     });
     if (task) {
+      // Generate new task ID for next task (after successful creation)
+      setCurrentTaskId(generateTaskId());
       navigate(`/execution/${task.id}`);
     }
-  }, [prompt, isLoading, startTask, navigate]);
+  }, [prompt, isLoading, startTask, navigate, currentTaskId]);
 
   const handleSubmit = async (attachments?: FileAttachment[]) => {
     if (!prompt.trim() && (!attachments || attachments.length === 0)) return;
@@ -241,6 +251,7 @@ export default function HomePage() {
             autoFocus={true}
             onConnectStore={handleConnectStore}
             shopifyRefreshKey={shopifyRefreshKey}
+            taskId={currentTaskId}
           />
         </motion.div>
 

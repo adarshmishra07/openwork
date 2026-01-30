@@ -24,7 +24,7 @@ const appSettingsStore = new Store<AppSettingsSchema>({
     onboardingComplete: false,
     selectedModel: {
       provider: 'anthropic',
-      model: 'anthropic/claude-opus-4-5',
+      model: 'anthropic/claude-sonnet-4-5',
     },
     ollamaConfig: null,
     litellmConfig: null,

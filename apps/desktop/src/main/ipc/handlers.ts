@@ -1811,6 +1811,221 @@ export function registerIPCHandlers(): void {
     }
   });
 
+  // ============================================
+  // Shell Handlers
+  // ============================================
+
+  // Shell: Open path with system default app
+  handle('shell:open-path', async (_event: IpcMainInvokeEvent, filePath: string) => {
+    return shell.openPath(filePath);
+  });
+
+  // ============================================
+  // Media Handlers
+  // ============================================
+
+  // Media: Load local file as data URL
+  handle('media:load-local-file', async (_event: IpcMainInvokeEvent, filePath: string) => {
+    try {
+      const buffer = fs.readFileSync(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+      const fileName = path.basename(filePath);
+
+      // Determine MIME type
+      const mimeTypes: Record<string, string> = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.svg': 'image/svg+xml',
+        '.mp4': 'video/mp4',
+        '.webm': 'video/webm',
+        '.mov': 'video/quicktime',
+        '.pdf': 'application/pdf',
+      };
+
+      const mimeType = mimeTypes[ext] || 'application/octet-stream';
+      const base64 = buffer.toString('base64');
+      const dataUrl = `data:${mimeType};base64,${base64}`;
+
+      return {
+        dataUrl,
+        mimeType,
+        size: buffer.length,
+        fileName,
+      };
+    } catch (error) {
+      console.error('[Media] Failed to load local file:', error);
+      throw new Error(`Failed to load file: ${filePath}`);
+    }
+  });
+
+  // ============================================
+  // Space Runtime Handlers
+  // ============================================
+
+  // Space Runtime: Match prompt to space
+  handle('space-runtime:match', async (_event: IpcMainInvokeEvent, prompt: string) => {
+    const { matchPromptToSpaceAsync } = await import('../spaces/space-selector');
+    return matchPromptToSpaceAsync(prompt);
+  });
+
+  // Space Runtime: Get suggestions for a prompt
+  handle('space-runtime:suggestions', async (_event: IpcMainInvokeEvent, prompt: string) => {
+    const { getSuggestedSpaces } = await import('../spaces/space-selector');
+    return getSuggestedSpaces(prompt);
+  });
+
+  // Space Runtime: Check if runtime is available
+  handle('space-runtime:is-available', async () => {
+    const { isSpaceRuntimeAvailable } = await import('../spaces/space-runtime-client');
+    return isSpaceRuntimeAvailable();
+  });
+
+  // Space Runtime: List spaces from remote
+  handle('space-runtime:list-remote', async () => {
+    const { listSpacesFromRuntime } = await import('../spaces/space-runtime-client');
+    return listSpacesFromRuntime();
+  });
+
+  // Space Runtime: Execute a space
+  handle('space-runtime:execute', async (_event: IpcMainInvokeEvent, spaceId: string, inputs: Record<string, unknown>) => {
+    const { executeSpace } = await import('../spaces/space-runtime-client');
+    return executeSpace(spaceId, inputs);
+  });
+
+  // Space Runtime: Get local registry
+  handle('space-runtime:registry', async () => {
+    const { SPACE_REGISTRY } = await import('../spaces/space-registry');
+    return SPACE_REGISTRY;
+  });
+
+  // ============================================
+  // Brand Asset Upload Handlers
+  // ============================================
+
+  // Brand: Upload asset (logo, character, scene, site-image) to S3
+  handle('brand:upload-asset', async (
+    _event: IpcMainInvokeEvent,
+    brandId: string,
+    assetType: 'logos' | 'characters' | 'scenes' | 'site-images',
+    filename: string,
+    contentType: string,
+    imageBase64: string
+  ) => {
+    const { uploadBrandAsset } = await import('../spaces/space-runtime-client');
+    return uploadBrandAsset({
+      brandId,
+      assetType,
+      filename,
+      contentType,
+      imageBase64,
+    });
+  });
+
+  // ============================================
+  // Chat Attachment Upload Handlers
+  // ============================================
+
+  // Attachment: Upload chat attachment to S3 (from file path)
+  handle('attachment:upload', async (
+    _event: IpcMainInvokeEvent,
+    taskId: string,
+    filePath: string
+  ) => {
+    const { uploadChatAttachment } = await import('../spaces/space-runtime-client');
+
+    try {
+      const buffer = fs.readFileSync(filePath);
+      const base64Data = buffer.toString('base64');
+      const filename = path.basename(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+
+      // Determine MIME type
+      const mimeTypes: Record<string, string> = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.svg': 'image/svg+xml',
+        '.pdf': 'application/pdf',
+        '.json': 'application/json',
+        '.md': 'text/markdown',
+        '.txt': 'text/plain',
+        '.csv': 'text/csv',
+      };
+      const contentType = mimeTypes[ext] || 'application/octet-stream';
+
+      return uploadChatAttachment({
+        taskId,
+        filename,
+        contentType,
+        base64Data,
+      });
+    } catch (error) {
+      console.error('[Attachment] Failed to upload file:', error);
+      return {
+        success: false,
+        error: `Failed to upload file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
+  });
+
+  // Attachment: Upload chat attachment to S3 (from base64 data)
+  handle('attachment:upload-base64', async (
+    _event: IpcMainInvokeEvent,
+    taskId: string,
+    filename: string,
+    contentType: string,
+    base64Data: string
+  ) => {
+    const { uploadChatAttachment } = await import('../spaces/space-runtime-client');
+
+    try {
+      return uploadChatAttachment({
+        taskId,
+        filename,
+        contentType,
+        base64Data,
+      });
+    } catch (error) {
+      console.error('[Attachment] Failed to upload base64 data:', error);
+      return {
+        success: false,
+        error: `Failed to upload: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
+  });
+
+  // Attachment: Upload generated image to S3 for persistence
+  handle('generated-image:upload', async (
+    _event: IpcMainInvokeEvent,
+    taskId: string,
+    localPath: string
+  ) => {
+    const { uploadGeneratedImage } = await import('../spaces/space-runtime-client');
+
+    try {
+      const buffer = fs.readFileSync(localPath);
+      const base64Data = buffer.toString('base64');
+      const filename = path.basename(localPath);
+
+      return uploadGeneratedImage({
+        taskId,
+        filename,
+        base64Data,
+      });
+    } catch (error) {
+      console.error('[GeneratedImage] Failed to upload:', error);
+      return {
+        success: false,
+        error: `Failed to upload generated image: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
+  });
+
   // App: Factory Reset (clear all data and restart)
   handle('app:factory-reset', async () => {
     console.log('[IPC] Factory reset requested');

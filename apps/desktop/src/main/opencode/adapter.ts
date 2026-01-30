@@ -11,7 +11,7 @@ import {
 } from './cli-path';
 import { getAllApiKeys } from '../store/secureStorage';
 import { getSelectedModel } from '../store/appSettings';
-import { getActiveProviderModel } from '../store/providerSettings';
+import { getActiveProviderModel, getProviderSettings } from '../store/providerSettings';
 import { generateOpenCodeConfig, ACCOMPLISH_AGENT_NAME, syncApiKeysToOpenCodeAuth, getAppScopedDataHome } from './config-generator';
 import { getExtendedNodePath } from '../utils/system-path';
 import { getBundledNodePaths, logBundledNodeInfo } from '../utils/bundled-node';
@@ -23,6 +23,7 @@ import type {
   TaskResult,
   OpenCodeMessage,
   PermissionRequest,
+  ProviderId,
 } from '@shopos/shared';
 
 /**
@@ -583,7 +584,24 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
 
   private async buildCliArgs(config: TaskConfig): Promise<string[]> {
     // Try new provider settings first, fall back to legacy settings
-    const activeModel = getActiveProviderModel();
+    let activeModel = getActiveProviderModel();
+
+    // If no active provider set but we have connected providers, use the first one
+    if (!activeModel) {
+      const settings = getProviderSettings();
+      const connectedIds = Object.keys(settings.connectedProviders) as ProviderId[];
+      if (connectedIds.length > 0) {
+        const firstProvider = settings.connectedProviders[connectedIds[0]];
+        if (firstProvider?.selectedModelId) {
+          activeModel = {
+            provider: connectedIds[0],
+            model: firstProvider.selectedModelId,
+          };
+          console.log('[OpenCode Adapter] No active provider set, using first connected:', activeModel);
+        }
+      }
+    }
+
     const selectedModel = activeModel || getSelectedModel();
 
     // Build the prompt - enhance with attachment context if present

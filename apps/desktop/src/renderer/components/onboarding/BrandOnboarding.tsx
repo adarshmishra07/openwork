@@ -820,11 +820,8 @@ function ApiSetupStep({ onValidityChange }: ApiSetupStepProps) {
         lastConnectedAt: new Date().toISOString(),
       });
 
-      // 4. Set as active provider if none is active
-      const settings = await accomplish.getProviderSettings();
-      if (!settings.activeProviderId) {
-        await accomplish.setActiveProvider(providerId);
-      }
+      // 4. Always set as active provider (user just selected this one)
+      await accomplish.setActiveProvider(providerId);
 
       // 5. Also set legacy selectedModel for Settings UI compatibility
       if (defaultModel) {

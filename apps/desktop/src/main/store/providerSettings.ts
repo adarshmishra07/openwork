@@ -175,11 +175,8 @@ export function hasOpenCodeAnthropicSubscription(): boolean {
  * without manually configuring an API key.
  */
 export function initializeSubscriptionProviderIfNeeded(): boolean {
-  // Only in packaged builds (subscription mode default ON)
-  // In dev, we require explicit USE_OPENCODE_SUBSCRIPTION=1
-  const useSubscriptionMode = app.isPackaged 
-    ? process.env.USE_OPENCODE_SUBSCRIPTION !== '0'
-    : process.env.USE_OPENCODE_SUBSCRIPTION === '1';
+  // Always disabled - we only use user-provided API keys, never global subscriptions
+  const useSubscriptionMode = false;
     
   if (!useSubscriptionMode) {
     console.log('[ProviderSettings] Subscription mode not active, skipping auto-init');
