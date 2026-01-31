@@ -47,6 +47,95 @@ const SpinningIcon = ({ className }: { className?: string }) => (
   />
 );
 
+/**
+ * Extract todo JSON blocks from text content and return filtered content + todos
+ * Detects JSON code blocks that contain "todos": [...] and parses them
+ */
+function extractTodosFromText(content: string): {
+  filteredContent: string;
+  extractedTodos: TodoItem[][]
+} {
+  const extractedTodos: TodoItem[][] = [];
+  let filteredContent = content;
+
+  // Match any code block (``` ... ```) and check if it contains todos JSON
+  const codeBlockRegex = /```(?:json)?\s*\n?([\s\S]*?)\n?```/gi;
+
+  filteredContent = filteredContent.replace(codeBlockRegex, (match, codeContent) => {
+    // Check if this looks like todos JSON
+    if (codeContent.includes('"todos"') && codeContent.includes('[')) {
+      try {
+        const parsed = JSON.parse(codeContent.trim());
+        if (parsed.todos && Array.isArray(parsed.todos) && parsed.todos.length > 0) {
+          const normalizedTodos = parsed.todos.map((t: { id?: string; content?: string; status?: string }, idx: number) => ({
+            id: t.id || `todo-${idx}`,
+            content: t.content || '',
+            status: t.status || 'pending'
+          }));
+          extractedTodos.push(normalizedTodos);
+          return ''; // Remove the JSON block from content
+        }
+      } catch {
+        // Not valid JSON, keep original
+      }
+    }
+    return match;
+  });
+
+  // Also match bare JSON objects (not in code blocks) that look like todos
+  // This handles cases where the JSON is just text without fences
+  const lines = filteredContent.split('\n');
+  let inJson = false;
+  let jsonBuffer = '';
+  let jsonStartIdx = -1;
+  const linesToRemove: number[] = [];
+
+  lines.forEach((line, idx) => {
+    if (!inJson && line.trim().startsWith('{') && line.includes('"todos"')) {
+      inJson = true;
+      jsonBuffer = line;
+      jsonStartIdx = idx;
+    } else if (inJson) {
+      jsonBuffer += '\n' + line;
+      // Check if JSON is complete (balanced braces)
+      const openBraces = (jsonBuffer.match(/\{/g) || []).length;
+      const closeBraces = (jsonBuffer.match(/\}/g) || []).length;
+      if (openBraces === closeBraces && openBraces > 0) {
+        try {
+          const parsed = JSON.parse(jsonBuffer.trim());
+          if (parsed.todos && Array.isArray(parsed.todos) && parsed.todos.length > 0) {
+            const normalizedTodos = parsed.todos.map((t: { id?: string; content?: string; status?: string }, i: number) => ({
+              id: t.id || `todo-${i}`,
+              content: t.content || '',
+              status: t.status || 'pending'
+            }));
+            extractedTodos.push(normalizedTodos);
+            // Mark lines for removal
+            for (let i = jsonStartIdx; i <= idx; i++) {
+              linesToRemove.push(i);
+            }
+          }
+        } catch {
+          // Not valid JSON
+        }
+        inJson = false;
+        jsonBuffer = '';
+        jsonStartIdx = -1;
+      }
+    }
+  });
+
+  // Remove the lines that contained todos JSON
+  if (linesToRemove.length > 0) {
+    filteredContent = lines.filter((_, idx) => !linesToRemove.includes(idx)).join('\n');
+  }
+
+  return {
+    filteredContent: filteredContent.trim(),
+    extractedTodos
+  };
+}
+
 // Tool name to human-readable progress mapping
 const TOOL_PROGRESS_MAP: Record<string, { label: string; icon: typeof FileText }> = {
   // Standard Claude Code tools
@@ -1330,8 +1419,10 @@ const ActivityBullet = memo(function ActivityBullet({
   const description = (message.toolInput as { description?: string })?.description;
   
   // Special handling for TodoWrite - render inline todo list (case-insensitive check)
+  // Also handles 'todos' tool name which some models may use
   const toolInput = message.toolInput as { todos?: TodoItem[] } | undefined;
-  if (toolName.toLowerCase() === 'todowrite' && toolInput?.todos) {
+  const isTodoTool = toolName.toLowerCase() === 'todowrite' || toolName.toLowerCase() === 'todos';
+  if (isTodoTool && toolInput?.todos) {
     return (
       <motion.div
         initial={{ opacity: 0, y: 4 }}
@@ -1737,12 +1828,27 @@ const MessageBubble = memo(function MessageBubble({
             )}
           </StreamingText>
         ) : (
-          <RichContentRenderer 
-            content={message.content} 
-            className={proseClasses}
-            imageSelectable={imageSelectable}
-            onImageSelect={onImageSelect}
-          />
+          (() => {
+            // Extract any todo JSON blocks from text content
+            const { filteredContent, extractedTodos } = extractTodosFromText(message.content);
+            return (
+              <>
+                {/* Render extracted todos as proper TodoList components */}
+                {extractedTodos.map((todos, idx) => (
+                  <TodoList key={`extracted-todo-${idx}`} todos={todos} />
+                ))}
+                {/* Render remaining content */}
+                {filteredContent && (
+                  <RichContentRenderer
+                    content={filteredContent}
+                    className={proseClasses}
+                    imageSelectable={imageSelectable}
+                    onImageSelect={onImageSelect}
+                  />
+                )}
+              </>
+            );
+          })()
         )}
         {/* Copy button for assistant messages */}
         {isAssistant && message.content && (

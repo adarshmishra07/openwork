@@ -5,8 +5,8 @@
  * Skills are loaded only when needed to save context window space.
  *
  * Scans two locations for SKILL.md files:
- * 1. skills/*/SKILL.md - Top-level skills (e.g., brandwork-spaces)
- * 2. skills/marketing-skills/*/SKILL.md - Marketing skills
+ * 1. skills/{name}/SKILL.md - Top-level skills (e.g., brandwork-spaces)
+ * 2. skills/marketing-skills/{name}/SKILL.md - Marketing skills
  *
  * Tools:
  * - list_skills: Returns all available skills with names and descriptions

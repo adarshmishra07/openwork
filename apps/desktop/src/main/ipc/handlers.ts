@@ -798,52 +798,10 @@ export function registerIPCHandlers(): void {
       }
     };
 
-    // Intent analysis pre-processing for follow-up messages
-    let effectivePrompt = validatedPrompt;
-
-    if (getIntentAnalysisEnabled()) {
-      forwardToRenderer('task:intent-analysis', { taskId, status: 'analyzing' });
-
-      try {
-        // Determine attachment types for context
-        const attachmentTypes = attachments
-          ?.map((a) => {
-            if (a.contentType.startsWith('image/')) return 'image';
-            if (a.contentType.includes('pdf')) return 'document';
-            return 'file';
-          })
-          .filter((v, i, arr) => arr.indexOf(v) === i); // unique
-
-        const intentResult = await analyzeIntent({
-          prompt: validatedPrompt,
-          hasAttachments: !!attachments?.length,
-          attachmentTypes,
-        });
-
-        if (intentResult && intentResult.confidence >= 0.8) {
-          effectivePrompt = intentResult.refinedPrompt;
-          console.log(
-            `[Intent] Follow-up: Using refined prompt (${intentResult.intent}, confidence: ${intentResult.confidence})`
-          );
-          console.log(`[Intent] Original: "${validatedPrompt}"`);
-          console.log(`[Intent] Refined:  "${effectivePrompt}"`);
-        }
-
-        forwardToRenderer('task:intent-analysis', {
-          taskId,
-          status: 'complete',
-          result: intentResult,
-        });
-      } catch (error) {
-        console.warn('[Intent] Follow-up analysis failed, using original prompt:', error);
-        forwardToRenderer('task:intent-analysis', {
-          taskId,
-          status: 'complete',
-          result: null,
-          error: 'Analysis failed',
-        });
-      }
-    }
+    // NOTE: Intent analysis is skipped for follow-up messages because:
+    // 1. The analyzer lacks conversation context, so it misinterprets references
+    // 2. It can corrupt URLs and specific data in the prompt
+    // Intent analysis only runs on initial task:start
 
     // Create task-scoped callbacks for the TaskManager (with batching for performance)
     const callbacks: TaskCallbacks = {
@@ -946,7 +904,7 @@ export function registerIPCHandlers(): void {
 
     // Start the task via TaskManager with sessionId for resume (creates isolated adapter or queues if busy)
     const task = await taskManager.startTask(taskId, {
-      prompt: effectivePrompt,
+      prompt: validatedPrompt,
       sessionId: validatedSessionId,
       taskId,
       attachments,

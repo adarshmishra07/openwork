@@ -1175,8 +1175,8 @@ NEVER use placeholder domains like "yourstore.myshopify.com" - always use the ac
   console.log('[OpenCode Config] Skills path:', skillsPath);
   console.log('[OpenCode Config] OpenCode config dir:', openCodeConfigDir);
 
-  // Build file-permission MCP server command
-  const filePermissionServerPath = path.join(skillsPath, 'file-permission', 'src', 'index.ts');
+  // Build file-permission MCP server command (using pre-compiled dist for faster startup)
+  const filePermissionServerPath = path.join(skillsPath, 'file-permission', 'dist', 'index.js');
 
   // Get connected providers from new settings (with legacy fallback)
   const providerSettings = getProviderSettings();
@@ -1461,7 +1461,7 @@ NEVER use placeholder domains like "yourstore.myshopify.com" - always use the ac
     mcp: {
       'file-permission': {
         type: 'local',
-        command: ['npx', 'tsx', filePermissionServerPath],
+        command: ['node', filePermissionServerPath],
         enabled: true,
         environment: {
           PERMISSION_API_PORT: String(PERMISSION_API_PORT),
@@ -1470,7 +1470,7 @@ NEVER use placeholder domains like "yourstore.myshopify.com" - always use the ac
       },
       'ask-user-question': {
         type: 'local',
-        command: ['npx', 'tsx', path.join(skillsPath, 'ask-user-question', 'src', 'index.ts')],
+        command: ['node', path.join(skillsPath, 'ask-user-question', 'dist', 'index.js')],
         enabled: true,
         environment: {
           QUESTION_API_PORT: String(QUESTION_API_PORT),
@@ -1480,14 +1480,14 @@ NEVER use placeholder domains like "yourstore.myshopify.com" - always use the ac
       // Browser automation MCP server (from remote)
       'dev-browser-mcp': {
         type: 'local',
-        command: ['npx', 'tsx', path.join(skillsPath, 'dev-browser-mcp', 'src', 'index.ts')],
+        command: ['node', path.join(skillsPath, 'dev-browser-mcp', 'dist', 'index.js')],
         enabled: true,
         timeout: 30000,  // Longer timeout for browser operations
       },
       // Space runtime for AI image workflows (our feature)
       'space-runtime': {
         type: 'local',
-        command: ['npx', 'tsx', path.join(skillsPath, 'space-runtime', 'src', 'index.ts')],
+        command: ['node', path.join(skillsPath, 'space-runtime', 'dist', 'index.js')],
         enabled: true,
         environment: {
           // Old API Gateway URL (30s timeout limit): https://8yivyeg6kd.execute-api.ap-south-1.amazonaws.com
@@ -1499,7 +1499,7 @@ NEVER use placeholder domains like "yourstore.myshopify.com" - always use the ac
       // Marketing skill loader (our feature)
       'skill-loader': {
         type: 'local',
-        command: ['npx', 'tsx', path.join(skillsPath, 'skill-loader', 'src', 'index.ts')],
+        command: ['node', path.join(skillsPath, 'skill-loader', 'dist', 'index.js')],
         enabled: true,
         environment: {
           MARKETING_SKILLS_PATH: path.join(skillsPath, 'marketing-skills'),
@@ -1513,7 +1513,7 @@ NEVER use placeholder domains like "yourstore.myshopify.com" - always use the ac
   if (shopifyCredentials && config.mcp) {
     config.mcp['shopify'] = {
       type: 'local',
-      command: ['npx', 'tsx', path.join(skillsPath, 'shopify', 'src', 'index.ts')],
+      command: ['node', path.join(skillsPath, 'shopify', 'dist', 'index.js')],
       enabled: true,
       environment: {
         SHOPIFY_CREDENTIALS: JSON.stringify(shopifyCredentials),

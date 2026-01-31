@@ -29,28 +29,38 @@ export interface AnalyzeIntentOptions {
   attachmentTypes?: string[]; // e.g., ['image', 'document']
 }
 
-const INTENT_PROMPT = `Classify intent and clarify if needed. Add minimal structural hints when helpful.
+const INTENT_PROMPT = `Classify intent and clarify WHAT the user wants. Do NOT suggest HOW to do it or which tools to use.
 
 Return JSON only:
-{"intent":"category","confidence":0.0-1.0,"refined_prompt":"clarified version with structural hints"}
+{"intent":"category","confidence":0.0-1.0,"refined_prompt":"clarified goal - plan steps and narrate progress"}
 
 Categories: research, code_generation, image_manipulation, shopify_operation, content_creation, general_query
 
-Structural hints to add when appropriate:
-- If attachments mentioned: "Use the attached [image/file] as reference"
-- If multi-step task: "Plan the steps first"
-- If needs external data: "Research first, then execute"
-- If creating content: "Match the brand voice"
+Rules:
+- Clarify the GOAL, not the METHOD
+- NEVER suggest specific tools, APIs, or techniques
+- NEVER remove URLs from the prompt - preserve them exactly
+- NEVER remove file paths or references
+- Preserve ALL specific data (URLs, numbers, names, product IDs, etc.)
+- Add "Plan the steps and narrate your progress" for complex tasks
+- If attachments: mention them as reference material
+- Keep it concise - just clarify what they want done
 
 Examples:
 Input: "make the dress photos look better" [has attached image]
-Output: {"intent":"image_manipulation","confidence":0.92,"refined_prompt":"Enhance the dress product photos - use the attached image as reference, improve lighting and remove backgrounds"}
+Output: {"intent":"image_manipulation","confidence":0.92,"refined_prompt":"Enhance the attached dress product photos with better lighting and clean backgrounds. Plan the steps and narrate your progress."}
+
+Input: "put this shoe on a model"
+Output: {"intent":"image_manipulation","confidence":0.95,"refined_prompt":"Place this shoe product on a model/person. Plan the steps and narrate your progress."}
+
+Input: "download https://example.com/image.jpg and remove the background"
+Output: {"intent":"image_manipulation","confidence":0.95,"refined_prompt":"Download https://example.com/image.jpg and remove its background. Plan the steps and narrate your progress."}
 
 Input: "check what zara charges and update my prices"
-Output: {"intent":"research","confidence":0.95,"refined_prompt":"Research Zara's pricing for similar products, then update our store pricing. Research first, then execute the updates."}
+Output: {"intent":"research","confidence":0.95,"refined_prompt":"Research Zara's pricing for similar products, then update our store pricing accordingly. Plan the steps and narrate your progress."}
 
 Input: "launch my new summer collection on shopify"
-Output: {"intent":"shopify_operation","confidence":0.88,"refined_prompt":"Create and publish the summer collection on Shopify. Plan the steps first: create products, add images, set pricing, then publish."}
+Output: {"intent":"shopify_operation","confidence":0.88,"refined_prompt":"Create and publish the summer collection on Shopify with products, images, and pricing. Plan the steps and narrate your progress."}
 
 User request: `;
 

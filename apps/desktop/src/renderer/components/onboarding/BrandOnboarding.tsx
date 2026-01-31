@@ -108,8 +108,8 @@ type OnboardingStepId =
   | 'complete';
 
 const STEPS: { id: OnboardingStepId; title: string; icon: React.ElementType; optional?: boolean }[] = [
-  { id: 'welcome', title: 'Welcome', icon: Home },
   { id: 'beta-info', title: 'Preview', icon: Sparkles },
+  { id: 'welcome', title: 'Welcome', icon: Home },
   { id: 'brand-basics', title: 'Basics', icon: Building2 },
   { id: 'brand-logo', title: 'Logo', icon: ImageIcon },
   { id: 'brand-palette', title: 'Colors', icon: Palette },
@@ -204,7 +204,7 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
   const goNext = () => {
     if (!isLastStep) {
       // If in import mode and we're at welcome, skip to shopify-connect
-      if (setupMode === 'import' && currentStepIndex === 0 && brandMemory) {
+      if (setupMode === 'import' && currentStep.id === 'welcome' && brandMemory) {
         const shopifyIndex = STEPS.findIndex(s => s.id === 'shopify-connect');
         setCurrentStepIndex(shopifyIndex);
       } else {
@@ -397,6 +397,9 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.2 }}
             >
+                {currentStep.id === 'beta-info' && (
+                  <BetaInfoStep />
+                )}
               {currentStep.id === 'welcome' && (
                 <WelcomeStep
                   setupMode={setupMode}
@@ -404,9 +407,6 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
                   brandMemory={brandMemory}
                   onBrandMemoryChange={setBrandMemory}
                 />
-              )}
-              {currentStep.id === 'beta-info' && (
-                <BetaInfoStep />
               )}
               {currentStep.id === 'brand-basics' && (
                 <BrandBasicsStep 
@@ -473,15 +473,19 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
       {/* Navigation */}
       <div className="p-8">
         <div className="max-w-xl mx-auto flex justify-between">
-          <Button
-            variant="ghost"
-            onClick={goBack}
-            disabled={isFirstStep}
-            className="gap-2"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back
-          </Button>
+          {/* Hide Back button on Welcome and Early Preview steps */}
+          {currentStep.id !== 'welcome' && currentStep.id !== 'beta-info' ? (
+            <Button
+              variant="ghost"
+              onClick={goBack}
+              className="gap-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back
+            </Button>
+          ) : (
+            <div /> // Empty placeholder for flex spacing
+          )}
           <div className="flex gap-2">
             {currentStep.optional && !isLastStep && (
               <Button 
