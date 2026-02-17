@@ -1178,30 +1178,32 @@ export default function ExecutionPage() {
                 />
               )}
 
-              {/* Selected image tags with thumbnails */}
+              {/* Selected image thumbnails with overlaid tags */}
               {selectedImages.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pb-2">
+                <div className="flex flex-wrap gap-2 pb-2">
                   {selectedImages.map((img) => (
-                    <span
+                    <div
                       key={img.label}
-                      className="inline-flex items-center gap-1.5 bg-primary/10 text-primary text-sm px-1.5 py-1 rounded-md"
+                      className="relative w-24 h-24 rounded-lg overflow-hidden border border-border/50 group"
                     >
-                      {/* Thumbnail preview */}
                       <img
                         src={img.url}
                         alt={`Selected image ${img.label}`}
-                        className="w-6 h-6 rounded object-cover border border-primary/30"
+                        className="w-full h-full object-cover"
                       />
-                      {/* Label for reference */}
-                      <span className="font-medium text-xs">{img.label}</span>
+                      {/* Overlaid label tag */}
+                      <span className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] font-medium px-1.5 py-0.5 rounded">
+                        {img.label}
+                      </span>
+                      {/* Remove button */}
                       <button
                         onClick={() => deselectImage(img.label)}
-                        className="hover:text-destructive transition-colors"
+                        className="absolute top-1 right-1 bg-black/50 hover:bg-destructive text-white rounded-full p-0.5 transition-colors"
                         title={`Remove image ${img.label}`}
                       >
                         <X className="h-3 w-3" />
                       </button>
-                    </span>
+                    </div>
                   ))}
                 </div>
               )}
