@@ -31,6 +31,9 @@ const DEV_BROWSER_URL = `http://localhost:${DEV_BROWSER_PORT}`;
 // Task ID for page name prefixing (supports parallel tasks)
 const TASK_ID = process.env.ACCOMPLISH_TASK_ID || 'default';
 
+// Direct CDP connection mode: bypass dev-browser server entirely
+const DIRECT_CDP_ENDPOINT = process.env.DEV_BROWSER_CDP_ENDPOINT || null;
+
 // Browser connection state
 let browser: Browser | null = null;
 let connectingPromise: Promise<Browser> | null = null;
@@ -39,6 +42,9 @@ let cachedServerMode: string | null = null;
 
 // Track pages that have persistent glow set up (prevents duplicate addInitScript calls)
 const glowSetupPages = new WeakSet<Page>();
+
+// Local page registry for direct CDP mode (no server to manage pages)
+const directModePages = new Map<string, Page>();
 
 /**
  * Fetch with retry for handling concurrent connection issues
@@ -84,6 +90,14 @@ async function ensureConnected(): Promise<Browser> {
 
   connectingPromise = (async () => {
     try {
+      if (DIRECT_CDP_ENDPOINT) {
+        // Direct CDP mode: connect straight to the endpoint, bypass dev-browser server
+        console.error(`[dev-browser-mcp] Connecting directly to CDP endpoint: ${DIRECT_CDP_ENDPOINT}`);
+        cachedServerMode = 'direct';
+        browser = await chromium.connectOverCDP(DIRECT_CDP_ENDPOINT);
+        return browser;
+      }
+
       const res = await fetchWithRetry(DEV_BROWSER_URL);
       if (!res.ok) {
         throw new Error(`Server returned ${res.status}: ${await res.text()}`);
@@ -350,7 +364,49 @@ interface GetPageResponse {
  */
 async function getPage(pageName?: string): Promise<Page> {
   const fullName = getFullPageName(pageName);
+  const b = await ensureConnected();
 
+  // Direct CDP mode: manage pages locally without dev-browser server
+  if (cachedServerMode === 'direct') {
+    // Check if we already have this page cached and it's still open
+    const cached = directModePages.get(fullName);
+    if (cached && !cached.isClosed()) {
+      return cached;
+    }
+    directModePages.delete(fullName);
+
+    // Try to find an existing page in the browser
+    const allPages = b.contexts().flatMap((ctx) => ctx.pages());
+    let selectedPage: Page;
+
+    if (allPages.length > 0) {
+      // Use the first page that isn't already claimed by another name
+      const claimedPages = new Set(directModePages.values());
+      const unclaimed = allPages.find((p) => !p.isClosed() && !claimedPages.has(p));
+      selectedPage = unclaimed || allPages[0]!;
+    } else {
+      // No pages exist — create one
+      const context = b.contexts()[0];
+      if (!context) {
+        throw new Error('No browser context available in direct CDP mode');
+      }
+      selectedPage = await context.newPage();
+    }
+
+    // Set default viewport on new/unviewported pages
+    if (!selectedPage.viewportSize()) {
+      await selectedPage.setViewportSize({ width: 1280, height: 720 });
+    }
+
+    // Track the page and clean up on close
+    directModePages.set(fullName, selectedPage);
+    selectedPage.on('close', () => directModePages.delete(fullName));
+
+    await setupPersistentGlow(selectedPage);
+    return selectedPage;
+  }
+
+  // Normal mode: use dev-browser server HTTP API
   const res = await fetchWithRetry(`${DEV_BROWSER_URL}/pages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -363,8 +419,6 @@ async function getPage(pageName?: string): Promise<Page> {
 
   const pageInfo = await res.json() as GetPageResponse;
   const { targetId } = pageInfo;
-
-  const b = await ensureConnected();
 
   // Use cached server mode (fetched once at connection time)
   const isExtensionMode = cachedServerMode === 'extension';
@@ -383,7 +437,7 @@ async function getPage(pageName?: string): Promise<Page> {
     } else {
       selectedPage = allPages[0]!;
     }
-    
+
     // Set up persistent glow for extension mode pages too
     await setupPersistentGlow(selectedPage);
     return selectedPage;
