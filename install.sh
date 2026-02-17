@@ -73,10 +73,15 @@ get_installed_version() {
     fi
 }
 
-# Fetch latest release info from GitHub
+# Fetch latest release info from GitHub (includes prereleases)
 get_latest_release() {
-    local api_url="https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest"
-    curl -fsSL "$api_url" 2>/dev/null
+    # Use /releases endpoint and get first item (most recent) to include prereleases
+    local api_url="https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases"
+    local all_releases=$(curl -sL "$api_url" 2>/dev/null)
+
+    # Extract the first release object from the array
+    # This handles both regular releases and prereleases
+    echo "$all_releases" | sed -n '1,/^  }$/p' | sed 's/^\[//'
 }
 
 # Extract version from release JSON
