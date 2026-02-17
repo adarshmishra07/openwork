@@ -102,6 +102,34 @@ async function ensureConnected(): Promise<Browser> {
 }
 
 /**
+ * Canvas/complex web apps that need coordinate-based interactions
+ */
+const CANVAS_APPS = [
+  { pattern: /docs\.google\.com\/document/, name: 'Google Docs' },
+  { pattern: /docs\.google\.com\/spreadsheets/, name: 'Google Sheets' },
+  { pattern: /docs\.google\.com\/presentation/, name: 'Google Slides' },
+  { pattern: /figma\.com/, name: 'Figma' },
+  { pattern: /canva\.com/, name: 'Canva' },
+  { pattern: /miro\.com/, name: 'Miro' },
+];
+
+function isCanvasApp(url: string): string | null {
+  for (const app of CANVAS_APPS) {
+    if (app.pattern.test(url)) return app.name;
+  }
+  return null;
+}
+
+async function getElementCoordinates(element: ElementHandle): Promise<{ centerX: number; centerY: number } | null> {
+  const box = await element.boundingBox();
+  if (!box) return null;
+  return {
+    centerX: box.x + box.width / 2,
+    centerY: box.y + box.height / 2,
+  };
+}
+
+/**
  * Get full page name with task prefix
  */
 function getFullPageName(pageName?: string): string {
@@ -1060,6 +1088,7 @@ const SNAPSHOT_SCRIPT = `
     finally { endAriaCaches(); }
     normalizeStringChildren(snapshot.root);
     normalizeGenericRoles(snapshot.root);
+    pruneTree(snapshot.root);
     return snapshot;
   }
 
@@ -1116,6 +1145,22 @@ const SNAPSHOT_SCRIPT = `
       return [node];
     };
     normalizeChildren(node);
+  }
+
+  function pruneTree(node) {
+    if (!node.children) return;
+    const result = [];
+    for (const child of node.children) {
+      if (typeof child === "string") { result.push(child); continue; }
+      pruneTree(child);
+      const shouldUnwrap = (child.role === "none" || child.role === "presentation") && !child.name && child.children.length <= 1;
+      if (shouldUnwrap) {
+        if (child.children.length === 1) result.push(child.children[0]);
+      } else {
+        result.push(child);
+      }
+    }
+    node.children = result;
   }
 
   function normalizeStringChildren(rootA11yNode) {
@@ -2114,7 +2159,32 @@ The page has loaded. Use browser_snapshot() to see the page elements and find in
               isError: true,
             };
           }
-          await element.click(clickOptions);
+
+          const canvasApp = isCanvasApp(page.url());
+          if (canvasApp) {
+            const coords = await getElementCoordinates(element);
+            if (coords) {
+              await page.mouse.click(coords.centerX, coords.centerY, clickOptions);
+              await waitForPageLoad(page);
+              return {
+                content: [{ type: 'text', text: `Clicked element [ref=${ref}] via coordinates (${Math.round(coords.centerX)}, ${Math.round(coords.centerY)}) [canvas app: ${canvasApp}]${clickDesc}` }],
+              };
+            }
+          }
+
+          try {
+            await element.click(clickOptions);
+          } catch (clickError) {
+            const coords = await getElementCoordinates(element);
+            if (coords) {
+              await page.mouse.click(coords.centerX, coords.centerY, clickOptions);
+              await waitForPageLoad(page);
+              return {
+                content: [{ type: 'text', text: `Clicked element [ref=${ref}] via coordinate fallback (${Math.round(coords.centerX)}, ${Math.round(coords.centerY)})${clickDesc}` }],
+              };
+            }
+            throw clickError;
+          }
           await waitForPageLoad(page);
           return {
             content: [{ type: 'text', text: `Clicked element [ref=${ref}]${clickDesc}` }],
@@ -2163,16 +2233,49 @@ The page has loaded. Use browser_snapshot() to see the page elements and find in
         }
 
         // Clear existing text and type new text
-        await element.click();
-        await element.fill(text);
+        const canvasApp = isCanvasApp(page.url());
+        const target = ref ? `[ref=${ref}]` : `"${selector}"`;
+        const enterNote = press_enter ? ' and pressed Enter' : '';
+
+        if (canvasApp) {
+          const coords = await getElementCoordinates(element);
+          if (coords) {
+            await page.mouse.click(coords.centerX, coords.centerY);
+            await page.keyboard.type(text);
+            if (press_enter) {
+              await page.keyboard.press('Enter');
+              await waitForPageLoad(page);
+            }
+            return {
+              content: [{ type: 'text', text: `Typed "${text}" into ${target} via coordinates [canvas app: ${canvasApp}]${enterNote}` }],
+            };
+          }
+        }
+
+        try {
+          await element.click();
+          await element.fill(text);
+        } catch (fillError) {
+          const coords = await getElementCoordinates(element);
+          if (coords) {
+            await page.mouse.click(coords.centerX, coords.centerY);
+            await page.keyboard.type(text);
+            if (press_enter) {
+              await page.keyboard.press('Enter');
+              await waitForPageLoad(page);
+            }
+            return {
+              content: [{ type: 'text', text: `Typed "${text}" into ${target} via coordinate fallback${enterNote}` }],
+            };
+          }
+          throw fillError;
+        }
 
         if (press_enter) {
           await element.press('Enter');
           await waitForPageLoad(page);
         }
 
-        const target = ref ? `[ref=${ref}]` : `"${selector}"`;
-        const enterNote = press_enter ? ' and pressed Enter' : '';
         return {
           content: [{ type: 'text', text: `Typed "${text}" into ${target}${enterNote}` }],
         };
@@ -2184,7 +2287,8 @@ The page has loaded. Use browser_snapshot() to see the page elements and find in
 
         const screenshotBuffer = await page.screenshot({
           fullPage: full_page ?? false,
-          type: 'png',
+          type: 'jpeg',
+          quality: 80,
         });
 
         const base64 = screenshotBuffer.toString('base64');
@@ -2193,7 +2297,7 @@ The page has loaded. Use browser_snapshot() to see the page elements and find in
           content: [{
             type: 'image',
             data: base64,
-            mimeType: 'image/png',
+            mimeType: 'image/jpeg',
           }],
         };
       }
@@ -2546,7 +2650,29 @@ The page has loaded. Use browser_snapshot() to see the page elements and find in
               isError: true,
             };
           }
-          await element.hover();
+          const canvasApp = isCanvasApp(page.url());
+          if (canvasApp) {
+            const coords = await getElementCoordinates(element);
+            if (coords) {
+              await page.mouse.move(coords.centerX, coords.centerY);
+              return {
+                content: [{ type: 'text', text: `Hovered over [ref=${ref}] via coordinates [canvas app: ${canvasApp}]` }],
+              };
+            }
+          }
+
+          try {
+            await element.hover();
+          } catch (hoverError) {
+            const coords = await getElementCoordinates(element);
+            if (coords) {
+              await page.mouse.move(coords.centerX, coords.centerY);
+              return {
+                content: [{ type: 'text', text: `Hovered over [ref=${ref}] via coordinate fallback` }],
+              };
+            }
+            throw hoverError;
+          }
           return {
             content: [{ type: 'text', text: `Hovered over [ref=${ref}]` }],
           };
