@@ -276,10 +276,8 @@ main() {
     # Cleanup download
     rm -rf "$temp_dir"
 
-    # Clear quarantine on first install
-    if $is_first_install; then
-        clear_quarantine
-    fi
+    # Clear quarantine (needed on every install since app is unsigned)
+    clear_quarantine
 
     echo ""
     echo -e "${GREEN}========================================${NC}"

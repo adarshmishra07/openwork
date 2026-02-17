@@ -48,6 +48,16 @@ for (const skill of mcpSkills) {
   console.log(`[build-skills] Building ${skill}...`);
 
   try {
+    // Ensure dev dependencies (tsup etc.) are installed before building
+    const nodeModulesPath = path.join(skillPath, 'node_modules', '.bin', 'tsup');
+    if (!fs.existsSync(nodeModulesPath)) {
+      console.log(`[build-skills]   Installing dependencies for ${skill}...`);
+      execFileSync('npm', ['install', '--include=dev'], {
+        cwd: skillPath,
+        stdio: 'pipe',
+      });
+    }
+
     // Run pnpm build in the skill directory using execFileSync (safer than execSync)
     execFileSync('pnpm', ['build'], {
       cwd: skillPath,
