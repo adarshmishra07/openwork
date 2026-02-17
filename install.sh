@@ -12,8 +12,8 @@
 set -e
 
 # Configuration
-GITHUB_OWNER="shopos"
-GITHUB_REPO="shopos"
+GITHUB_OWNER="adarshmishra07"
+GITHUB_REPO="openwork"
 APP_NAME="ShopOS"
 INSTALL_DIR="/Applications"
 APP_PATH="${INSTALL_DIR}/${APP_NAME}.app"
