@@ -448,6 +448,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
       'OPENROUTER_API_KEY',
       'LITELLM_API_KEY',
       'MOONSHOT_API_KEY',
+      'MINIMAX_API_KEY',
       'OPENCODE_CONFIG',  // Also prevent inherited config override
     ];
     for (const key of inheritedApiKeyVars) {
@@ -537,6 +538,12 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     if (apiKeys.kimi) {
       env.MOONSHOT_API_KEY = apiKeys.kimi;
       console.log('[OpenCode CLI] Using Kimi (Moonshot) API key from settings');
+    }
+
+    // Set Minimax API key if configured
+    if (apiKeys.minimax) {
+      env.MINIMAX_API_KEY = apiKeys.minimax;
+      console.log('[OpenCode CLI] Using Minimax API key from settings');
     }
 
     // Set Ollama host if configured (check new settings first, then legacy)

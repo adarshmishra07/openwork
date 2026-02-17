@@ -187,13 +187,13 @@ export function deleteApiKey(provider: string): boolean {
 /**
  * Supported API key providers
  */
-export type ApiKeyProvider = 'anthropic' | 'openai' | 'openrouter' | 'google' | 'xai' | 'deepseek' | 'zai' | 'glm' | 'custom' | 'kimi' | 'litellm' | 'shopify';
+export type ApiKeyProvider = 'anthropic' | 'openai' | 'openrouter' | 'google' | 'xai' | 'deepseek' | 'zai' | 'glm' | 'custom' | 'kimi' | 'minimax' | 'litellm' | 'shopify';
 
 /**
  * Get all API keys for all providers
  */
 export async function getAllApiKeys(): Promise<Record<ApiKeyProvider, string | null>> {
-  const [anthropic, openai, openrouter, google, xai, deepseek, zai, glm, custom, kimi, litellm, shopify] = await Promise.all([
+  const [anthropic, openai, openrouter, google, xai, deepseek, zai, glm, custom, kimi, minimax, litellm, shopify] = await Promise.all([
     getApiKey('anthropic'),
     getApiKey('openai'),
     getApiKey('openrouter'),
@@ -204,11 +204,12 @@ export async function getAllApiKeys(): Promise<Record<ApiKeyProvider, string | n
     getApiKey('glm'),
     getApiKey('custom'),
     getApiKey('kimi'),
+    getApiKey('minimax'),
     getApiKey('litellm'),
     getApiKey('shopify'),
   ]);
 
-  return { anthropic, openai, openrouter, google, xai, deepseek, zai, glm, custom, kimi, litellm, shopify };
+  return { anthropic, openai, openrouter, google, xai, deepseek, zai, glm, custom, kimi, minimax, litellm, shopify };
 }
 
 /**

@@ -2,7 +2,7 @@
  * Provider and model configuration types for multi-provider support
  */
 
-export type ProviderType = 'anthropic' | 'openai' | 'openrouter' | 'google' | 'xai' | 'ollama' | 'deepseek' | 'zai' | 'custom' | 'kimi' | 'litellm';
+export type ProviderType = 'anthropic' | 'openai' | 'openrouter' | 'google' | 'xai' | 'ollama' | 'deepseek' | 'zai' | 'custom' | 'kimi' | 'minimax' | 'litellm';
 
 export interface ProviderConfig {
   id: ProviderType;
@@ -117,6 +117,14 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
         displayName: 'Claude Opus 4.5',
         provider: 'anthropic',
         fullId: 'anthropic/claude-opus-4-5',
+        contextWindow: 200000,
+        supportsVision: true,
+      },
+      {
+        id: 'claude-opus-4-6',
+        displayName: 'Claude Opus 4.6',
+        provider: 'anthropic',
+        fullId: 'anthropic/claude-opus-4-6',
         contextWindow: 200000,
         supportsVision: true,
       },
@@ -305,6 +313,31 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
         displayName: 'Kimi K2 Thinking Turbo',
         provider: 'kimi',
         fullId: 'kimi/kimi-k2-thinking-turbo',
+        contextWindow: 128000,
+        supportsVision: false,
+      },
+    ],
+  },
+  {
+    id: 'minimax',
+    name: 'Minimax',
+    requiresApiKey: true,
+    apiKeyEnvVar: 'MINIMAX_API_KEY',
+    baseUrl: 'https://api.minimax.io',
+    models: [
+      {
+        id: 'minimax-m2.5',
+        displayName: 'Minimax M2.5',
+        provider: 'minimax',
+        fullId: 'minimax/minimax-m2.5',
+        contextWindow: 128000,
+        supportsVision: false,
+      },
+      {
+        id: 'minimax-m2.5-highspeed',
+        displayName: 'Minimax M2.5 Highspeed',
+        provider: 'minimax',
+        fullId: 'minimax/minimax-m2.5-highspeed',
         contextWindow: 128000,
         supportsVision: false,
       },

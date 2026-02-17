@@ -46,7 +46,7 @@ const accomplishAPI = {
   // Settings
   getApiKeys: (): Promise<unknown[]> => ipcRenderer.invoke('settings:api-keys'),
   addApiKey: (
-    provider: 'anthropic' | 'openai' | 'openrouter' | 'google' | 'xai' | 'deepseek' | 'zai' | 'custom' | 'kimi' | 'litellm',
+    provider: 'anthropic' | 'openai' | 'openrouter' | 'google' | 'xai' | 'deepseek' | 'zai' | 'custom' | 'kimi' | 'minimax' | 'litellm',
     key: string,
     label?: string
   ): Promise<unknown> =>
@@ -151,6 +151,10 @@ const accomplishAPI = {
   // Kimi (Moonshot) API validation
   validateKimiApiKey: (apiKey: string): Promise<{ valid: boolean; error?: string }> =>
     ipcRenderer.invoke('kimi:validate', apiKey),
+
+  // Minimax API validation
+  validateMinimaxApiKey: (apiKey: string): Promise<{ valid: boolean; error?: string }> =>
+    ipcRenderer.invoke('minimax:validate', apiKey),
 
   // E2E Testing
   isE2EMode: (): Promise<boolean> =>

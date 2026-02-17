@@ -49,7 +49,7 @@ interface AccomplishAPI {
 
   // Settings
   getApiKeys(): Promise<ApiKeyConfig[]>;
-  addApiKey(provider: 'anthropic' | 'openai' | 'openrouter' | 'google' | 'xai' | 'deepseek' | 'zai' | 'custom' | 'kimi' | 'litellm', key: string, label?: string): Promise<ApiKeyConfig>;
+  addApiKey(provider: 'anthropic' | 'openai' | 'openrouter' | 'google' | 'xai' | 'deepseek' | 'zai' | 'custom' | 'kimi' | 'minimax' | 'litellm', key: string, label?: string): Promise<ApiKeyConfig>;
   removeApiKey(id: string): Promise<void>;
   getDebugMode(): Promise<boolean>;
   setDebugMode(enabled: boolean): Promise<void>;
@@ -116,6 +116,9 @@ interface AccomplishAPI {
 
   // Kimi (Moonshot) API validation
   validateKimiApiKey(apiKey: string): Promise<{ valid: boolean; error?: string }>;
+
+  // Minimax API validation
+  validateMinimaxApiKey(apiKey: string): Promise<{ valid: boolean; error?: string }>;
 
   // E2E Testing
   isE2EMode(): Promise<boolean>;

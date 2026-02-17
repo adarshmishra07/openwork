@@ -1,6 +1,6 @@
 {
   "name": "@shopos/desktop",
-  "version": "0.3.0",
+  "version": "0.3.3",
   "private": true,
   "type": "module",
   "description": "ShopOS - AI operating system for e-commerce brands",
@@ -41,7 +41,6 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.15",
-    "@shopos/shared": "workspace:*",
     "@fal-ai/client": "^1.8.3",
     "@radix-ui/react-avatar": "^1.1.2",
     "@radix-ui/react-dialog": "^1.1.4",
@@ -52,6 +51,7 @@
     "@radix-ui/react-separator": "^1.1.1",
     "@radix-ui/react-slot": "^1.1.1",
     "@radix-ui/react-tooltip": "^1.1.6",
+    "@shopos/shared": "workspace:*",
     "better-sqlite3": "^12.6.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -79,6 +79,7 @@
     "@testing-library/jest-dom": "6.6.3",
     "@testing-library/react": "^16.3.1",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/eventsource": "^3.0.0",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
@@ -101,6 +102,7 @@
     "appId": "com.shopos.desktop",
     "productName": "ShopOS",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "npmRebuild": false,
     "directories": {
       "output": "release",
       "buildResources": "resources"

@@ -37,10 +37,13 @@ try {
   // Get command line args (everything after 'node scripts/package.js')
   const args = process.argv.slice(2).join(' ');
   // Use npx to run electron-builder to ensure it's found in node_modules
+  // Skip native rebuild - we already do this in postinstall with pnpm
   const command = `npx electron-builder ${args}`;
 
   console.log('Running:', command);
-  execSync(command, { stdio: 'inherit', cwd: path.join(__dirname, '..') });
+  // Set environment to skip rebuild (already done in postinstall)
+  const env = { ...process.env, ELECTRON_BUILDER_SKIP_NATIVE_REBUILD: 'true' };
+  execSync(command, { stdio: 'inherit', cwd: path.join(__dirname, '..'), env });
 
 } finally {
   // Restore the symlink

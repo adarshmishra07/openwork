@@ -9,11 +9,11 @@
  */
 import { memo, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  ChevronRight, 
-  Wrench, 
-  BookOpen, 
-  Sparkles, 
+import {
+  ChevronRight,
+  Wrench,
+  BookOpen,
+  Sparkles,
   Search,
   CheckCircle2,
   XCircle,
@@ -22,6 +22,7 @@ import {
   Terminal,
   Code,
   Globe,
+  MessageCircleQuestion,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -49,6 +50,20 @@ interface CollapsibleToolCallProps {
 }
 
 /**
+ * Check if tool is a question/interactive tool that should be handled specially
+ * These tools are rendered via InlinePermission, so we show a minimal display here
+ */
+function isQuestionTool(toolName: string): boolean {
+  const lowerName = toolName.toLowerCase();
+  return (
+    lowerName === 'askuserquestion' ||
+    lowerName === 'ask_user_question' ||
+    lowerName.includes('askuser') ||
+    lowerName.includes('ask_user')
+  );
+}
+
+/**
  * Detect the type of activity from a tool name
  */
 function detectActivityType(toolName: string): ActivityType {
@@ -59,8 +74,8 @@ function detectActivityType(toolName: string): ActivityType {
     return 'space';
   }
   if (
-    toolName.startsWith('browser_') || 
-    toolName.startsWith('dev_browser') || 
+    toolName.startsWith('browser_') ||
+    toolName.startsWith('dev_browser') ||
     toolName.startsWith('dev-browser')
   ) {
     return 'browser';
@@ -147,7 +162,7 @@ export const CollapsibleToolCall = memo(function CollapsibleToolCall({
 }: CollapsibleToolCallProps) {
   // Auto-expand on error
   const [isExpanded, setIsExpanded] = useState(defaultExpanded || status === 'error');
-  
+
   // Auto-expand when error occurs
   useEffect(() => {
     if (status === 'error') {
@@ -159,9 +174,52 @@ export const CollapsibleToolCall = memo(function CollapsibleToolCall({
   const Icon = getActivityIcon(type, name);
   const displayName = formatToolName(name);
   const hasDetails = input || output || error;
-  
+
   // Apply pulsating glow when browser tool is running
   const isBrowserRunning = type === 'browser' && status === 'running';
+
+  // Special handling for question tools - render as friendly message instead of raw JSON
+  // These are usually handled via InlinePermission, but may appear as tool calls too
+  if (isQuestionTool(name)) {
+    const questionInput = input as {
+      question?: string;
+      questions?: Array<{ question?: string; header?: string }>;
+      header?: string;
+      options?: Array<{ label: string; description?: string }>;
+    } | undefined;
+
+    // Extract question text from various possible input formats
+    const questionText =
+      questionInput?.question ||
+      questionInput?.questions?.[0]?.question ||
+      questionInput?.header ||
+      'Waiting for your response...';
+
+    return (
+      <div className={cn('py-1', className)}>
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <MessageCircleQuestion className="h-4 w-4 text-primary" />
+          <span className="text-sm italic">{questionText}</span>
+          {status === 'running' && (
+            <Loader2 className="h-3.5 w-3.5 animate-spin ml-auto" />
+          )}
+          {status === 'success' && (
+            <CheckCircle2 className="h-3.5 w-3.5 text-green-500 ml-auto" />
+          )}
+        </div>
+        {/* Show options if available */}
+        {questionInput?.options && questionInput.options.length > 0 && (
+          <div className="ml-6 mt-1 space-y-0.5">
+            {questionInput.options.map((opt, idx) => (
+              <div key={idx} className="text-xs text-muted-foreground/70">
+                {idx + 1}. {opt.label}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   // Status indicator
   const StatusIcon = () => {

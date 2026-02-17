@@ -12,7 +12,7 @@ const PROVIDER_ORDER: ProviderId[] = [
   'anthropic',
   'openai',
   'google',
-  'kimi',
+  'minimax',
   'deepseek',
   'zai',
   'ollama',

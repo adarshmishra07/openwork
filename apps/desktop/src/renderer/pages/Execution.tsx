@@ -1178,15 +1178,22 @@ export default function ExecutionPage() {
                 />
               )}
 
-              {/* Selected image tags */}
+              {/* Selected image tags with thumbnails */}
               {selectedImages.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 pb-2">
                   {selectedImages.map((img) => (
                     <span
                       key={img.label}
-                      className="inline-flex items-center gap-1 bg-primary/10 text-primary text-sm px-2 py-0.5 rounded-md"
+                      className="inline-flex items-center gap-1.5 bg-primary/10 text-primary text-sm px-1.5 py-1 rounded-md"
                     >
-                      <span className="font-medium">{img.label}</span>
+                      {/* Thumbnail preview */}
+                      <img
+                        src={img.url}
+                        alt={`Selected image ${img.label}`}
+                        className="w-6 h-6 rounded object-cover border border-primary/30"
+                      />
+                      {/* Label for reference */}
+                      <span className="font-medium text-xs">{img.label}</span>
                       <button
                         onClick={() => deselectImage(img.label)}
                         className="hover:text-destructive transition-colors"

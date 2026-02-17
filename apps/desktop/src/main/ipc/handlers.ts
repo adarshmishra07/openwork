@@ -107,7 +107,7 @@ import * as path from 'path';
 import * as os from 'os';
 
 const MAX_TEXT_LENGTH = 8000;
-const ALLOWED_API_KEY_PROVIDERS = new Set(['anthropic', 'openai', 'openrouter', 'google', 'xai', 'deepseek', 'zai', 'custom', 'kimi', 'litellm']);
+const ALLOWED_API_KEY_PROVIDERS = new Set(['anthropic', 'openai', 'openrouter', 'google', 'xai', 'deepseek', 'zai', 'custom', 'kimi', 'minimax', 'litellm']);
 const API_KEY_VALIDATION_TIMEOUT_MS = 15000;
 
 interface OllamaModel {
@@ -953,7 +953,7 @@ export function registerIPCHandlers(): void {
       if (!ALLOWED_API_KEY_PROVIDERS.has(provider)) {
         throw new Error('Unsupported API key provider');
       }
-      const sanitizedKey = sanitizeString(key, 'apiKey', 256);
+      const sanitizedKey = sanitizeString(key, 'apiKey', 2048);
       const sanitizedLabel = label ? sanitizeString(label, 'label', 128) : undefined;
 
       // Store the API key securely in OS keychain
@@ -986,7 +986,7 @@ export function registerIPCHandlers(): void {
 
   // API Key: Set API key
   handle('api-key:set', async (_event: IpcMainInvokeEvent, key: string) => {
-    const sanitizedKey = sanitizeString(key, 'apiKey', 256);
+    const sanitizedKey = sanitizeString(key, 'apiKey', 2048);
     await storeApiKey('anthropic', sanitizedKey);
     console.log('[API Key] Key set', { keyPrefix: sanitizedKey.substring(0, 8) });
   });
@@ -998,7 +998,7 @@ export function registerIPCHandlers(): void {
 
   // API Key: Validate API key by making a test request
   handle('api-key:validate', async (_event: IpcMainInvokeEvent, key: string) => {
-    const sanitizedKey = sanitizeString(key, 'apiKey', 256);
+    const sanitizedKey = sanitizeString(key, 'apiKey', 2048);
     console.log('[API Key] Validation requested');
 
     try {
@@ -1046,7 +1046,7 @@ export function registerIPCHandlers(): void {
     if (!ALLOWED_API_KEY_PROVIDERS.has(provider)) {
       return { valid: false, error: 'Unsupported provider' };
     }
-    const sanitizedKey = sanitizeString(key, 'apiKey', 256);
+    const sanitizedKey = sanitizeString(key, 'apiKey', 2048);
     console.log(`[API Key] Validation requested for provider: ${provider}`);
 
     try {
@@ -1149,6 +1149,47 @@ export function registerIPCHandlers(): void {
           );
           break;
 
+        case 'minimax': {
+          response = await fetchWithTimeout(
+            'https://api.minimax.io/v1/chat/completions',
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${sanitizedKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: 'MiniMax-Text-01',
+                messages: [{ role: 'user', content: 'hi' }],
+                max_tokens: 1,
+              }),
+            },
+            API_KEY_VALIDATION_TIMEOUT_MS
+          );
+          // Minimax returns various error codes - check for auth errors specifically
+          const minimaxData = await response.json().catch(() => ({})) as {
+            type?: string;
+            error?: { type?: string; message?: string };
+            base_resp?: { status_code?: number; status_msg?: string };
+          };
+          // Check for invalid API key errors (code 2049 or authorized_error)
+          if (minimaxData.error?.type === 'authorized_error' ||
+              minimaxData.base_resp?.status_code === 2049) {
+            return { valid: false, error: 'Invalid API key. Please check your Minimax API key.' };
+          }
+          // Insufficient balance (1008) means key is valid but account needs credits - treat as valid
+          if (minimaxData.error?.type === 'insufficient_balance_error' ||
+              minimaxData.base_resp?.status_code === 1008) {
+            console.log('[API Key] Minimax key valid but account has insufficient balance');
+            return { valid: true };
+          }
+          // If we got a successful response or any non-auth error, key is valid
+          if (response.ok || response.status === 429) {
+            return { valid: true };
+          }
+          break;
+        }
+
         default:
           // For 'custom' provider, skip validation
           console.log('[API Key] Skipping validation for custom provider');
@@ -1213,6 +1254,49 @@ export function registerIPCHandlers(): void {
         return { valid: false, error: 'Request timed out. Please check your internet connection.' };
       }
       
+      return { valid: false, error: message };
+    }
+  });
+
+  // Minimax: Validate API key (test against Minimax API)
+  handle('minimax:validate', async (_event: IpcMainInvokeEvent, apiKey: string) => {
+    console.log('[Minimax] Validation requested');
+
+    try {
+      // Test by calling the models endpoint
+      const response = await fetchWithTimeout(
+        'https://api.minimax.io/v1/models',
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+        },
+        API_KEY_VALIDATION_TIMEOUT_MS
+      );
+
+      if (response.ok) {
+        console.log('[Minimax] Validation succeeded');
+        return { valid: true };
+      }
+
+      const errorText = await response.text();
+      console.warn('[Minimax] Validation failed:', response.status, errorText);
+
+      if (response.status === 401) {
+        return { valid: false, error: 'Invalid API key. Please check your Minimax API key.' };
+      }
+
+      return { valid: false, error: `Validation failed: ${response.status}` };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Validation failed';
+      console.warn('[Minimax] Validation error:', message);
+
+      if (message.includes('timeout') || message.includes('abort')) {
+        return { valid: false, error: 'Request timed out. Please check your internet connection.' };
+      }
+
       return { valid: false, error: message };
     }
   });
@@ -1402,7 +1486,7 @@ export function registerIPCHandlers(): void {
   // LiteLLM: Test connection and fetch models
   handle('litellm:test-connection', async (_event: IpcMainInvokeEvent, url: string, apiKey?: string) => {
     const sanitizedUrl = sanitizeString(url, 'litellmUrl', 256);
-    const sanitizedApiKey = apiKey ? sanitizeString(apiKey, 'apiKey', 256) : undefined;
+    const sanitizedApiKey = apiKey ? sanitizeString(apiKey, 'apiKey', 2048) : undefined;
 
     // Validate URL format and protocol
     try {

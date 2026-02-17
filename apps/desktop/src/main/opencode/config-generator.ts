@@ -734,16 +734,26 @@ NEVER execute bulk operations without showing preview first.
 </bulk-operation-protocol>
 </skill>
 
-<skill name="shopos-spaces">
+<skill name="space-tools">
 ##############################################################################
 # SPACE TOOLS - PRIMARY METHOD FOR IMAGE GENERATION
 ##############################################################################
 
-You have ShopOS Space tools (space_*) for e-commerce image tasks. These are your PRIMARY
+You have ShopOS Space tools for e-commerce image tasks. These are your PRIMARY
 tools for image generation because:
 - They return S3 URLs that display properly in the app
 - They're optimized for e-commerce use cases
 - They handle errors gracefully
+
+**IMPORTANT: Tool names are prefixed with "space-runtime_" in MCP calls:**
+- space-runtime_space_product_swap
+- space-runtime_space_steal_the_look
+- space-runtime_space_sketch_to_product
+- space-runtime_space_background_remover
+- space-runtime_space_store_display_banner
+- space-runtime_space_multiproduct_tryon
+- space-runtime_space_match_prompt (to find best space for a task)
+- space-runtime_space_list_all (to list all available spaces)
 
 **AVAILABLE SPACE TOOLS:**
 - space_product_swap: Put product on different backgrounds/scenes
@@ -1069,6 +1079,21 @@ interface KimiProviderConfig {
   models: Record<string, KimiProviderModelConfig>;
 }
 
+interface MinimaxProviderModelConfig {
+  name: string;
+  tools?: boolean;
+}
+
+interface MinimaxProviderConfig {
+  npm: string;
+  name: string;
+  options: {
+    baseURL: string;
+    apiKey?: string;
+  };
+  models: Record<string, MinimaxProviderModelConfig>;
+}
+
 interface OpenRouterProviderModelConfig {
   name: string;
   tools?: boolean;
@@ -1112,7 +1137,7 @@ interface ZaiProviderConfig {
   models: Record<string, ZaiProviderModelConfig>;
 }
 
-type ProviderConfig = OllamaProviderConfig | KimiProviderConfig | OpenRouterProviderConfig | LiteLLMProviderConfig | ZaiProviderConfig;
+type ProviderConfig = OllamaProviderConfig | KimiProviderConfig | MinimaxProviderConfig | OpenRouterProviderConfig | LiteLLMProviderConfig | ZaiProviderConfig;
 
 interface OpenCodeConfig {
   $schema?: string;
@@ -1193,13 +1218,14 @@ NEVER use placeholder domains like "yourstore.myshopify.com" - always use the ac
     zai: 'zai-coding-plan',
     glm: 'glm',
     kimi: 'kimi',
+    minimax: 'minimax',
     ollama: 'ollama',
     openrouter: 'openrouter',
     litellm: 'litellm',
   };
 
   // Build enabled providers list from new settings or fall back to base providers
-  const baseProviders = ['anthropic', 'openai', 'openrouter', 'google', 'xai', 'deepseek', 'zai-coding-plan', 'kimi'];
+  const baseProviders = ['anthropic', 'openai', 'openrouter', 'google', 'xai', 'deepseek', 'zai-coding-plan', 'kimi', 'minimax'];
   let enabledProviders = baseProviders;
 
   // If we have connected providers in the new settings, use those
@@ -1363,6 +1389,56 @@ NEVER use placeholder domains like "yourstore.myshopify.com" - always use the ac
         console.log('[OpenCode Config] Kimi configured from legacy API key');
       }
     }
+
+  // Configure Minimax if connected (check new settings first, then legacy)
+  const minimaxProvider = providerSettings.connectedProviders.minimax;
+  if (minimaxProvider?.connectionStatus === 'connected') {
+    // New provider settings: Minimax is connected
+    const modelId = minimaxProvider.selectedModelId?.replace('minimax/', '') || 'minimax-m2.5';
+
+    const options: { baseURL: string; apiKey?: string } = {
+      baseURL: 'https://api.minimax.io/v1',
+    };
+
+    // Explicitly pass apiKey if available
+    const minimaxKey = getApiKey('minimax');
+    if (minimaxKey) {
+      options.apiKey = minimaxKey;
+    }
+
+    providerConfig.minimax = {
+      npm: '@ai-sdk/openai-compatible',
+      name: 'Minimax',
+      options,
+      models: {
+        [modelId]: {
+          name: modelId,
+          tools: true,
+        },
+      },
+    };
+    console.log('[OpenCode Config] Minimax configured from new settings:', modelId);
+  } else {
+    // Legacy fallback: use old Minimax config if API key exists
+    const minimaxKey = getApiKey('minimax');
+    if (minimaxKey) {
+      providerConfig.minimax = {
+        npm: '@ai-sdk/openai-compatible',
+        name: 'Minimax',
+        options: {
+          baseURL: 'https://api.minimax.io/v1',
+          apiKey: minimaxKey,
+        },
+        models: {
+          'minimax-m2.5': {
+            name: 'Minimax M2.5',
+            tools: true,
+          },
+        },
+      };
+      console.log('[OpenCode Config] Minimax configured from legacy API key');
+    }
+  }
 
   // Configure LiteLLM if connected (check new settings first, then legacy)
   const litellmProvider = providerSettings.connectedProviders.litellm;

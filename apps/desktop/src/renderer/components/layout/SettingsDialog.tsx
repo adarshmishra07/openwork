@@ -30,7 +30,7 @@ const API_KEY_PROVIDERS = [
   { id: 'xai', name: 'xAI (Grok)', prefix: 'xai-', placeholder: 'xai-...' },
   { id: 'deepseek', name: 'DeepSeek', prefix: 'sk-', placeholder: 'sk-...' },
   { id: 'zai', name: 'Z.AI Coding Plan', prefix: '', placeholder: 'Your Z.AI API key...' },
-  { id: 'kimi', name: 'Kimi (Moonshot)', prefix: 'sk-', placeholder: 'Your Moonshot API key...' },
+  { id: 'minimax', name: 'Minimax', prefix: 'eyJ', placeholder: 'Your Minimax API key...' },
 ] as const;
 
 type ProviderId = typeof API_KEY_PROVIDERS[number]['id'];

@@ -9,6 +9,7 @@ export type ProviderId =
   | 'zai'
   | 'glm'
   | 'kimi'
+  | 'minimax'
   | 'ollama'
   | 'openrouter'
   | 'litellm';
@@ -33,6 +34,7 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
   zai: { id: 'zai', name: 'Z-AI', category: 'classic', label: 'Service', logoKey: 'z-ai' },
   glm: { id: 'glm', name: 'GLM (Zhipu)', category: 'classic', label: 'Service', logoKey: 'zhipu', helpUrl: 'https://open.bigmodel.cn/usercenter/apikeys' },
   kimi: { id: 'kimi', name: 'Kimi', category: 'classic', label: 'Service', logoKey: 'kimi', helpUrl: 'https://platform.moonshot.cn/console/api-keys' },
+  minimax: { id: 'minimax', name: 'Minimax', category: 'classic', label: 'Service', logoKey: 'minimax', helpUrl: 'https://platform.minimax.io' },
   ollama: { id: 'ollama', name: 'Ollama', category: 'local', label: 'Local Models', logoKey: 'olama' },
   openrouter: { id: 'openrouter', name: 'OpenRouter', category: 'proxy', label: 'Service', logoKey: 'open-router', helpUrl: 'https://openrouter.ai/keys' },
   litellm: { id: 'litellm', name: 'LiteLLM', category: 'hybrid', label: 'Service', logoKey: 'liteLLM' },
@@ -47,6 +49,11 @@ export interface ApiKeyCredentials {
 
 export interface KimiCredentials {
   type: 'kimi';
+  keyPrefix: string;
+}
+
+export interface MinimaxCredentials {
+  type: 'minimax';
   keyPrefix: string;
 }
 
@@ -78,6 +85,7 @@ export interface SubscriptionCredentials {
 export type ProviderCredentials =
   | ApiKeyCredentials
   | KimiCredentials
+  | MinimaxCredentials
   | OllamaCredentials
   | OpenRouterCredentials
   | LiteLLMCredentials
@@ -123,6 +131,7 @@ export const DEFAULT_MODELS: Partial<Record<ProviderId, string>> = {
   google: 'google/gemini-3-pro-preview',
   xai: 'xai/grok-4',
   kimi: 'kimi/kimi-k2.5',
+  minimax: 'minimax/minimax-m2.5',
   zai: 'zai/glm-4.7-flashx',
   deepseek: 'deepseek/deepseek-chat',
 };
