@@ -1,6 +1,6 @@
 /**
  * Brand Onboarding Wizard
- * 
+ *
  * Multi-step wizard to capture brand information:
  * 1. Welcome - Introduction to Shop OS
  * 2. Brand Basics - Name, industry, target audience, tagline
@@ -13,8 +13,8 @@
  * 9. Complete - Summary and finish
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useCallback, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowRight,
   ArrowLeft,
@@ -34,92 +34,138 @@ import {
   Plus,
   Trash2,
   Sparkles,
-  Key
-} from 'lucide-react';
-import logoImage from '/assets/shopos-logo.png';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { getAccomplish } from '@/lib/accomplish';
+  Key,
+} from "lucide-react";
+import logoImage from "/assets/shopos-logo.svg";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { getAccomplish } from "@/lib/accomplish";
 import type {
   BrandProfile,
   BrandVoiceTemplate,
   BrandMemory,
   BrandColor,
   BrandTagline,
-  ProviderId
-} from '@shopos/shared';
-import { DEFAULT_MODELS } from '@shopos/shared';
+  ProviderId,
+} from "@shopos/shared";
+import { DEFAULT_MODELS } from "@shopos/shared";
 
 interface BrandOnboardingProps {
   onComplete: (brandProfile: BrandProfile) => void;
 }
 
-const VOICE_TEMPLATES: { id: BrandVoiceTemplate; name: string; description: string; example: string }[] = [
-  { 
-    id: 'professional', 
-    name: 'Professional', 
-    description: 'Formal, authoritative, trustworthy',
-    example: 'Discover our curated collection of premium products...'
+const VOICE_TEMPLATES: {
+  id: BrandVoiceTemplate;
+  name: string;
+  description: string;
+  example: string;
+}[] = [
+  {
+    id: "professional",
+    name: "Professional",
+    description: "Formal, authoritative, trustworthy",
+    example: "Discover our curated collection of premium products...",
   },
-  { 
-    id: 'friendly', 
-    name: 'Friendly', 
-    description: 'Warm, conversational, approachable',
-    example: "Hey there! You're gonna love what we have in store..."
+  {
+    id: "friendly",
+    name: "Friendly",
+    description: "Warm, conversational, approachable",
+    example: "Hey there! You're gonna love what we have in store...",
   },
-  { 
-    id: 'playful', 
-    name: 'Playful', 
-    description: 'Fun, witty, energetic',
-    example: 'Warning: These deals are seriously addictive...'
+  {
+    id: "playful",
+    name: "Playful",
+    description: "Fun, witty, energetic",
+    example: "Warning: These deals are seriously addictive...",
   },
-  { 
-    id: 'luxury', 
-    name: 'Luxury', 
-    description: 'Sophisticated, exclusive, refined',
-    example: 'Introducing the epitome of elegance...'
+  {
+    id: "luxury",
+    name: "Luxury",
+    description: "Sophisticated, exclusive, refined",
+    example: "Introducing the epitome of elegance...",
   },
-  { 
-    id: 'minimal', 
-    name: 'Minimal', 
-    description: 'Direct, understated, clean',
-    example: 'Simple. Beautiful. Yours.'
+  {
+    id: "minimal",
+    name: "Minimal",
+    description: "Direct, understated, clean",
+    example: "Simple. Beautiful. Yours.",
   },
 ];
 
-const TAGLINE_TONES = ['minimal', 'bold', 'professional', 'playful', 'luxury', 'modern', 'elegant', 'casual'];
-const PERSONALITY_TRAITS = ['innovative', 'trustworthy', 'friendly', 'bold', 'sophisticated', 'playful', 'authentic', 'expert', 'caring', 'adventurous'];
-const FONT_FAMILIES = ['Manrope', 'Inter', 'Poppins', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Playfair Display', 'Raleway', 'Work Sans'];
-const FONT_WEIGHTS = ['300', '400', '500', '600', '700', '800'];
+const TAGLINE_TONES = [
+  "minimal",
+  "bold",
+  "professional",
+  "playful",
+  "luxury",
+  "modern",
+  "elegant",
+  "casual",
+];
+const PERSONALITY_TRAITS = [
+  "innovative",
+  "trustworthy",
+  "friendly",
+  "bold",
+  "sophisticated",
+  "playful",
+  "authentic",
+  "expert",
+  "caring",
+  "adventurous",
+];
+const FONT_FAMILIES = [
+  "Manrope",
+  "Inter",
+  "Poppins",
+  "Roboto",
+  "Open Sans",
+  "Lato",
+  "Montserrat",
+  "Playfair Display",
+  "Raleway",
+  "Work Sans",
+];
+const FONT_WEIGHTS = ["300", "400", "500", "600", "700", "800"];
 
 type OnboardingStepId =
-  | 'welcome'
-  | 'beta-info'
-  | 'api-setup'
-  | 'brand-basics'
-  | 'brand-logo'
-  | 'brand-palette'
-  | 'brand-typography'
-  | 'brand-voice'
-  | 'brand-rules'
-  | 'brand-assets'
-  | 'shopify-connect'
-  | 'complete';
+  | "welcome"
+  | "beta-info"
+  | "api-setup"
+  | "brand-basics"
+  | "brand-logo"
+  | "brand-palette"
+  | "brand-typography"
+  | "brand-voice"
+  | "brand-rules"
+  | "brand-assets"
+  | "shopify-connect"
+  | "complete";
 
-const STEPS: { id: OnboardingStepId; title: string; icon: React.ElementType; optional?: boolean }[] = [
-  { id: 'beta-info', title: 'Preview', icon: Sparkles },
-  { id: 'welcome', title: 'Welcome', icon: Home },
-  { id: 'brand-basics', title: 'Basics', icon: Building2 },
-  { id: 'brand-logo', title: 'Logo', icon: ImageIcon },
-  { id: 'brand-palette', title: 'Colors', icon: Palette },
-  { id: 'brand-typography', title: 'Fonts', icon: Type, optional: true },
-  { id: 'brand-voice', title: 'Voice', icon: MessageSquare },
-  { id: 'brand-rules', title: 'Rules', icon: CheckCircle2, optional: true },
-  { id: 'brand-assets', title: 'Assets', icon: Users, optional: true },
-  { id: 'shopify-connect', title: 'Shopify', icon: ShoppingBag, optional: true },
-  { id: 'api-setup', title: 'Intelligence', icon: Key },
-  { id: 'complete', title: 'Complete', icon: CheckCircle2 },
+const STEPS: {
+  id: OnboardingStepId;
+  title: string;
+  icon: React.ElementType;
+  optional?: boolean;
+}[] = [
+  { id: "beta-info", title: "Preview", icon: Sparkles },
+  { id: "welcome", title: "Welcome", icon: Home },
+  { id: "brand-basics", title: "Basics", icon: Building2 },
+  { id: "brand-logo", title: "Logo", icon: ImageIcon },
+  { id: "brand-palette", title: "Colors", icon: Palette },
+  { id: "brand-typography", title: "Fonts", icon: Type, optional: true },
+  { id: "brand-voice", title: "Voice", icon: MessageSquare },
+  { id: "brand-rules", title: "Rules", icon: CheckCircle2, optional: true },
+  { id: "brand-assets", title: "Assets", icon: Users, optional: true },
+  {
+    id: "shopify-connect",
+    title: "Shopify",
+    icon: ShoppingBag,
+    optional: true,
+  },
+  { id: "api-setup", title: "Intelligence", icon: Key },
+  { id: "complete", title: "Complete", icon: CheckCircle2 },
 ];
 
 // Extended brand data to hold all onboarding fields
@@ -162,26 +208,28 @@ interface OnboardingBrandData {
 
 export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [setupMode, setSetupMode] = useState<'choose' | 'manual' | 'import'>('choose');
+  const [setupMode, setSetupMode] = useState<"choose" | "manual" | "import">(
+    "choose",
+  );
   const [brandMemory, setBrandMemory] = useState<BrandMemory | null>(null);
   const [hasApiKey, setHasApiKey] = useState(false);
   const [brandData, setBrandData] = useState<OnboardingBrandData>({
     id: crypto.randomUUID(),
-    name: '',
-    description: '',
-    industry: '',
-    targetAudience: '',
-    tagline: { text: '', tones: [] },
+    name: "",
+    description: "",
+    industry: "",
+    targetAudience: "",
+    tagline: { text: "", tones: [] },
     logos: [],
     palette: {
-      primary: [{ hex: '#6366F1', label: 'Primary' }],
+      primary: [{ hex: "#6366F1", label: "Primary" }],
       secondary: [],
       other: [],
     },
     typography: null,
     voice: {
-      template: 'friendly',
-      tone: '',
+      template: "friendly",
+      tone: "",
       personality: [],
       vocabulary: { preferred: [], avoided: [] },
       examples: [],
@@ -189,7 +237,7 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
     rules: {
       doStatements: [],
       dontStatements: [],
-      legalDisclaimer: '',
+      legalDisclaimer: "",
     },
     characters: [],
     scenes: [],
@@ -204,8 +252,12 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
   const goNext = () => {
     if (!isLastStep) {
       // If in import mode and we're at welcome, skip to shopify-connect
-      if (setupMode === 'import' && currentStep.id === 'welcome' && brandMemory) {
-        const shopifyIndex = STEPS.findIndex(s => s.id === 'shopify-connect');
+      if (
+        setupMode === "import" &&
+        currentStep.id === "welcome" &&
+        brandMemory
+      ) {
+        const shopifyIndex = STEPS.findIndex((s) => s.id === "shopify-connect");
         setCurrentStepIndex(shopifyIndex);
       } else {
         setCurrentStepIndex(currentStepIndex + 1);
@@ -216,46 +268,91 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
         name: brandData.name,
         overview: brandData.description,
         tagline: brandData.tagline.text ? brandData.tagline : undefined,
-        logo: brandData.logos.length > 0 ? {
-          urls: brandData.logos.map(l => l.url),
-          colors: brandData.logos.flatMap(l => l.colors),
-        } : undefined,
+        logo:
+          brandData.logos.length > 0
+            ? {
+                urls: brandData.logos.map((l) => l.url),
+                colors: brandData.logos.flatMap((l) => l.colors),
+              }
+            : undefined,
         palette: {
           primary: brandData.palette.primary,
           secondary: brandData.palette.secondary,
           other: brandData.palette.other,
         },
-        fonts: brandData.typography ? [{
-          family: brandData.typography.family,
-          weight: brandData.typography.weight,
-          color: brandData.typography.color,
-        }] : undefined,
-        characters: brandData.characters.map(c => ({
+        fonts: brandData.typography
+          ? [
+              {
+                family: brandData.typography.family,
+                weight: brandData.typography.weight,
+                color: brandData.typography.color,
+              },
+            ]
+          : undefined,
+        characters: brandData.characters.map((c) => ({
           url: c.url,
           metadata: { name: c.name, description: c.description },
         })),
-        scenes: brandData.scenes.map(s => ({
+        scenes: brandData.scenes.map((s) => ({
           url: s.url,
-          metadata: { name: s.name, description: s.description, type: s.type as 'studio' | 'lifestyle' | 'outdoor' | 'abstract' | 'home' | 'other' },
+          metadata: {
+            name: s.name,
+            description: s.description,
+            type: s.type as
+              | "studio"
+              | "lifestyle"
+              | "outdoor"
+              | "abstract"
+              | "home"
+              | "other",
+          },
         })),
-        site_images: brandData.siteImages.length > 0 ? brandData.siteImages : undefined,
+        site_images:
+          brandData.siteImages.length > 0 ? brandData.siteImages : undefined,
         // Include voice in BrandMemory for self-contained JSON exports
         voice: {
           template: brandData.voice.template,
           tone: brandData.voice.tone || undefined,
-          personality: brandData.voice.personality.length > 0 ? brandData.voice.personality : undefined,
-          vocabulary: (brandData.voice.vocabulary.preferred.length > 0 || brandData.voice.vocabulary.avoided.length > 0) ? {
-            preferred: brandData.voice.vocabulary.preferred.length > 0 ? brandData.voice.vocabulary.preferred : undefined,
-            avoided: brandData.voice.vocabulary.avoided.length > 0 ? brandData.voice.vocabulary.avoided : undefined,
-          } : undefined,
-          examples: brandData.voice.examples.length > 0 ? brandData.voice.examples : undefined,
+          personality:
+            brandData.voice.personality.length > 0
+              ? brandData.voice.personality
+              : undefined,
+          vocabulary:
+            brandData.voice.vocabulary.preferred.length > 0 ||
+            brandData.voice.vocabulary.avoided.length > 0
+              ? {
+                  preferred:
+                    brandData.voice.vocabulary.preferred.length > 0
+                      ? brandData.voice.vocabulary.preferred
+                      : undefined,
+                  avoided:
+                    brandData.voice.vocabulary.avoided.length > 0
+                      ? brandData.voice.vocabulary.avoided
+                      : undefined,
+                }
+              : undefined,
+          examples:
+            brandData.voice.examples.length > 0
+              ? brandData.voice.examples
+              : undefined,
         },
         // Include rules in BrandMemory
-        rules: (brandData.rules.doStatements.length > 0 || brandData.rules.dontStatements.length > 0 || brandData.rules.legalDisclaimer) ? {
-          doStatements: brandData.rules.doStatements.length > 0 ? brandData.rules.doStatements : undefined,
-          dontStatements: brandData.rules.dontStatements.length > 0 ? brandData.rules.dontStatements : undefined,
-          legalDisclaimer: brandData.rules.legalDisclaimer || undefined,
-        } : undefined,
+        rules:
+          brandData.rules.doStatements.length > 0 ||
+          brandData.rules.dontStatements.length > 0 ||
+          brandData.rules.legalDisclaimer
+            ? {
+                doStatements:
+                  brandData.rules.doStatements.length > 0
+                    ? brandData.rules.doStatements
+                    : undefined,
+                dontStatements:
+                  brandData.rules.dontStatements.length > 0
+                    ? brandData.rules.dontStatements
+                    : undefined,
+                legalDisclaimer: brandData.rules.legalDisclaimer || undefined,
+              }
+            : undefined,
         // Include context fields
         industry: brandData.industry || undefined,
         targetAudience: brandData.targetAudience || undefined,
@@ -263,16 +360,17 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
 
       const completedProfile: BrandProfile = {
         id: brandData.id,
-        name: brandMemory?.name || brandData.name || 'My Brand',
-        description: brandMemory?.overview || brandData.description || '',
-        industry: brandData.industry || brandMemory?.industry || '',
-        targetAudience: brandData.targetAudience || brandMemory?.targetAudience || '',
+        name: brandMemory?.name || brandData.name || "My Brand",
+        description: brandMemory?.overview || brandData.description || "",
+        industry: brandData.industry || brandMemory?.industry || "",
+        targetAudience:
+          brandData.targetAudience || brandMemory?.targetAudience || "",
         voice: brandData.voice,
         style: {
-          primaryColor: brandData.palette.primary[0]?.hex || '#6366F1',
-          secondaryColor: brandData.palette.secondary[0]?.hex || '#8B5CF6',
-          fontStyle: 'modern',
-          imageStyle: 'lifestyle',
+          primaryColor: brandData.palette.primary[0]?.hex || "#6366F1",
+          secondaryColor: brandData.palette.secondary[0]?.hex || "#8B5CF6",
+          fontStyle: "modern",
+          imageStyle: "lifestyle",
         },
         rules: {
           doStatements: brandData.rules.doStatements,
@@ -301,26 +399,29 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
     }
   };
 
-  const updateBrandData = useCallback((updates: Partial<OnboardingBrandData>) => {
-    setBrandData(prev => ({ ...prev, ...updates }));
-  }, []);
+  const updateBrandData = useCallback(
+    (updates: Partial<OnboardingBrandData>) => {
+      setBrandData((prev) => ({ ...prev, ...updates }));
+    },
+    [],
+  );
 
   // Determine if current step can proceed
   const canProceed = () => {
     switch (currentStep.id) {
-      case 'welcome':
-        return setupMode !== 'choose';
-      case 'beta-info':
+      case "welcome":
+        return setupMode !== "choose";
+      case "beta-info":
         return true; // User just needs to acknowledge
-      case 'api-setup':
+      case "api-setup":
         return hasApiKey;
-      case 'brand-basics':
+      case "brand-basics":
         return !!brandData.name.trim();
-      case 'brand-logo':
+      case "brand-logo":
         return brandData.logos.length > 0;
-      case 'brand-palette':
+      case "brand-palette":
         return brandData.palette.primary.length > 0;
-      case 'brand-voice':
+      case "brand-voice":
         // Validation: require at least 2 personality traits and 1 preferred word
         return (
           brandData.voice.template &&
@@ -331,18 +432,20 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
         return true;
     }
   };
-  
+
   // Get validation message for current step
   const getValidationMessage = () => {
-    if (currentStep.id === 'brand-voice') {
+    if (currentStep.id === "brand-voice") {
       const issues: string[] = [];
       if (brandData.voice.personality.length < 2) {
-        issues.push(`Select at least 2 personality traits (${brandData.voice.personality.length}/2)`);
+        issues.push(
+          `Select at least 2 personality traits (${brandData.voice.personality.length}/2)`,
+        );
       }
       if (brandData.voice.vocabulary.preferred.length < 1) {
-        issues.push('Add at least 1 preferred word');
+        issues.push("Add at least 1 preferred word");
       }
-      return issues.length > 0 ? issues.join(' • ') : null;
+      return issues.length > 0 ? issues.join(" • ") : null;
     }
     return null;
   };
@@ -354,16 +457,15 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between mb-2">
             {STEPS.map((step, index) => (
-              <div 
-                key={step.id}
-                className="flex items-center"
-              >
-                <div 
+              <div key={step.id} className="flex items-center">
+                <div
                   className={`
                     w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium transition-colors
-                    ${index <= currentStepIndex 
-                      ? 'bg-primary text-primary-foreground' 
-                      : 'bg-muted text-muted-foreground'}
+                    ${
+                      index <= currentStepIndex
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground"
+                    }
                   `}
                 >
                   {index < currentStepIndex ? (
@@ -373,10 +475,10 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
                   )}
                 </div>
                 {index < STEPS.length - 1 && (
-                  <div 
+                  <div
                     className={`
                       w-8 h-0.5 mx-0.5 transition-colors
-                      ${index < currentStepIndex ? 'bg-primary' : 'bg-muted'}
+                      ${index < currentStepIndex ? "bg-primary" : "bg-muted"}
                     `}
                   />
                 )}
@@ -397,10 +499,8 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.2 }}
             >
-                {currentStep.id === 'beta-info' && (
-                  <BetaInfoStep />
-                )}
-              {currentStep.id === 'welcome' && (
+              {currentStep.id === "beta-info" && <BetaInfoStep />}
+              {currentStep.id === "welcome" && (
                 <WelcomeStep
                   setupMode={setupMode}
                   onSetupModeChange={setSetupMode}
@@ -408,61 +508,43 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
                   onBrandMemoryChange={setBrandMemory}
                 />
               )}
-              {currentStep.id === 'brand-basics' && (
-                <BrandBasicsStep 
-                  data={brandData} 
-                  onChange={updateBrandData} 
+              {currentStep.id === "brand-basics" && (
+                <BrandBasicsStep data={brandData} onChange={updateBrandData} />
+              )}
+              {currentStep.id === "brand-logo" && (
+                <BrandLogoStep data={brandData} onChange={updateBrandData} />
+              )}
+              {currentStep.id === "brand-palette" && (
+                <BrandPaletteStep data={brandData} onChange={updateBrandData} />
+              )}
+              {currentStep.id === "brand-typography" && (
+                <BrandTypographyStep
+                  data={brandData}
+                  onChange={updateBrandData}
                 />
               )}
-              {currentStep.id === 'brand-logo' && (
-                <BrandLogoStep 
-                  data={brandData} 
-                  onChange={updateBrandData} 
-                />
+              {currentStep.id === "brand-voice" && (
+                <BrandVoiceStep data={brandData} onChange={updateBrandData} />
               )}
-              {currentStep.id === 'brand-palette' && (
-                <BrandPaletteStep 
-                  data={brandData} 
-                  onChange={updateBrandData} 
-                />
+              {currentStep.id === "brand-rules" && (
+                <BrandRulesStep data={brandData} onChange={updateBrandData} />
               )}
-              {currentStep.id === 'brand-typography' && (
-                <BrandTypographyStep 
-                  data={brandData} 
-                  onChange={updateBrandData} 
-                />
+              {currentStep.id === "brand-assets" && (
+                <BrandAssetsStep data={brandData} onChange={updateBrandData} />
               )}
-              {currentStep.id === 'brand-voice' && (
-                <BrandVoiceStep 
-                  data={brandData} 
-                  onChange={updateBrandData} 
-                />
-              )}
-              {currentStep.id === 'brand-rules' && (
-                <BrandRulesStep 
-                  data={brandData} 
-                  onChange={updateBrandData} 
-                />
-              )}
-              {currentStep.id === 'brand-assets' && (
-                <BrandAssetsStep 
-                  data={brandData} 
-                  onChange={updateBrandData} 
-                />
-              )}
-              {currentStep.id === 'shopify-connect' && (
+              {currentStep.id === "shopify-connect" && (
                 <ShopifyConnectStep
                   data={brandData}
                   onChange={updateBrandData}
                 />
               )}
-              {currentStep.id === 'api-setup' && (
+              {currentStep.id === "api-setup" && (
                 <ApiSetupStep
                   hasApiKey={hasApiKey}
                   onValidityChange={setHasApiKey}
                 />
               )}
-              {currentStep.id === 'complete' && (
+              {currentStep.id === "complete" && (
                 <CompleteStep data={brandData} brandMemory={brandMemory} />
               )}
             </motion.div>
@@ -474,12 +556,8 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
       <div className="p-8">
         <div className="max-w-xl mx-auto flex justify-between">
           {/* Hide Back button on Welcome and Early Preview steps */}
-          {currentStep.id !== 'welcome' && currentStep.id !== 'beta-info' ? (
-            <Button
-              variant="ghost"
-              onClick={goBack}
-              className="gap-2"
-            >
+          {currentStep.id !== "welcome" && currentStep.id !== "beta-info" ? (
+            <Button variant="ghost" onClick={goBack} className="gap-2">
               <ArrowLeft className="w-4 h-4" />
               Back
             </Button>
@@ -488,19 +566,12 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
           )}
           <div className="flex gap-2">
             {currentStep.optional && !isLastStep && (
-              <Button 
-                variant="ghost"
-                onClick={skipStep}
-              >
+              <Button variant="ghost" onClick={skipStep}>
                 Skip
               </Button>
             )}
-            <Button 
-              onClick={goNext} 
-              className="gap-2"
-              disabled={!canProceed()}
-            >
-              {isLastStep ? 'Get Started' : 'Continue'}
+            <Button onClick={goNext} className="gap-2" disabled={!canProceed()}>
+              {isLastStep ? "Get Started" : "Continue"}
               <ArrowRight className="w-4 h-4" />
             </Button>
           </div>
@@ -515,13 +586,18 @@ export function BrandOnboarding({ onComplete }: BrandOnboardingProps) {
 // ============================================
 
 interface WelcomeStepProps {
-  setupMode: 'choose' | 'manual' | 'import';
-  onSetupModeChange: (mode: 'choose' | 'manual' | 'import') => void;
+  setupMode: "choose" | "manual" | "import";
+  onSetupModeChange: (mode: "choose" | "manual" | "import") => void;
   brandMemory: BrandMemory | null;
   onBrandMemoryChange: (memory: BrandMemory | null) => void;
 }
 
-function WelcomeStep({ setupMode, onSetupModeChange, brandMemory, onBrandMemoryChange }: WelcomeStepProps) {
+function WelcomeStep({
+  setupMode,
+  onSetupModeChange,
+  brandMemory,
+  onBrandMemoryChange,
+}: WelcomeStepProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const accomplish = getAccomplish();
@@ -538,31 +614,33 @@ function WelcomeStep({ setupMode, onSetupModeChange, brandMemory, onBrandMemoryC
       }
 
       const memoryData = result.data as BrandMemory;
-      
+
       if (!memoryData.name) {
-        throw new Error('Brand memory must have a name');
+        throw new Error("Brand memory must have a name");
       }
 
       onBrandMemoryChange(memoryData);
-      onSetupModeChange('import');
+      onSetupModeChange("import");
     } catch (err) {
-      console.error('Failed to import brand memory:', err);
-      setError(err instanceof Error ? err.message : 'Failed to parse JSON file');
+      console.error("Failed to import brand memory:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to parse JSON file",
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleManualSetup = () => {
-    onSetupModeChange('manual');
+    onSetupModeChange("manual");
   };
 
   const handleRemoveImport = () => {
     onBrandMemoryChange(null);
-    onSetupModeChange('choose');
+    onSetupModeChange("choose");
   };
 
-  if (setupMode === 'import' && brandMemory) {
+  if (setupMode === "import" && brandMemory) {
     const memorySummary = {
       hasLogo: !!brandMemory.logo?.urls?.length,
       hasTagline: !!brandMemory.tagline?.text,
@@ -635,33 +713,42 @@ function WelcomeStep({ setupMode, onSetupModeChange, brandMemory, onBrandMemoryC
   return (
     <div className="text-center space-y-6">
       <div className="w-20 h-20 mx-auto rounded-2xl flex items-center justify-center">
-        <img src={logoImage} alt="Shop OS" className="w-16 h-16 object-contain" />
+        <img
+          src={logoImage}
+          alt="Shop OS"
+          className="w-16 h-16 object-contain"
+        />
       </div>
       <div>
         <h1 className="text-3xl font-bold mb-3">Welcome to Shop OS</h1>
         <p className="text-lg text-muted-foreground">
-          Your AI work companion that learns your brand and does real commerce work.
+          Your AI work companion that learns your brand and does real commerce
+          work.
         </p>
       </div>
 
       <div className="space-y-3 pt-4">
-        <p className="text-sm text-muted-foreground mb-4">How would you like to set up your brand?</p>
-        
+        <p className="text-sm text-muted-foreground mb-4">
+          How would you like to set up your brand?
+        </p>
+
         <button
           onClick={handleManualSetup}
           disabled={isLoading}
           className={`w-full p-4 rounded-lg border-2 transition-all text-left flex items-center gap-4 ${
-            setupMode === 'manual'
-              ? 'border-primary bg-primary/10'
-              : 'border-border hover:border-primary/50 hover:bg-muted/30'
+            setupMode === "manual"
+              ? "border-primary bg-primary/10"
+              : "border-border hover:border-primary/50 hover:bg-muted/30"
           }`}
         >
           <Building2 className="w-8 h-8 text-primary" />
           <div className="flex-1">
             <h3 className="font-medium">Enter Details Manually</h3>
-            <p className="text-sm text-muted-foreground">Set up your brand step by step</p>
+            <p className="text-sm text-muted-foreground">
+              Set up your brand step by step
+            </p>
           </div>
-          {setupMode === 'manual' && (
+          {setupMode === "manual" && (
             <CheckCircle2 className="w-6 h-6 text-primary shrink-0" />
           )}
         </button>
@@ -678,7 +765,9 @@ function WelcomeStep({ setupMode, onSetupModeChange, brandMemory, onBrandMemoryC
           )}
           <div>
             <h3 className="font-medium">Import Brand Memory JSON</h3>
-            <p className="text-sm text-muted-foreground">Upload your brand's visual DNA file</p>
+            <p className="text-sm text-muted-foreground">
+              Upload your brand's visual DNA file
+            </p>
           </div>
         </button>
 
@@ -740,7 +829,8 @@ function BetaInfoStep() {
           <div>
             <h3 className="font-medium">API Costs</h3>
             <p className="text-sm text-muted-foreground">
-              You'll need your own API key. Usage costs are billed by the provider
+              You'll need your own API key. Usage costs are billed by the
+              provider
             </p>
           </div>
         </div>
@@ -757,13 +847,13 @@ function BetaInfoStep() {
 // API Setup Step
 // ============================================
 
-type ApiProvider = 'anthropic' | 'openai' | 'google' | 'xai';
+type ApiProvider = "anthropic" | "openai" | "google" | "xai";
 
 const PROVIDERS: { id: ApiProvider; name: string; description: string }[] = [
-  { id: 'anthropic', name: 'Anthropic', description: 'Claude models' },
-  { id: 'openai', name: 'OpenAI', description: 'GPT models' },
-  { id: 'google', name: 'Google', description: 'Gemini models' },
-  { id: 'xai', name: 'xAI', description: 'Grok models' },
+  { id: "anthropic", name: "Anthropic", description: "Claude models" },
+  { id: "openai", name: "OpenAI", description: "GPT models" },
+  { id: "google", name: "Google", description: "Gemini models" },
+  { id: "xai", name: "xAI", description: "Grok models" },
 ];
 
 interface ApiSetupStepProps {
@@ -772,8 +862,8 @@ interface ApiSetupStepProps {
 }
 
 function ApiSetupStep({ onValidityChange }: ApiSetupStepProps) {
-  const [provider, setProvider] = useState<ApiProvider>('anthropic');
-  const [key, setKey] = useState('');
+  const [provider, setProvider] = useState<ApiProvider>("anthropic");
+  const [key, setKey] = useState("");
   const [saved, setSaved] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -784,13 +874,13 @@ function ApiSetupStep({ onValidityChange }: ApiSetupStepProps) {
     const checkExistingKeys = async () => {
       try {
         const keys = await accomplish.getApiKeys();
-        const providers = keys.map(k => k.provider);
+        const providers = keys.map((k) => k.provider);
         setSaved(providers);
         if (providers.length > 0) {
           onValidityChange(true);
         }
       } catch (err) {
-        console.error('Failed to fetch API keys:', err);
+        console.error("Failed to fetch API keys:", err);
       }
     };
     checkExistingKeys();
@@ -803,9 +893,12 @@ function ApiSetupStep({ onValidityChange }: ApiSetupStepProps) {
 
     try {
       // 1. Validate the API key first
-      const validation = await accomplish.validateApiKeyForProvider(provider, key.trim());
+      const validation = await accomplish.validateApiKeyForProvider(
+        provider,
+        key.trim(),
+      );
       if (!validation.valid) {
-        setError(validation.error || 'Invalid API key');
+        setError(validation.error || "Invalid API key");
         setLoading(false);
         return;
       }
@@ -818,9 +911,9 @@ function ApiSetupStep({ onValidityChange }: ApiSetupStepProps) {
       const defaultModel = DEFAULT_MODELS[providerId] || null;
       await accomplish.setConnectedProvider(providerId, {
         providerId,
-        connectionStatus: 'connected',
+        connectionStatus: "connected",
         selectedModelId: defaultModel,
-        credentials: { type: 'api_key', keyPrefix: key.trim().substring(0, 8) },
+        credentials: { type: "api_key", keyPrefix: key.trim().substring(0, 8) },
         lastConnectedAt: new Date().toISOString(),
       });
 
@@ -837,12 +930,12 @@ function ApiSetupStep({ onValidityChange }: ApiSetupStepProps) {
 
       // Update UI
       const keys = await accomplish.getApiKeys();
-      setSaved(keys.map(k => k.provider));
-      setKey('');
+      setSaved(keys.map((k) => k.provider));
+      setKey("");
       onValidityChange(true);
     } catch (e) {
-      console.error('Failed to add API key:', e);
-      setError('Failed to add API key. Please try again.');
+      console.error("Failed to add API key:", e);
+      setError("Failed to add API key. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -870,14 +963,16 @@ function ApiSetupStep({ onValidityChange }: ApiSetupStepProps) {
               }}
               className={`p-3 rounded-lg border-2 text-left transition-all ${
                 provider === p.id
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border hover:border-primary/50'
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:border-primary/50"
               }`}
             >
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-medium text-sm">{p.name}</h3>
-                  <p className="text-xs text-muted-foreground">{p.description}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {p.description}
+                  </p>
                 </div>
                 {saved.includes(p.id) && (
                   <CheckCircle2 className="w-4 h-4 text-green-500" />
@@ -900,12 +995,12 @@ function ApiSetupStep({ onValidityChange }: ApiSetupStepProps) {
               setKey(e.target.value);
               setError(null);
             }}
-            placeholder={`Enter your ${PROVIDERS.find(p => p.id === provider)?.name} API key`}
+            placeholder={`Enter your ${PROVIDERS.find((p) => p.id === provider)?.name} API key`}
             className="flex-1"
             disabled={loading}
           />
           <Button onClick={handleAdd} disabled={!key.trim() || loading}>
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add'}
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add"}
           </Button>
         </div>
         {error && (
@@ -922,12 +1017,15 @@ function ApiSetupStep({ onValidityChange }: ApiSetupStepProps) {
           <div className="flex items-center gap-2 text-foreground">
             <CheckCircle2 className="w-5 h-5" />
             <span className="font-medium">
-              {saved.length} provider{saved.length > 1 ? 's' : ''} connected
+              {saved.length} provider{saved.length > 1 ? "s" : ""} connected
             </span>
           </div>
           <div className="flex flex-wrap gap-2 mt-2">
             {saved.map((s) => (
-              <span key={s} className="px-2 py-1 rounded bg-foreground/10 text-foreground text-xs font-medium capitalize">
+              <span
+                key={s}
+                className="px-2 py-1 rounded bg-foreground/10 text-foreground text-xs font-medium capitalize"
+              >
                 {s}
               </span>
             ))}
@@ -951,7 +1049,7 @@ function BrandBasicsStep({ data, onChange }: StepProps) {
   const toggleTaglineTone = (tone: string) => {
     const current = data.tagline.tones || [];
     const newTones = current.includes(tone)
-      ? current.filter(t => t !== tone)
+      ? current.filter((t) => t !== tone)
       : [...current, tone];
     onChange({ tagline: { ...data.tagline, tones: newTones } });
   };
@@ -960,9 +1058,11 @@ function BrandBasicsStep({ data, onChange }: StepProps) {
     <div className="space-y-6">
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold mb-2">Tell us about your brand</h2>
-        <p className="text-muted-foreground">We'll use this to personalize your experience</p>
+        <p className="text-muted-foreground">
+          We'll use this to personalize your experience
+        </p>
       </div>
-      
+
       <div className="space-y-4">
         <div>
           <Label htmlFor="brandName">Brand Name *</Label>
@@ -980,7 +1080,9 @@ function BrandBasicsStep({ data, onChange }: StepProps) {
           <Input
             id="tagline"
             value={data.tagline.text}
-            onChange={(e) => onChange({ tagline: { ...data.tagline, text: e.target.value } })}
+            onChange={(e) =>
+              onChange({ tagline: { ...data.tagline, text: e.target.value } })
+            }
             placeholder="e.g., Style that speaks"
             className="mt-1.5"
           />
@@ -995,8 +1097,8 @@ function BrandBasicsStep({ data, onChange }: StepProps) {
                 onClick={() => toggleTaglineTone(tone)}
                 className={`px-3 py-1.5 rounded-full text-sm capitalize transition-all ${
                   data.tagline.tones?.includes(tone)
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted hover:bg-muted/80'
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted hover:bg-muted/80"
                 }`}
               >
                 {tone}
@@ -1004,7 +1106,7 @@ function BrandBasicsStep({ data, onChange }: StepProps) {
             ))}
           </div>
         </div>
-        
+
         <div>
           <Label htmlFor="industry">Industry</Label>
           <Input
@@ -1015,7 +1117,7 @@ function BrandBasicsStep({ data, onChange }: StepProps) {
             className="mt-1.5"
           />
         </div>
-        
+
         <div>
           <Label htmlFor="targetAudience">Target Audience</Label>
           <Input
@@ -1026,7 +1128,7 @@ function BrandBasicsStep({ data, onChange }: StepProps) {
             className="mt-1.5"
           />
         </div>
-        
+
         <div>
           <Label htmlFor="description">Brief Description</Label>
           <textarea
@@ -1051,23 +1153,32 @@ const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
  * Convert technical error messages to human-readable ones
  */
 function humanizeUploadError(error: string): string {
-  if (error.includes('413') || error.includes('6291456') || error.includes('Request must be smaller')) {
+  if (
+    error.includes("413") ||
+    error.includes("6291456") ||
+    error.includes("Request must be smaller")
+  ) {
     return `File is too large. Please use an image smaller than ${MAX_FILE_SIZE_MB}MB.`;
   }
-  if (error.includes('Failed to fetch') || error.includes('NetworkError')) {
-    return 'Network error. Please check your internet connection and try again.';
+  if (error.includes("Failed to fetch") || error.includes("NetworkError")) {
+    return "Network error. Please check your internet connection and try again.";
   }
-  if (error.includes('timeout') || error.includes('Timeout')) {
-    return 'Upload timed out. Please try again with a smaller file.';
+  if (error.includes("timeout") || error.includes("Timeout")) {
+    return "Upload timed out. Please try again with a smaller file.";
   }
-  if (error.includes('403') || error.includes('Forbidden')) {
-    return 'Permission denied. Please try again later.';
+  if (error.includes("403") || error.includes("Forbidden")) {
+    return "Permission denied. Please try again later.";
   }
-  if (error.includes('500') || error.includes('Internal Server Error')) {
-    return 'Server error. Please try again later.';
+  if (error.includes("500") || error.includes("Internal Server Error")) {
+    return "Server error. Please try again later.";
   }
   // Return original if no match, but clean up technical details
-  return error.replace(/\d{3}\s*-\s*/, '').replace(/[{}"]/g, '').trim() || 'Upload failed. Please try again.';
+  return (
+    error
+      .replace(/\d{3}\s*-\s*/, "")
+      .replace(/[{}"]/g, "")
+      .trim() || "Upload failed. Please try again."
+  );
 }
 
 function BrandLogoStep({ data, onChange }: StepProps) {
@@ -1088,7 +1199,9 @@ function BrandLogoStep({ data, onChange }: StepProps) {
         // Check file size before uploading
         if (file.size > MAX_FILE_SIZE_BYTES) {
           const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
-          setError(`File "${file.name}" is too large (${sizeMB}MB). Please use an image smaller than ${MAX_FILE_SIZE_MB}MB.`);
+          setError(
+            `File "${file.name}" is too large (${sizeMB}MB). Please use an image smaller than ${MAX_FILE_SIZE_MB}MB.`,
+          );
           continue;
         }
 
@@ -1097,7 +1210,7 @@ function BrandLogoStep({ data, onChange }: StepProps) {
         const base64Promise = new Promise<string>((resolve, reject) => {
           reader.onload = () => {
             const result = reader.result as string;
-            const base64 = result.split(',')[1];
+            const base64 = result.split(",")[1];
             resolve(base64);
           };
           reader.onerror = reject;
@@ -1108,10 +1221,10 @@ function BrandLogoStep({ data, onChange }: StepProps) {
         // Upload to S3
         const result = await accomplish.uploadBrandAsset(
           data.id,
-          'logos',
+          "logos",
           file.name,
           file.type,
-          base64
+          base64,
         );
 
         if (result.success && result.url) {
@@ -1119,17 +1232,20 @@ function BrandLogoStep({ data, onChange }: StepProps) {
             logos: [...data.logos, { url: result.url, colors: [] }],
           });
         } else {
-          setError(humanizeUploadError(result.error || 'Failed to upload logo'));
+          setError(
+            humanizeUploadError(result.error || "Failed to upload logo"),
+          );
         }
       }
     } catch (err) {
-      console.error('Failed to upload logo:', err);
-      const errorMsg = err instanceof Error ? err.message : 'Failed to upload logo';
+      console.error("Failed to upload logo:", err);
+      const errorMsg =
+        err instanceof Error ? err.message : "Failed to upload logo";
       setError(humanizeUploadError(errorMsg));
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+        fileInputRef.current.value = "";
       }
     }
   };
@@ -1140,7 +1256,11 @@ function BrandLogoStep({ data, onChange }: StepProps) {
     });
   };
 
-  const updateLogoColor = (logoIndex: number, colorIndex: number, color: string) => {
+  const updateLogoColor = (
+    logoIndex: number,
+    colorIndex: number,
+    color: string,
+  ) => {
     const newLogos = [...data.logos];
     newLogos[logoIndex].colors[colorIndex] = color;
     onChange({ logos: newLogos });
@@ -1148,13 +1268,15 @@ function BrandLogoStep({ data, onChange }: StepProps) {
 
   const addLogoColor = (logoIndex: number) => {
     const newLogos = [...data.logos];
-    newLogos[logoIndex].colors.push('#000000');
+    newLogos[logoIndex].colors.push("#000000");
     onChange({ logos: newLogos });
   };
 
   const removeLogoColor = (logoIndex: number, colorIndex: number) => {
     const newLogos = [...data.logos];
-    newLogos[logoIndex].colors = newLogos[logoIndex].colors.filter((_, i) => i !== colorIndex);
+    newLogos[logoIndex].colors = newLogos[logoIndex].colors.filter(
+      (_, i) => i !== colorIndex,
+    );
     onChange({ logos: newLogos });
   };
 
@@ -1162,7 +1284,9 @@ function BrandLogoStep({ data, onChange }: StepProps) {
     <div className="space-y-6">
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold mb-2">Upload your logo</h2>
-        <p className="text-muted-foreground">Add your brand logo and identify its colors</p>
+        <p className="text-muted-foreground">
+          Add your brand logo and identify its colors
+        </p>
       </div>
 
       <div className="space-y-4">
@@ -1177,7 +1301,7 @@ function BrandLogoStep({ data, onChange }: StepProps) {
             <Upload className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
           )}
           <h3 className="font-medium mb-1">
-            {isUploading ? 'Uploading...' : 'Click to upload logo'}
+            {isUploading ? "Uploading..." : "Click to upload logo"}
           </h3>
           <p className="text-sm text-muted-foreground">
             PNG, JPG, SVG up to {MAX_FILE_SIZE_MB}MB
@@ -1203,10 +1327,17 @@ function BrandLogoStep({ data, onChange }: StepProps) {
         {data.logos.length > 0 && (
           <div className="space-y-4">
             {data.logos.map((logo, logoIndex) => (
-              <div key={logoIndex} className="p-4 rounded-lg border-2 border-border bg-muted/30">
+              <div
+                key={logoIndex}
+                className="p-4 rounded-lg border-2 border-border bg-muted/30"
+              >
                 <div className="flex items-start gap-4">
                   <div className="w-20 h-20 rounded-lg bg-white flex items-center justify-center overflow-hidden">
-                    <img src={logo.url} alt="Logo" className="max-w-full max-h-full object-contain" />
+                    <img
+                      src={logo.url}
+                      alt="Logo"
+                      className="max-w-full max-h-full object-contain"
+                    />
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center justify-between mb-2">
@@ -1222,15 +1353,26 @@ function BrandLogoStep({ data, onChange }: StepProps) {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {logo.colors.map((color, colorIndex) => (
-                        <div key={colorIndex} className="flex items-center gap-1">
+                        <div
+                          key={colorIndex}
+                          className="flex items-center gap-1"
+                        >
                           <input
                             type="color"
                             value={color}
-                            onChange={(e) => updateLogoColor(logoIndex, colorIndex, e.target.value)}
+                            onChange={(e) =>
+                              updateLogoColor(
+                                logoIndex,
+                                colorIndex,
+                                e.target.value,
+                              )
+                            }
                             className="w-8 h-8 rounded cursor-pointer border border-border"
                           />
                           <button
-                            onClick={() => removeLogoColor(logoIndex, colorIndex)}
+                            onClick={() =>
+                              removeLogoColor(logoIndex, colorIndex)
+                            }
                             className="text-muted-foreground hover:text-destructive"
                           >
                             <X className="w-4 h-4" />
@@ -1260,8 +1402,8 @@ function BrandLogoStep({ data, onChange }: StepProps) {
 }
 
 function BrandPaletteStep({ data, onChange }: StepProps) {
-  const addColor = (type: 'primary' | 'secondary' | 'other') => {
-    const newColor: BrandColor = { hex: '#000000', label: '' };
+  const addColor = (type: "primary" | "secondary" | "other") => {
+    const newColor: BrandColor = { hex: "#000000", label: "" };
     onChange({
       palette: {
         ...data.palette,
@@ -1270,7 +1412,11 @@ function BrandPaletteStep({ data, onChange }: StepProps) {
     });
   };
 
-  const updateColor = (type: 'primary' | 'secondary' | 'other', index: number, updates: Partial<BrandColor>) => {
+  const updateColor = (
+    type: "primary" | "secondary" | "other",
+    index: number,
+    updates: Partial<BrandColor>,
+  ) => {
     const newColors = [...data.palette[type]];
     newColors[index] = { ...newColors[index], ...updates };
     onChange({
@@ -1281,7 +1427,10 @@ function BrandPaletteStep({ data, onChange }: StepProps) {
     });
   };
 
-  const removeColor = (type: 'primary' | 'secondary' | 'other', index: number) => {
+  const removeColor = (
+    type: "primary" | "secondary" | "other",
+    index: number,
+  ) => {
     onChange({
       palette: {
         ...data.palette,
@@ -1290,10 +1439,16 @@ function BrandPaletteStep({ data, onChange }: StepProps) {
     });
   };
 
-  const renderColorSection = (title: string, type: 'primary' | 'secondary' | 'other', required?: boolean) => (
+  const renderColorSection = (
+    title: string,
+    type: "primary" | "secondary" | "other",
+    required?: boolean,
+  ) => (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <Label>{title} {required && '*'}</Label>
+        <Label>
+          {title} {required && "*"}
+        </Label>
         <Button variant="ghost" size="sm" onClick={() => addColor(type)}>
           <Plus className="w-4 h-4 mr-1" />
           Add
@@ -1305,22 +1460,28 @@ function BrandPaletteStep({ data, onChange }: StepProps) {
             <input
               type="color"
               value={color.hex}
-              onChange={(e) => updateColor(type, index, { hex: e.target.value })}
+              onChange={(e) =>
+                updateColor(type, index, { hex: e.target.value })
+              }
               className="w-10 h-10 rounded cursor-pointer border-2 border-border"
             />
             <Input
               value={color.hex}
-              onChange={(e) => updateColor(type, index, { hex: e.target.value })}
+              onChange={(e) =>
+                updateColor(type, index, { hex: e.target.value })
+              }
               placeholder="#000000"
               className="w-28"
             />
             <Input
               value={color.label}
-              onChange={(e) => updateColor(type, index, { label: e.target.value })}
+              onChange={(e) =>
+                updateColor(type, index, { label: e.target.value })
+              }
               placeholder="Label (e.g., Brand Blue)"
               className="flex-1"
             />
-            {!(type === 'primary' && data.palette.primary.length === 1) && (
+            {!(type === "primary" && data.palette.primary.length === 1) && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -1333,7 +1494,9 @@ function BrandPaletteStep({ data, onChange }: StepProps) {
           </div>
         ))}
         {data.palette[type].length === 0 && (
-          <p className="text-sm text-muted-foreground italic">No colors added</p>
+          <p className="text-sm text-muted-foreground italic">
+            No colors added
+          </p>
         )}
       </div>
     </div>
@@ -1343,13 +1506,15 @@ function BrandPaletteStep({ data, onChange }: StepProps) {
     <div className="space-y-6">
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold mb-2">Color palette</h2>
-        <p className="text-muted-foreground">Define your brand's color scheme</p>
+        <p className="text-muted-foreground">
+          Define your brand's color scheme
+        </p>
       </div>
 
       <div className="space-y-6">
-        {renderColorSection('Primary Colors', 'primary', true)}
-        {renderColorSection('Secondary Colors', 'secondary')}
-        {renderColorSection('Accent Colors', 'other')}
+        {renderColorSection("Primary Colors", "primary", true)}
+        {renderColorSection("Secondary Colors", "secondary")}
+        {renderColorSection("Accent Colors", "other")}
       </div>
 
       <p className="text-xs text-muted-foreground text-center">
@@ -1360,7 +1525,11 @@ function BrandPaletteStep({ data, onChange }: StepProps) {
 }
 
 function BrandTypographyStep({ data, onChange }: StepProps) {
-  const typography = data.typography || { family: 'Inter', weight: '400', color: '#000000' };
+  const typography = data.typography || {
+    family: "Inter",
+    weight: "400",
+    color: "#000000",
+  };
 
   const updateTypography = (updates: Partial<typeof typography>) => {
     onChange({ typography: { ...typography, ...updates } });
@@ -1370,7 +1539,9 @@ function BrandTypographyStep({ data, onChange }: StepProps) {
     <div className="space-y-6">
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold mb-2">Typography (Optional)</h2>
-        <p className="text-muted-foreground">Set your brand's font preferences</p>
+        <p className="text-muted-foreground">
+          Set your brand's font preferences
+        </p>
       </div>
 
       <div className="space-y-4">
@@ -1382,7 +1553,9 @@ function BrandTypographyStep({ data, onChange }: StepProps) {
             className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           >
             {FONT_FAMILIES.map((font) => (
-              <option key={font} value={font}>{font}</option>
+              <option key={font} value={font}>
+                {font}
+              </option>
             ))}
           </select>
         </div>
@@ -1395,7 +1568,9 @@ function BrandTypographyStep({ data, onChange }: StepProps) {
             className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           >
             {FONT_WEIGHTS.map((weight) => (
-              <option key={weight} value={weight}>{weight}</option>
+              <option key={weight} value={weight}>
+                {weight}
+              </option>
             ))}
           </select>
         </div>
@@ -1420,12 +1595,14 @@ function BrandTypographyStep({ data, onChange }: StepProps) {
 
         {/* Preview */}
         <div className="p-4 rounded-lg bg-muted/50">
-          <Label className="text-xs text-muted-foreground mb-2 block">Preview</Label>
-          <p 
-            style={{ 
-              fontFamily: typography.family, 
+          <Label className="text-xs text-muted-foreground mb-2 block">
+            Preview
+          </Label>
+          <p
+            style={{
+              fontFamily: typography.family,
               fontWeight: typography.weight,
-              color: typography.color 
+              color: typography.color,
             }}
             className="text-2xl"
           >
@@ -1439,8 +1616,8 @@ function BrandTypographyStep({ data, onChange }: StepProps) {
 
 function BrandVoiceStep({ data, onChange }: StepProps) {
   const selectedTemplate = data.voice.template;
-  const [preferredInput, setPreferredInput] = useState('');
-  const [avoidedInput, setAvoidedInput] = useState('');
+  const [preferredInput, setPreferredInput] = useState("");
+  const [avoidedInput, setAvoidedInput] = useState("");
 
   const handleTemplateSelect = (template: BrandVoiceTemplate) => {
     onChange({
@@ -1451,7 +1628,7 @@ function BrandVoiceStep({ data, onChange }: StepProps) {
   const togglePersonality = (trait: string) => {
     const current = data.voice.personality || [];
     const newPersonality = current.includes(trait)
-      ? current.filter(t => t !== trait)
+      ? current.filter((t) => t !== trait)
       : [...current, trait];
     onChange({ voice: { ...data.voice, personality: newPersonality } });
   };
@@ -1463,11 +1640,14 @@ function BrandVoiceStep({ data, onChange }: StepProps) {
         ...data.voice,
         vocabulary: {
           ...data.voice.vocabulary,
-          preferred: [...data.voice.vocabulary.preferred, preferredInput.trim()],
+          preferred: [
+            ...data.voice.vocabulary.preferred,
+            preferredInput.trim(),
+          ],
         },
       },
     });
-    setPreferredInput('');
+    setPreferredInput("");
   };
 
   const addAvoidedWord = () => {
@@ -1481,7 +1661,7 @@ function BrandVoiceStep({ data, onChange }: StepProps) {
         },
       },
     });
-    setAvoidedInput('');
+    setAvoidedInput("");
   };
 
   const removePreferredWord = (word: string) => {
@@ -1490,7 +1670,7 @@ function BrandVoiceStep({ data, onChange }: StepProps) {
         ...data.voice,
         vocabulary: {
           ...data.voice.vocabulary,
-          preferred: data.voice.vocabulary.preferred.filter(w => w !== word),
+          preferred: data.voice.vocabulary.preferred.filter((w) => w !== word),
         },
       },
     });
@@ -1502,7 +1682,7 @@ function BrandVoiceStep({ data, onChange }: StepProps) {
         ...data.voice,
         vocabulary: {
           ...data.voice.vocabulary,
-          avoided: data.voice.vocabulary.avoided.filter(w => w !== word),
+          avoided: data.voice.vocabulary.avoided.filter((w) => w !== word),
         },
       },
     });
@@ -1512,7 +1692,9 @@ function BrandVoiceStep({ data, onChange }: StepProps) {
     <div className="space-y-6">
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold mb-2">Brand voice</h2>
-        <p className="text-muted-foreground">Define how your brand communicates</p>
+        <p className="text-muted-foreground">
+          Define how your brand communicates
+        </p>
       </div>
 
       {/* Voice Template */}
@@ -1525,15 +1707,19 @@ function BrandVoiceStep({ data, onChange }: StepProps) {
               onClick={() => handleTemplateSelect(template.id)}
               className={`
                 w-full p-3 rounded-lg border-2 text-left transition-all
-                ${selectedTemplate === template.id 
-                  ? 'border-primary bg-primary/5' 
-                  : 'border-border hover:border-primary/50'}
+                ${
+                  selectedTemplate === template.id
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-primary/50"
+                }
               `}
             >
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className="font-medium">{template.name}</h3>
-                  <p className="text-sm text-muted-foreground">{template.description}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {template.description}
+                  </p>
                 </div>
                 {selectedTemplate === template.id && (
                   <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
@@ -1550,7 +1736,9 @@ function BrandVoiceStep({ data, onChange }: StepProps) {
         <Input
           id="tone"
           value={data.voice.tone}
-          onChange={(e) => onChange({ voice: { ...data.voice, tone: e.target.value } })}
+          onChange={(e) =>
+            onChange({ voice: { ...data.voice, tone: e.target.value } })
+          }
           placeholder="e.g., Warm and approachable, yet authoritative"
           className="mt-1.5"
         />
@@ -1566,8 +1754,8 @@ function BrandVoiceStep({ data, onChange }: StepProps) {
               onClick={() => togglePersonality(trait)}
               className={`px-3 py-1.5 rounded-full text-sm capitalize transition-all ${
                 data.voice.personality?.includes(trait)
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted hover:bg-muted/80'
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted hover:bg-muted/80"
               }`}
             >
               {trait}
@@ -1584,7 +1772,7 @@ function BrandVoiceStep({ data, onChange }: StepProps) {
             <Input
               value={preferredInput}
               onChange={(e) => setPreferredInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addPreferredWord()}
+              onKeyDown={(e) => e.key === "Enter" && addPreferredWord()}
               placeholder="Add word"
               className="flex-1"
             />
@@ -1594,7 +1782,10 @@ function BrandVoiceStep({ data, onChange }: StepProps) {
           </div>
           <div className="flex flex-wrap gap-1 mt-2">
             {data.voice.vocabulary.preferred.map((word) => (
-              <span key={word} className="px-2 py-1 rounded bg-green-500/20 text-green-700 dark:text-green-300 text-xs flex items-center gap-1">
+              <span
+                key={word}
+                className="px-2 py-1 rounded bg-green-500/20 text-green-700 dark:text-green-300 text-xs flex items-center gap-1"
+              >
                 {word}
                 <button onClick={() => removePreferredWord(word)}>
                   <X className="w-3 h-3" />
@@ -1610,7 +1801,7 @@ function BrandVoiceStep({ data, onChange }: StepProps) {
             <Input
               value={avoidedInput}
               onChange={(e) => setAvoidedInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addAvoidedWord()}
+              onKeyDown={(e) => e.key === "Enter" && addAvoidedWord()}
               placeholder="Add word"
               className="flex-1"
             />
@@ -1620,7 +1811,10 @@ function BrandVoiceStep({ data, onChange }: StepProps) {
           </div>
           <div className="flex flex-wrap gap-1 mt-2">
             {data.voice.vocabulary.avoided.map((word) => (
-              <span key={word} className="px-2 py-1 rounded bg-red-500/20 text-red-700 dark:text-red-300 text-xs flex items-center gap-1">
+              <span
+                key={word}
+                className="px-2 py-1 rounded bg-red-500/20 text-red-700 dark:text-red-300 text-xs flex items-center gap-1"
+              >
                 {word}
                 <button onClick={() => removeAvoidedWord(word)}>
                   <X className="w-3 h-3" />
@@ -1635,8 +1829,8 @@ function BrandVoiceStep({ data, onChange }: StepProps) {
 }
 
 function BrandRulesStep({ data, onChange }: StepProps) {
-  const [doInput, setDoInput] = useState('');
-  const [dontInput, setDontInput] = useState('');
+  const [doInput, setDoInput] = useState("");
+  const [dontInput, setDontInput] = useState("");
 
   const addDoStatement = () => {
     if (!doInput.trim()) return;
@@ -1646,7 +1840,7 @@ function BrandRulesStep({ data, onChange }: StepProps) {
         doStatements: [...data.rules.doStatements, doInput.trim()],
       },
     });
-    setDoInput('');
+    setDoInput("");
   };
 
   const addDontStatement = () => {
@@ -1657,14 +1851,14 @@ function BrandRulesStep({ data, onChange }: StepProps) {
         dontStatements: [...data.rules.dontStatements, dontInput.trim()],
       },
     });
-    setDontInput('');
+    setDontInput("");
   };
 
   const removeDoStatement = (statement: string) => {
     onChange({
       rules: {
         ...data.rules,
-        doStatements: data.rules.doStatements.filter(s => s !== statement),
+        doStatements: data.rules.doStatements.filter((s) => s !== statement),
       },
     });
   };
@@ -1673,7 +1867,9 @@ function BrandRulesStep({ data, onChange }: StepProps) {
     onChange({
       rules: {
         ...data.rules,
-        dontStatements: data.rules.dontStatements.filter(s => s !== statement),
+        dontStatements: data.rules.dontStatements.filter(
+          (s) => s !== statement,
+        ),
       },
     });
   };
@@ -1682,7 +1878,9 @@ function BrandRulesStep({ data, onChange }: StepProps) {
     <div className="space-y-6">
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold mb-2">Brand rules</h2>
-        <p className="text-muted-foreground">Define what your brand should and shouldn't do</p>
+        <p className="text-muted-foreground">
+          Define what your brand should and shouldn't do
+        </p>
       </div>
 
       {/* Do Statements */}
@@ -1695,7 +1893,7 @@ function BrandRulesStep({ data, onChange }: StepProps) {
           <Input
             value={doInput}
             onChange={(e) => setDoInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && addDoStatement()}
+            onKeyDown={(e) => e.key === "Enter" && addDoStatement()}
             placeholder="e.g., Always use inclusive language"
             className="flex-1"
           />
@@ -1705,12 +1903,12 @@ function BrandRulesStep({ data, onChange }: StepProps) {
         </div>
         <div className="flex flex-wrap gap-2 mt-3">
           {data.rules.doStatements.map((statement, index) => (
-            <span 
-              key={index} 
+            <span
+              key={index}
               className="px-3 py-1.5 rounded-lg bg-green-500/20 text-green-700 dark:text-green-300 text-sm flex items-center gap-2"
             >
               {statement}
-              <button 
+              <button
                 onClick={() => removeDoStatement(statement)}
                 className="hover:bg-green-500/30 rounded p-0.5"
               >
@@ -1720,7 +1918,9 @@ function BrandRulesStep({ data, onChange }: StepProps) {
           ))}
         </div>
         {data.rules.doStatements.length === 0 && (
-          <p className="text-sm text-muted-foreground mt-2">No do's added yet</p>
+          <p className="text-sm text-muted-foreground mt-2">
+            No do's added yet
+          </p>
         )}
       </div>
 
@@ -1734,7 +1934,7 @@ function BrandRulesStep({ data, onChange }: StepProps) {
           <Input
             value={dontInput}
             onChange={(e) => setDontInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && addDontStatement()}
+            onKeyDown={(e) => e.key === "Enter" && addDontStatement()}
             placeholder="e.g., Never use slang or profanity"
             className="flex-1"
           />
@@ -1744,12 +1944,12 @@ function BrandRulesStep({ data, onChange }: StepProps) {
         </div>
         <div className="flex flex-wrap gap-2 mt-3">
           {data.rules.dontStatements.map((statement, index) => (
-            <span 
-              key={index} 
+            <span
+              key={index}
               className="px-3 py-1.5 rounded-lg bg-red-500/20 text-red-700 dark:text-red-300 text-sm flex items-center gap-2"
             >
               {statement}
-              <button 
+              <button
                 onClick={() => removeDontStatement(statement)}
                 className="hover:bg-red-500/30 rounded p-0.5"
               >
@@ -1759,7 +1959,9 @@ function BrandRulesStep({ data, onChange }: StepProps) {
           ))}
         </div>
         {data.rules.dontStatements.length === 0 && (
-          <p className="text-sm text-muted-foreground mt-2">No don'ts added yet</p>
+          <p className="text-sm text-muted-foreground mt-2">
+            No don'ts added yet
+          </p>
         )}
       </div>
 
@@ -1772,9 +1974,11 @@ function BrandRulesStep({ data, onChange }: StepProps) {
         <textarea
           id="legalDisclaimer"
           value={data.rules.legalDisclaimer}
-          onChange={(e) => onChange({ 
-            rules: { ...data.rules, legalDisclaimer: e.target.value } 
-          })}
+          onChange={(e) =>
+            onChange({
+              rules: { ...data.rules, legalDisclaimer: e.target.value },
+            })
+          }
           placeholder="e.g., Results may vary. Not intended to diagnose, treat, or cure any disease."
           className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
         />
@@ -1782,10 +1986,22 @@ function BrandRulesStep({ data, onChange }: StepProps) {
 
       {/* Summary */}
       <div className="p-4 rounded-lg bg-muted/50">
-        <Label className="text-xs text-muted-foreground mb-2 block">Summary</Label>
+        <Label className="text-xs text-muted-foreground mb-2 block">
+          Summary
+        </Label>
         <div className="text-sm space-y-1">
-          <p><span className="text-green-600 dark:text-green-400">{data.rules.doStatements.length}</span> do's defined</p>
-          <p><span className="text-red-600 dark:text-red-400">{data.rules.dontStatements.length}</span> don'ts defined</p>
+          <p>
+            <span className="text-green-600 dark:text-green-400">
+              {data.rules.doStatements.length}
+            </span>{" "}
+            do's defined
+          </p>
+          <p>
+            <span className="text-red-600 dark:text-red-400">
+              {data.rules.dontStatements.length}
+            </span>{" "}
+            don'ts defined
+          </p>
           {data.rules.legalDisclaimer && (
             <p className="text-muted-foreground">Legal disclaimer added</p>
           )}
@@ -1798,10 +2014,12 @@ function BrandRulesStep({ data, onChange }: StepProps) {
 function BrandAssetsStep({ data, onChange }: StepProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [uploadType, setUploadType] = useState<'characters' | 'scenes' | 'siteImages'>('characters');
-  const [newAssetName, setNewAssetName] = useState('');
-  const [newAssetDesc, setNewAssetDesc] = useState('');
-  const [newAssetType, setNewAssetType] = useState('studio');
+  const [uploadType, setUploadType] = useState<
+    "characters" | "scenes" | "siteImages"
+  >("characters");
+  const [newAssetName, setNewAssetName] = useState("");
+  const [newAssetDesc, setNewAssetDesc] = useState("");
+  const [newAssetType, setNewAssetType] = useState("studio");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const accomplish = getAccomplish();
 
@@ -1817,7 +2035,9 @@ function BrandAssetsStep({ data, onChange }: StepProps) {
         // Check file size before uploading
         if (file.size > MAX_FILE_SIZE_BYTES) {
           const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
-          setError(`File "${file.name}" is too large (${sizeMB}MB). Please use an image smaller than ${MAX_FILE_SIZE_MB}MB.`);
+          setError(
+            `File "${file.name}" is too large (${sizeMB}MB). Please use an image smaller than ${MAX_FILE_SIZE_MB}MB.`,
+          );
           continue;
         }
 
@@ -1825,7 +2045,7 @@ function BrandAssetsStep({ data, onChange }: StepProps) {
         const base64Promise = new Promise<string>((resolve, reject) => {
           reader.onload = () => {
             const result = reader.result as string;
-            const base64 = result.split(',')[1];
+            const base64 = result.split(",")[1];
             resolve(base64);
           };
           reader.onerror = reject;
@@ -1834,9 +2054,9 @@ function BrandAssetsStep({ data, onChange }: StepProps) {
         const base64 = await base64Promise;
 
         const assetTypeMap = {
-          characters: 'characters',
-          scenes: 'scenes',
-          siteImages: 'site-images',
+          characters: "characters",
+          scenes: "scenes",
+          siteImages: "site-images",
         } as const;
 
         const result = await accomplish.uploadBrandAsset(
@@ -1844,35 +2064,53 @@ function BrandAssetsStep({ data, onChange }: StepProps) {
           assetTypeMap[uploadType],
           file.name,
           file.type,
-          base64
+          base64,
         );
 
         if (result.success && result.url) {
-          if (uploadType === 'siteImages') {
+          if (uploadType === "siteImages") {
             onChange({ siteImages: [...data.siteImages, result.url] });
-          } else if (uploadType === 'characters') {
+          } else if (uploadType === "characters") {
             onChange({
-              characters: [...data.characters, { url: result.url, name: newAssetName, description: newAssetDesc }],
+              characters: [
+                ...data.characters,
+                {
+                  url: result.url,
+                  name: newAssetName,
+                  description: newAssetDesc,
+                },
+              ],
             });
           } else {
             onChange({
-              scenes: [...data.scenes, { url: result.url, name: newAssetName, description: newAssetDesc, type: newAssetType }],
+              scenes: [
+                ...data.scenes,
+                {
+                  url: result.url,
+                  name: newAssetName,
+                  description: newAssetDesc,
+                  type: newAssetType,
+                },
+              ],
             });
           }
-          setNewAssetName('');
-          setNewAssetDesc('');
+          setNewAssetName("");
+          setNewAssetDesc("");
         } else {
-          setError(humanizeUploadError(result.error || 'Failed to upload asset'));
+          setError(
+            humanizeUploadError(result.error || "Failed to upload asset"),
+          );
         }
       }
     } catch (err) {
-      console.error('Failed to upload asset:', err);
-      const errorMsg = err instanceof Error ? err.message : 'Failed to upload asset';
+      console.error("Failed to upload asset:", err);
+      const errorMsg =
+        err instanceof Error ? err.message : "Failed to upload asset";
       setError(humanizeUploadError(errorMsg));
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+        fileInputRef.current.value = "";
       }
     }
   };
@@ -1893,42 +2131,46 @@ function BrandAssetsStep({ data, onChange }: StepProps) {
     <div className="space-y-6">
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold mb-2">Visual Assets (Optional)</h2>
-        <p className="text-muted-foreground">Add characters, scenes, and reference images</p>
+        <p className="text-muted-foreground">
+          Add characters, scenes, and reference images
+        </p>
       </div>
 
       {/* Asset Type Tabs */}
       <div className="flex gap-2 border-b border-border">
-        {(['characters', 'scenes', 'siteImages'] as const).map((type) => (
+        {(["characters", "scenes", "siteImages"] as const).map((type) => (
           <button
             key={type}
             onClick={() => setUploadType(type)}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               uploadType === type
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
-            {type === 'characters' && `Characters (${data.characters.length})`}
-            {type === 'scenes' && `Scenes (${data.scenes.length})`}
-            {type === 'siteImages' && `Site Images (${data.siteImages.length})`}
+            {type === "characters" && `Characters (${data.characters.length})`}
+            {type === "scenes" && `Scenes (${data.scenes.length})`}
+            {type === "siteImages" && `Site Images (${data.siteImages.length})`}
           </button>
         ))}
       </div>
 
       {/* Metadata inputs for characters/scenes */}
-      {uploadType !== 'siteImages' && (
+      {uploadType !== "siteImages" && (
         <div className="space-y-2">
           <Input
             value={newAssetName}
             onChange={(e) => setNewAssetName(e.target.value)}
-            placeholder={uploadType === 'characters' ? 'Character name' : 'Scene name'}
+            placeholder={
+              uploadType === "characters" ? "Character name" : "Scene name"
+            }
           />
           <Input
             value={newAssetDesc}
             onChange={(e) => setNewAssetDesc(e.target.value)}
             placeholder="Description"
           />
-          {uploadType === 'scenes' && (
+          {uploadType === "scenes" && (
             <select
               value={newAssetType}
               onChange={(e) => setNewAssetType(e.target.value)}
@@ -1956,7 +2198,7 @@ function BrandAssetsStep({ data, onChange }: StepProps) {
           <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
         )}
         <p className="text-sm text-muted-foreground">
-          {isUploading ? 'Uploading...' : 'Click to upload'}
+          {isUploading ? "Uploading..." : "Click to upload"}
         </p>
         <input
           ref={fileInputRef}
@@ -1976,13 +2218,20 @@ function BrandAssetsStep({ data, onChange }: StepProps) {
       )}
 
       {/* Asset Lists */}
-      {uploadType === 'characters' && data.characters.length > 0 && (
+      {uploadType === "characters" && data.characters.length > 0 && (
         <div className="grid grid-cols-3 gap-3">
           {data.characters.map((char, index) => (
             <div key={index} className="relative group">
-              <img src={char.url} alt={char.name} className="w-full h-24 object-cover rounded-lg" />
+              <img
+                src={char.url}
+                alt={char.name}
+                className="w-full h-24 object-cover rounded-lg"
+              />
               <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
-                <button onClick={() => removeCharacter(index)} className="text-white">
+                <button
+                  onClick={() => removeCharacter(index)}
+                  className="text-white"
+                >
                   <Trash2 className="w-5 h-5" />
                 </button>
               </div>
@@ -1992,13 +2241,20 @@ function BrandAssetsStep({ data, onChange }: StepProps) {
         </div>
       )}
 
-      {uploadType === 'scenes' && data.scenes.length > 0 && (
+      {uploadType === "scenes" && data.scenes.length > 0 && (
         <div className="grid grid-cols-3 gap-3">
           {data.scenes.map((scene, index) => (
             <div key={index} className="relative group">
-              <img src={scene.url} alt={scene.name} className="w-full h-24 object-cover rounded-lg" />
+              <img
+                src={scene.url}
+                alt={scene.name}
+                className="w-full h-24 object-cover rounded-lg"
+              />
               <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
-                <button onClick={() => removeScene(index)} className="text-white">
+                <button
+                  onClick={() => removeScene(index)}
+                  className="text-white"
+                >
                   <Trash2 className="w-5 h-5" />
                 </button>
               </div>
@@ -2008,13 +2264,20 @@ function BrandAssetsStep({ data, onChange }: StepProps) {
         </div>
       )}
 
-      {uploadType === 'siteImages' && data.siteImages.length > 0 && (
+      {uploadType === "siteImages" && data.siteImages.length > 0 && (
         <div className="grid grid-cols-4 gap-2">
           {data.siteImages.map((url, index) => (
             <div key={index} className="relative group">
-              <img src={url} alt={`Site ${index + 1}`} className="w-full h-20 object-cover rounded-lg" />
+              <img
+                src={url}
+                alt={`Site ${index + 1}`}
+                className="w-full h-20 object-cover rounded-lg"
+              />
               <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
-                <button onClick={() => removeSiteImage(index)} className="text-white">
+                <button
+                  onClick={() => removeSiteImage(index)}
+                  className="text-white"
+                >
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
@@ -2027,8 +2290,8 @@ function BrandAssetsStep({ data, onChange }: StepProps) {
 }
 
 function ShopifyConnectStep({ data, onChange }: StepProps) {
-  const [shopDomain, setShopDomain] = useState('');
-  const [accessToken, setAccessToken] = useState('');
+  const [shopDomain, setShopDomain] = useState("");
+  const [accessToken, setAccessToken] = useState("");
   const [isConnecting, setIsConnecting] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2036,7 +2299,7 @@ function ShopifyConnectStep({ data, onChange }: StepProps) {
 
   const handleTestConnection = async () => {
     if (!shopDomain.trim() || !accessToken.trim()) return;
-    
+
     setIsTesting(true);
     setError(null);
     setShopName(null);
@@ -2051,10 +2314,10 @@ function ShopifyConnectStep({ data, onChange }: StepProps) {
       if (result.success && result.shop) {
         setShopName(result.shop.name);
       } else {
-        setError(result.error || 'Connection failed');
+        setError(result.error || "Connection failed");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Connection failed');
+      setError(err instanceof Error ? err.message : "Connection failed");
     } finally {
       setIsTesting(false);
     }
@@ -2068,14 +2331,14 @@ function ShopifyConnectStep({ data, onChange }: StepProps) {
 
     try {
       const accomplish = getAccomplish();
-      
+
       const testResult = await accomplish.testShopifyConnection({
         shopDomain: shopDomain.trim(),
         accessToken: accessToken.trim(),
       });
 
       if (!testResult.success) {
-        setError(testResult.error || 'Invalid credentials');
+        setError(testResult.error || "Invalid credentials");
         setIsConnecting(false);
         return;
       }
@@ -2085,13 +2348,13 @@ function ShopifyConnectStep({ data, onChange }: StepProps) {
         accessToken: accessToken.trim(),
       });
 
-      onChange({ 
+      onChange({
         shopifyConnected: true,
         shopifyStoreUrl: shopDomain.trim(),
       });
       setShopName(testResult.shop?.name || null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to connect');
+      setError(err instanceof Error ? err.message : "Failed to connect");
     } finally {
       setIsConnecting(false);
     }
@@ -2106,14 +2369,16 @@ function ShopifyConnectStep({ data, onChange }: StepProps) {
             Your store is ready to be managed by Shop OS
           </p>
         </div>
-        
+
         <div className="p-6 rounded-lg border-2 border-foreground/20 bg-foreground/5">
           <div className="text-center space-y-4">
             <div className="w-12 h-12 mx-auto rounded-full bg-foreground/10 flex items-center justify-center">
               <CheckCircle2 className="w-6 h-6 text-foreground" />
             </div>
             <div>
-              <h3 className="font-medium">{shopName || data.shopifyStoreUrl}</h3>
+              <h3 className="font-medium">
+                {shopName || data.shopifyStoreUrl}
+              </h3>
               <p className="text-sm text-muted-foreground mt-1">
                 Successfully connected to your Shopify store
               </p>
@@ -2132,7 +2397,7 @@ function ShopifyConnectStep({ data, onChange }: StepProps) {
           This allows Shop OS to read and update your products
         </p>
       </div>
-      
+
       <div className="space-y-4">
         <div>
           <Label htmlFor="shopDomain">Store Domain</Label>
@@ -2163,7 +2428,7 @@ function ShopifyConnectStep({ data, onChange }: StepProps) {
             className="mt-1.5"
           />
           <p className="text-xs text-muted-foreground mt-1.5">
-            Create a custom app in your Shopify admin to get an access token.{' '}
+            Create a custom app in your Shopify admin to get an access token.{" "}
             <a
               href="https://help.shopify.com/en/manual/apps/app-types/custom-apps"
               target="_blank"
@@ -2202,7 +2467,7 @@ function ShopifyConnectStep({ data, onChange }: StepProps) {
                 Testing...
               </>
             ) : (
-              'Test Connection'
+              "Test Connection"
             )}
           </Button>
           <Button
@@ -2228,9 +2493,15 @@ function ShopifyConnectStep({ data, onChange }: StepProps) {
   );
 }
 
-function CompleteStep({ data, brandMemory }: { data: OnboardingBrandData; brandMemory: BrandMemory | null }) {
-  const displayName = brandMemory?.name || data.name || 'Your Brand';
-  
+function CompleteStep({
+  data,
+  brandMemory,
+}: {
+  data: OnboardingBrandData;
+  brandMemory: BrandMemory | null;
+}) {
+  const displayName = brandMemory?.name || data.name || "Your Brand";
+
   return (
     <div className="text-center space-y-6">
       <div className="w-20 h-20 mx-auto rounded-full bg-foreground/10 flex items-center justify-center">
@@ -2249,33 +2520,45 @@ function CompleteStep({ data, brandMemory }: { data: OnboardingBrandData; brandM
           <div className="flex items-center gap-3">
             <div className="flex -space-x-2">
               {data.logos.slice(0, 3).map((logo, i) => (
-                <div key={i} className="w-8 h-8 rounded-full bg-white border-2 border-background overflow-hidden">
-                  <img src={logo.url} alt="" className="w-full h-full object-contain" />
+                <div
+                  key={i}
+                  className="w-8 h-8 rounded-full bg-white border-2 border-background overflow-hidden"
+                >
+                  <img
+                    src={logo.url}
+                    alt=""
+                    className="w-full h-full object-contain"
+                  />
                 </div>
               ))}
             </div>
             <span className="text-sm">{data.logos.length} logo(s)</span>
           </div>
         )}
-        
+
         {data.palette.primary.length > 0 && (
           <div className="flex items-center gap-3">
             <div className="flex -space-x-1">
               {data.palette.primary.slice(0, 5).map((color, i) => (
-                <div 
-                  key={i} 
-                  className="w-6 h-6 rounded-full border-2 border-background" 
+                <div
+                  key={i}
+                  className="w-6 h-6 rounded-full border-2 border-background"
                   style={{ backgroundColor: color.hex }}
                 />
               ))}
             </div>
-            <span className="text-sm">{data.palette.primary.length + data.palette.secondary.length} color(s)</span>
+            <span className="text-sm">
+              {data.palette.primary.length + data.palette.secondary.length}{" "}
+              color(s)
+            </span>
           </div>
         )}
 
         <div className="flex items-center gap-3">
           <MessageSquare className="w-5 h-5 text-muted-foreground" />
-          <span className="text-sm capitalize">{data.voice.template} voice</span>
+          <span className="text-sm capitalize">
+            {data.voice.template} voice
+          </span>
         </div>
 
         {data.shopifyConnected && (

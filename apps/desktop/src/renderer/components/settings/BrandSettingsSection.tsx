@@ -366,15 +366,13 @@ function BrandBasicsEditor({ brand, onSave, saving }: EditorProps) {
         />
       </div>
 
-      {hasChanges && (
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        >
-          {saving ? 'Saving...' : 'Save Changes'}
-        </button>
-      )}
+      <button
+        onClick={handleSave}
+        disabled={saving || !hasChanges}
+        className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {saving ? 'Saving...' : hasChanges ? 'Save Changes' : 'Saved'}
+      </button>
     </div>
   );
 }
@@ -607,15 +605,13 @@ function BrandColorsEditor({ brand, onSave, saving }: EditorProps) {
         </div>
       </div>
 
-      {hasChanges && (
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        >
-          {saving ? 'Saving...' : 'Save Changes'}
-        </button>
-      )}
+      <button
+        onClick={handleSave}
+        disabled={saving || !hasChanges}
+        className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {saving ? 'Saving...' : hasChanges ? 'Save Changes' : 'Saved'}
+      </button>
     </div>
   );
 }
@@ -770,15 +766,13 @@ function BrandVoiceEditor({ brand, onSave, saving }: EditorProps) {
         </div>
       </div>
 
-      {hasChanges && (
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        >
-          {saving ? 'Saving...' : 'Save Changes'}
-        </button>
-      )}
+      <button
+        onClick={handleSave}
+        disabled={saving || !hasChanges}
+        className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {saving ? 'Saving...' : hasChanges ? 'Save Changes' : 'Saved'}
+      </button>
     </div>
   );
 }
@@ -928,15 +922,13 @@ function BrandRulesEditor({ brand, onSave, saving }: EditorProps) {
         />
       </div>
 
-      {hasChanges && (
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        >
-          {saving ? 'Saving...' : 'Save Changes'}
-        </button>
-      )}
+      <button
+        onClick={handleSave}
+        disabled={saving || !hasChanges}
+        className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {saving ? 'Saving...' : hasChanges ? 'Save Changes' : 'Saved'}
+      </button>
     </div>
   );
 }
@@ -1122,15 +1114,13 @@ function BrandAssetsEditor({ brand, onSave, saving }: EditorProps) {
         </div>
       )}
 
-      {hasChanges && (
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        >
-          {saving ? 'Saving...' : 'Save Changes'}
-        </button>
-      )}
+      <button
+        onClick={handleSave}
+        disabled={saving || !hasChanges}
+        className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {saving ? 'Saving...' : hasChanges ? 'Save Changes' : 'Saved'}
+      </button>
     </div>
   );
 }

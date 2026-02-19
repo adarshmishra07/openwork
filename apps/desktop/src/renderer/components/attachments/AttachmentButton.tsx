@@ -1,4 +1,4 @@
-import { Paperclip } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface AttachmentButtonProps {
@@ -8,8 +8,8 @@ interface AttachmentButtonProps {
   attachmentCount?: number;
 }
 
-export function AttachmentButton({ 
-  onClick, 
+export function AttachmentButton({
+  onClick,
   disabled = false,
   hasAttachments = false,
   attachmentCount = 0,
@@ -20,20 +20,19 @@ export function AttachmentButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        'flex items-center gap-2 h-9 px-4 rounded-full border text-sm font-medium transition-colors',
+        'w-8 h-8 rounded-full border flex items-center justify-center transition-colors',
         disabled
-          ? 'border-border bg-muted text-muted-foreground cursor-not-allowed opacity-50'
+          ? 'border-border text-muted-foreground cursor-not-allowed opacity-40'
           : hasAttachments
             ? 'border-primary/50 bg-primary/10 text-primary hover:bg-primary/20'
-            : 'border-border bg-card text-foreground hover:bg-muted cursor-pointer'
+            : 'border-border/60 text-muted-foreground hover:text-foreground hover:border-border cursor-pointer'
       )}
       title={disabled ? 'Cannot attach files while task is running' : 'Attach files'}
     >
-      <Paperclip className="h-4 w-4" />
       {hasAttachments && attachmentCount > 0 ? (
-        <span>{attachmentCount}</span>
+        <span className="text-xs font-medium">{attachmentCount}</span>
       ) : (
-        <span>Attach</span>
+        <Plus className="h-4 w-4" />
       )}
     </button>
   );

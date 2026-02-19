@@ -1,1083 +1,1302 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Shop OS - Codebase Audit Report</title>
-  <style>
-    :root {
-      --bg-primary: #0a0a0a;
-      --bg-secondary: #141414;
-      --bg-tertiary: #1a1a1a;
-      --text-primary: #fafafa;
-      --text-secondary: #a1a1aa;
-      --text-muted: #71717a;
-      --border-color: #27272a;
-      --accent-red: #ef4444;
-      --accent-orange: #f97316;
-      --accent-yellow: #eab308;
-      --accent-green: #22c55e;
-      --accent-blue: #3b82f6;
-      --accent-purple: #a855f7;
-    }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Shop OS - Codebase Audit Report</title>
+    <style>
+      :root {
+        --bg-primary: #0a0a0a;
+        --bg-secondary: #141414;
+        --bg-tertiary: #1a1a1a;
+        --text-primary: #fafafa;
+        --text-secondary: #a1a1aa;
+        --text-muted: #71717a;
+        --border-color: #27272a;
+        --accent-red: #ef4444;
+        --accent-orange: #f97316;
+        --accent-yellow: #eab308;
+        --accent-green: #22c55e;
+        --accent-blue: #3b82f6;
+        --accent-purple: #a855f7;
+      }
 
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background: var(--bg-primary);
-      color: var(--text-primary);
-      line-height: 1.6;
-      padding: 2rem;
-    }
-
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-
-    header {
-      text-align: center;
-      margin-bottom: 3rem;
-      padding-bottom: 2rem;
-      border-bottom: 1px solid var(--border-color);
-    }
-
-    h1 {
-      font-size: 2.5rem;
-      margin-bottom: 0.5rem;
-      background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-
-    .subtitle {
-      color: var(--text-secondary);
-      font-size: 1.1rem;
-    }
-
-    .date {
-      color: var(--text-muted);
-      font-size: 0.9rem;
-      margin-top: 0.5rem;
-    }
-
-    /* Summary Cards */
-    .summary-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 1.5rem;
-      margin-bottom: 3rem;
-    }
-
-    .summary-card {
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      padding: 1.5rem;
-      text-align: center;
-    }
-
-    .summary-card.critical {
-      border-color: var(--accent-red);
-      box-shadow: 0 0 20px rgba(239, 68, 68, 0.1);
-    }
-
-    .summary-card.warning {
-      border-color: var(--accent-orange);
-    }
-
-    .summary-card.info {
-      border-color: var(--accent-blue);
-    }
-
-    .summary-card.success {
-      border-color: var(--accent-green);
-    }
-
-    .summary-number {
-      font-size: 3rem;
-      font-weight: 700;
-      margin-bottom: 0.5rem;
-    }
-
-    .summary-card.critical .summary-number { color: var(--accent-red); }
-    .summary-card.warning .summary-number { color: var(--accent-orange); }
-    .summary-card.info .summary-number { color: var(--accent-blue); }
-    .summary-card.success .summary-number { color: var(--accent-green); }
-
-    .summary-label {
-      color: var(--text-secondary);
-      font-size: 0.9rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    /* Sections */
-    section {
-      margin-bottom: 3rem;
-    }
-
-    h2 {
-      font-size: 1.5rem;
-      margin-bottom: 1rem;
-      padding-bottom: 0.5rem;
-      border-bottom: 2px solid var(--border-color);
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    h2 .badge {
-      font-size: 0.75rem;
-      padding: 0.25rem 0.75rem;
-      border-radius: 9999px;
-      font-weight: 500;
-    }
-
-    h2 .badge.high { background: var(--accent-red); color: white; }
-    h2 .badge.medium { background: var(--accent-orange); color: white; }
-    h2 .badge.low { background: var(--accent-yellow); color: black; }
-
-    h3 {
-      font-size: 1.1rem;
-      margin: 1.5rem 0 1rem;
-      color: var(--text-secondary);
-    }
-
-    /* Tables */
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 1.5rem;
-      background: var(--bg-secondary);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-
-    th, td {
-      padding: 0.75rem 1rem;
-      text-align: left;
-      border-bottom: 1px solid var(--border-color);
-    }
-
-    th {
-      background: var(--bg-tertiary);
-      font-weight: 600;
-      color: var(--text-secondary);
-      font-size: 0.85rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    tr:last-child td {
-      border-bottom: none;
-    }
-
-    tr:hover {
-      background: var(--bg-tertiary);
-    }
-
-    .severity {
-      display: inline-block;
-      padding: 0.2rem 0.5rem;
-      border-radius: 4px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-    }
-
-    .severity.high { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
-    .severity.medium { background: rgba(249, 115, 22, 0.2); color: var(--accent-orange); }
-    .severity.low { background: rgba(234, 179, 8, 0.2); color: var(--accent-yellow); }
-
-    /* Code blocks */
-    code {
-      background: var(--bg-tertiary);
-      padding: 0.2rem 0.4rem;
-      border-radius: 4px;
-      font-family: 'SF Mono', Monaco, 'Courier New', monospace;
-      font-size: 0.85rem;
-      color: var(--accent-purple);
-    }
-
-    pre {
-      background: var(--bg-tertiary);
-      padding: 1rem;
-      border-radius: 8px;
-      overflow-x: auto;
-      margin: 1rem 0;
-    }
-
-    pre code {
-      background: none;
-      padding: 0;
-    }
-
-    /* File lists */
-    .file-list {
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      padding: 1rem;
-      margin: 1rem 0;
-    }
-
-    .file-list ul {
-      list-style: none;
-      padding-left: 0;
-    }
-
-    .file-list li {
-      padding: 0.5rem 0;
-      border-bottom: 1px solid var(--border-color);
-      font-family: 'SF Mono', Monaco, 'Courier New', monospace;
-      font-size: 0.85rem;
-      color: var(--text-secondary);
-    }
-
-    .file-list li:last-child {
-      border-bottom: none;
-    }
-
-    .file-list li::before {
-      content: "- ";
-      color: var(--accent-red);
-    }
-
-    /* Recommendations */
-    .recommendation {
-      background: var(--bg-secondary);
-      border-left: 4px solid var(--accent-blue);
-      padding: 1rem 1.5rem;
-      margin: 1rem 0;
-      border-radius: 0 8px 8px 0;
-    }
-
-    .recommendation.critical {
-      border-left-color: var(--accent-red);
-    }
-
-    .recommendation.warning {
-      border-left-color: var(--accent-orange);
-    }
-
-    .recommendation h4 {
-      margin-bottom: 0.5rem;
-      color: var(--text-primary);
-    }
-
-    .recommendation p {
-      color: var(--text-secondary);
-      font-size: 0.95rem;
-    }
-
-    /* Stats */
-    .stats-bar {
-      display: flex;
-      gap: 2rem;
-      flex-wrap: wrap;
-      margin: 1.5rem 0;
-      padding: 1rem;
-      background: var(--bg-secondary);
-      border-radius: 8px;
-    }
-
-    .stat {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .stat-value {
-      font-size: 1.5rem;
-      font-weight: 700;
-      color: var(--accent-purple);
-    }
-
-    .stat-label {
-      font-size: 0.85rem;
-      color: var(--text-muted);
-    }
-
-    /* Checklist */
-    .checklist {
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      padding: 1.5rem;
-    }
-
-    .checklist-item {
-      display: flex;
-      align-items: flex-start;
-      gap: 0.75rem;
-      padding: 0.75rem 0;
-      border-bottom: 1px solid var(--border-color);
-    }
-
-    .checklist-item:last-child {
-      border-bottom: none;
-    }
-
-    .checkbox {
-      width: 20px;
-      height: 20px;
-      border: 2px solid var(--border-color);
-      border-radius: 4px;
-      flex-shrink: 0;
-      margin-top: 2px;
-    }
-
-    .checklist-content {
-      flex: 1;
-    }
-
-    .checklist-title {
-      font-weight: 600;
-      margin-bottom: 0.25rem;
-    }
-
-    .checklist-desc {
-      font-size: 0.9rem;
-      color: var(--text-secondary);
-    }
-
-    /* Footer */
-    footer {
-      margin-top: 4rem;
-      padding-top: 2rem;
-      border-top: 1px solid var(--border-color);
-      text-align: center;
-      color: var(--text-muted);
-      font-size: 0.9rem;
-    }
-
-    /* Collapsible sections */
-    details {
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      margin: 1rem 0;
-    }
-
-    summary {
-      padding: 1rem;
-      cursor: pointer;
-      font-weight: 600;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    summary:hover {
-      background: var(--bg-tertiary);
-    }
-
-    details[open] summary {
-      border-bottom: 1px solid var(--border-color);
-    }
-
-    details > div {
-      padding: 1rem;
-    }
-
-    /* Responsive */
-    @media (max-width: 768px) {
       body {
-        padding: 1rem;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        line-height: 1.6;
+        padding: 2rem;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      header {
+        text-align: center;
+        margin-bottom: 3rem;
+        padding-bottom: 2rem;
+        border-bottom: 1px solid var(--border-color);
       }
 
       h1 {
-        font-size: 1.75rem;
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
+        background: linear-gradient(
+          135deg,
+          var(--accent-purple),
+          var(--accent-blue)
+        );
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
       }
 
+      .subtitle {
+        color: var(--text-secondary);
+        font-size: 1.1rem;
+      }
+
+      .date {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        margin-top: 0.5rem;
+      }
+
+      /* Summary Cards */
       .summary-grid {
-        grid-template-columns: 1fr 1fr;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 3rem;
       }
 
+      .summary-card {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 1.5rem;
+        text-align: center;
+      }
+
+      .summary-card.critical {
+        border-color: var(--accent-red);
+        box-shadow: 0 0 20px rgba(239, 68, 68, 0.1);
+      }
+
+      .summary-card.warning {
+        border-color: var(--accent-orange);
+      }
+
+      .summary-card.info {
+        border-color: var(--accent-blue);
+      }
+
+      .summary-card.success {
+        border-color: var(--accent-green);
+      }
+
+      .summary-number {
+        font-size: 3rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+      }
+
+      .summary-card.critical .summary-number {
+        color: var(--accent-red);
+      }
+      .summary-card.warning .summary-number {
+        color: var(--accent-orange);
+      }
+      .summary-card.info .summary-number {
+        color: var(--accent-blue);
+      }
+      .summary-card.success .summary-number {
+        color: var(--accent-green);
+      }
+
+      .summary-label {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      /* Sections */
+      section {
+        margin-bottom: 3rem;
+      }
+
+      h2 {
+        font-size: 1.5rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid var(--border-color);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      h2 .badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-weight: 500;
+      }
+
+      h2 .badge.high {
+        background: var(--accent-red);
+        color: white;
+      }
+      h2 .badge.medium {
+        background: var(--accent-orange);
+        color: white;
+      }
+      h2 .badge.low {
+        background: var(--accent-yellow);
+        color: black;
+      }
+
+      h3 {
+        font-size: 1.1rem;
+        margin: 1.5rem 0 1rem;
+        color: var(--text-secondary);
+      }
+
+      /* Tables */
       table {
-        display: block;
-        overflow-x: auto;
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 1.5rem;
+        background: var(--bg-secondary);
+        border-radius: 8px;
+        overflow: hidden;
       }
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <header>
-      <h1>Shop OS Codebase Audit</h1>
-      <p class="subtitle">Pre-Client Handover Quality Assessment</p>
-      <p class="date">Generated: January 21, 2026</p>
-    </header>
 
-    <!-- Executive Summary -->
-    <section>
-      <h2>Executive Summary</h2>
-      <div class="summary-grid">
-        <div class="summary-card critical">
-          <div class="summary-number">12</div>
-          <div class="summary-label">High Severity Issues</div>
-        </div>
-        <div class="summary-card warning">
-          <div class="summary-number">27</div>
-          <div class="summary-label">Medium Severity</div>
-        </div>
-        <div class="summary-card info">
-          <div class="summary-number">14</div>
-          <div class="summary-label">Low Severity</div>
-        </div>
-        <div class="summary-card success">
-          <div class="summary-number">~3,500</div>
-          <div class="summary-label">Lines to Remove</div>
-        </div>
-      </div>
+      th,
+      td {
+        padding: 0.75rem 1rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border-color);
+      }
 
-      <div class="stats-bar">
-        <div class="stat">
-          <span class="stat-value">6</span>
-          <span class="stat-label">Dead main process files</span>
-        </div>
-        <div class="stat">
-          <span class="stat-value">20+</span>
-          <span class="stat-label">Orphaned components</span>
-        </div>
-        <div class="stat">
-          <span class="stat-value">20</span>
-          <span class="stat-label">Unused asset files</span>
-        </div>
-        <div class="stat">
-          <span class="stat-value">8</span>
-          <span class="stat-label">Unused IPC handlers</span>
-        </div>
-      </div>
-    </section>
+      th {
+        background: var(--bg-tertiary);
+        font-weight: 600;
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
 
-    <!-- Section 1: Dead Code - Main Process -->
-    <section>
-      <h2>Dead Code - Main Process <span class="badge high">HIGH</span></h2>
-      <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-        These files in <code>apps/desktop/src/main/</code> are never imported or used anywhere in the codebase. 
-        They represent ~1,500 lines of dead code that should be deleted.
-      </p>
+      tr:last-child td {
+        border-bottom: none;
+      }
 
-      <table>
-        <thead>
-          <tr>
-            <th>File Path</th>
-            <th>Lines</th>
-            <th>Description</th>
-            <th>Severity</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><code>src/main/shopify/client.ts</code></td>
-            <td>~543</td>
-            <td>Complete Shopify Admin REST API client - never imported. Shopify is handled via MCP server instead.</td>
-            <td><span class="severity high">High</span></td>
-          </tr>
-          <tr>
-            <td><code>src/main/spaces/index.ts</code></td>
-            <td>~76</td>
-            <td>Exports <code>AVAILABLE_SPACES</code>, <code>getAvailableSpaces()</code>, <code>isSpaceReady()</code> - none are used anywhere.</td>
-            <td><span class="severity high">High</span></td>
-          </tr>
-          <tr>
-            <td><code>src/main/spaces/product-photography.ts</code></td>
-            <td>~200</td>
-            <td>Fal.ai image generation implementation - never called. Spaces use Python runtime instead.</td>
-            <td><span class="severity high">High</span></td>
-          </tr>
-          <tr>
-            <td><code>src/main/spaces/catalog-generator.ts</code></td>
-            <td>~220</td>
-            <td>Catalog content generation - never called.</td>
-            <td><span class="severity high">High</span></td>
-          </tr>
-          <tr>
-            <td><code>src/main/spaces/competitor-research.ts</code></td>
-            <td>~260</td>
-            <td>Competitor research prompts - never called.</td>
-            <td><span class="severity high">High</span></td>
-          </tr>
-          <tr>
-            <td><code>src/main/prompts/system-prompt.ts</code></td>
-            <td>~192</td>
-            <td>System prompt definitions - replaced by <code>opencode/config-generator.ts</code>.</td>
-            <td><span class="severity high">High</span></td>
-          </tr>
-        </tbody>
-      </table>
+      tr:hover {
+        background: var(--bg-tertiary);
+      }
 
-      <div class="recommendation critical">
-        <h4>Recommended Action</h4>
-        <p>Delete all 6 files listed above. These were likely early implementations that were superseded by the Python space runtime and MCP server architecture.</p>
-      </div>
-    </section>
+      .severity {
+        display: inline-block;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+      }
 
-    <!-- Section 2: Orphaned Renderer Components -->
-    <section>
-      <h2>Orphaned Renderer Components <span class="badge high">HIGH</span></h2>
-      <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-        These React components are never imported or rendered anywhere in the application.
-      </p>
+      .severity.high {
+        background: rgba(239, 68, 68, 0.2);
+        color: var(--accent-red);
+      }
+      .severity.medium {
+        background: rgba(249, 115, 22, 0.2);
+        color: var(--accent-orange);
+      }
+      .severity.low {
+        background: rgba(234, 179, 8, 0.2);
+        color: var(--accent-yellow);
+      }
 
-      <h3>History Page (Not Routed)</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>File Path</th>
-            <th>Issue</th>
-            <th>Severity</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><code>src/renderer/pages/History.tsx</code></td>
-            <td>Page component exists but no route defined in <code>App.tsx</code>. Only <code>/</code> and <code>/execution/:id</code> are routed.</td>
-            <td><span class="severity high">High</span></td>
-          </tr>
-          <tr>
-            <td><code>src/renderer/components/layout/Header.tsx</code></td>
-            <td>Only imported by orphaned <code>History.tsx</code>.</td>
-            <td><span class="severity high">High</span></td>
-          </tr>
-          <tr>
-            <td><code>src/renderer/components/history/TaskHistory.tsx</code></td>
-            <td>Only imported by orphaned <code>History.tsx</code>.</td>
-            <td><span class="severity high">High</span></td>
-          </tr>
-        </tbody>
-      </table>
+      /* Code blocks */
+      code {
+        background: var(--bg-tertiary);
+        padding: 0.2rem 0.4rem;
+        border-radius: 4px;
+        font-family: "SF Mono", Monaco, "Courier New", monospace;
+        font-size: 0.85rem;
+        color: var(--accent-purple);
+      }
 
-      <h3>Unused Settings System (~19 files)</h3>
-      <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-        An entire settings system was built under <code>src/renderer/components/settings/</code> but was never integrated. 
-        The app uses <code>SettingsDialog.tsx</code> in the layout folder instead.
-      </p>
+      pre {
+        background: var(--bg-tertiary);
+        padding: 1rem;
+        border-radius: 8px;
+        overflow-x: auto;
+        margin: 1rem 0;
+      }
 
-      <details>
-        <summary>View all unused settings files (19 files) <span class="severity medium">Medium</span></summary>
-        <div>
-          <div class="file-list">
-            <ul>
-              <li>components/settings/ProviderGrid.tsx</li>
-              <li>components/settings/ProviderSettingsPanel.tsx</li>
-              <li>components/settings/ProviderCard.tsx</li>
-              <li>components/settings/hooks/useProviderSettings.ts</li>
-              <li>components/settings/shared/index.ts</li>
-              <li>components/settings/shared/ConnectionStatus.tsx</li>
-              <li>components/settings/shared/ApiKeyInput.tsx</li>
-              <li>components/settings/shared/ModelSelector.tsx</li>
-              <li>components/settings/shared/RegionSelector.tsx</li>
-              <li>components/settings/shared/ConnectButton.tsx</li>
-              <li>components/settings/shared/ConnectedControls.tsx</li>
-              <li>components/settings/shared/ProviderFormHeader.tsx</li>
-              <li>components/settings/shared/FormError.tsx</li>
-              <li>components/settings/providers/ClassicProviderForm.tsx</li>
-              <li>components/settings/providers/BedrockProviderForm.tsx</li>
-              <li>components/settings/providers/OllamaProviderForm.tsx</li>
-              <li>components/settings/providers/OpenRouterProviderForm.tsx</li>
-              <li>components/settings/providers/LiteLLMProviderForm.tsx</li>
-              <li>components/settings/providers/index.ts</li>
-            </ul>
+      pre code {
+        background: none;
+        padding: 0;
+      }
+
+      /* File lists */
+      .file-list {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 1rem;
+        margin: 1rem 0;
+      }
+
+      .file-list ul {
+        list-style: none;
+        padding-left: 0;
+      }
+
+      .file-list li {
+        padding: 0.5rem 0;
+        border-bottom: 1px solid var(--border-color);
+        font-family: "SF Mono", Monaco, "Courier New", monospace;
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+      }
+
+      .file-list li:last-child {
+        border-bottom: none;
+      }
+
+      .file-list li::before {
+        content: "- ";
+        color: var(--accent-red);
+      }
+
+      /* Recommendations */
+      .recommendation {
+        background: var(--bg-secondary);
+        border-left: 4px solid var(--accent-blue);
+        padding: 1rem 1.5rem;
+        margin: 1rem 0;
+        border-radius: 0 8px 8px 0;
+      }
+
+      .recommendation.critical {
+        border-left-color: var(--accent-red);
+      }
+
+      .recommendation.warning {
+        border-left-color: var(--accent-orange);
+      }
+
+      .recommendation h4 {
+        margin-bottom: 0.5rem;
+        color: var(--text-primary);
+      }
+
+      .recommendation p {
+        color: var(--text-secondary);
+        font-size: 0.95rem;
+      }
+
+      /* Stats */
+      .stats-bar {
+        display: flex;
+        gap: 2rem;
+        flex-wrap: wrap;
+        margin: 1.5rem 0;
+        padding: 1rem;
+        background: var(--bg-secondary);
+        border-radius: 8px;
+      }
+
+      .stat {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .stat-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--accent-purple);
+      }
+
+      .stat-label {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+      }
+
+      /* Checklist */
+      .checklist {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 1.5rem;
+      }
+
+      .checklist-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      .checklist-item:last-child {
+        border-bottom: none;
+      }
+
+      .checkbox {
+        width: 20px;
+        height: 20px;
+        border: 2px solid var(--border-color);
+        border-radius: 4px;
+        flex-shrink: 0;
+        margin-top: 2px;
+      }
+
+      .checklist-content {
+        flex: 1;
+      }
+
+      .checklist-title {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+      }
+
+      .checklist-desc {
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+      }
+
+      /* Footer */
+      footer {
+        margin-top: 4rem;
+        padding-top: 2rem;
+        border-top: 1px solid var(--border-color);
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 0.9rem;
+      }
+
+      /* Collapsible sections */
+      details {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        margin: 1rem 0;
+      }
+
+      summary {
+        padding: 1rem;
+        cursor: pointer;
+        font-weight: 600;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      summary:hover {
+        background: var(--bg-tertiary);
+      }
+
+      details[open] summary {
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      details > div {
+        padding: 1rem;
+      }
+
+      /* Responsive */
+      @media (max-width: 768px) {
+        body {
+          padding: 1rem;
+        }
+
+        h1 {
+          font-size: 1.75rem;
+        }
+
+        .summary-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        table {
+          display: block;
+          overflow-x: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Shop OS Codebase Audit</h1>
+        <p class="subtitle">Pre-Client Handover Quality Assessment</p>
+        <p class="date">Generated: January 21, 2026</p>
+      </header>
+
+      <!-- Executive Summary -->
+      <section>
+        <h2>Executive Summary</h2>
+        <div class="summary-grid">
+          <div class="summary-card critical">
+            <div class="summary-number">12</div>
+            <div class="summary-label">High Severity Issues</div>
           </div>
-          <div class="recommendation warning">
-            <h4>Decision Required</h4>
-            <p>Either integrate this new settings system (it appears more modular) OR delete the entire <code>components/settings/</code> folder. Currently there are two complete settings implementations causing confusion.</p>
+          <div class="summary-card warning">
+            <div class="summary-number">27</div>
+            <div class="summary-label">Medium Severity</div>
+          </div>
+          <div class="summary-card info">
+            <div class="summary-number">14</div>
+            <div class="summary-label">Low Severity</div>
+          </div>
+          <div class="summary-card success">
+            <div class="summary-number">~3,500</div>
+            <div class="summary-label">Lines to Remove</div>
           </div>
         </div>
-      </details>
 
-      <h3>Unused shadcn/ui Components</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>Component</th>
-            <th>Status</th>
-            <th>Severity</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><code>components/ui/skeleton.tsx</code></td>
-            <td>Never imported</td>
-            <td><span class="severity medium">Medium</span></td>
-          </tr>
-          <tr>
-            <td><code>components/ui/dropdown-menu.tsx</code></td>
-            <td>Never imported</td>
-            <td><span class="severity medium">Medium</span></td>
-          </tr>
-          <tr>
-            <td><code>components/ui/separator.tsx</code></td>
-            <td>Never imported</td>
-            <td><span class="severity medium">Medium</span></td>
-          </tr>
-          <tr>
-            <td><code>components/ui/avatar.tsx</code></td>
-            <td>Never imported</td>
-            <td><span class="severity medium">Medium</span></td>
-          </tr>
-          <tr>
-            <td><code>components/ui/textarea.tsx</code></td>
-            <td>Never imported (native textarea used)</td>
-            <td><span class="severity low">Low</span></td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
-    <!-- Section 3: Unused IPC Handlers -->
-    <section>
-      <h2>Unused IPC Handlers <span class="badge medium">MEDIUM</span></h2>
-      <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-        These IPC handlers are registered in the main process but never called from the renderer.
-      </p>
-
-      <table>
-        <thead>
-          <tr>
-            <th>Handler Name</th>
-            <th>Exposed As</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><code>space-runtime:match</code></td>
-            <td><code>matchPromptToSpace()</code></td>
-            <td>Registered but never called from renderer</td>
-          </tr>
-          <tr>
-            <td><code>space-runtime:suggestions</code></td>
-            <td><code>getSuggestedSpaces()</code></td>
-            <td>Registered but never called from renderer</td>
-          </tr>
-          <tr>
-            <td><code>space-runtime:is-available</code></td>
-            <td><code>isSpaceRuntimeAvailable()</code></td>
-            <td>Registered but never called from renderer</td>
-          </tr>
-          <tr>
-            <td><code>space-runtime:list-remote</code></td>
-            <td><code>listRemoteSpaces()</code></td>
-            <td>Registered but never called from renderer</td>
-          </tr>
-          <tr>
-            <td><code>space-runtime:execute</code></td>
-            <td><code>executeSpace()</code></td>
-            <td>Registered but never called from renderer</td>
-          </tr>
-          <tr>
-            <td><code>space-runtime:registry</code></td>
-            <td><code>getLocalSpaceRegistry()</code></td>
-            <td>Registered but never called from renderer</td>
-          </tr>
-          <tr>
-            <td><code>opencode:check</code></td>
-            <td><code>checkOpenCodeCli()</code></td>
-            <td>Only in type definitions, never called</td>
-          </tr>
-          <tr>
-            <td><code>opencode:version</code></td>
-            <td><code>getOpenCodeVersion()</code></td>
-            <td>Only in type definitions, never called</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div class="recommendation warning">
-        <h4>Recommended Action</h4>
-        <p>Either implement UI features that use these handlers (e.g., a space selector UI) or remove the handlers to reduce code complexity. The space-runtime handlers suggest a planned feature that was never completed.</p>
-      </div>
-    </section>
-
-    <!-- Section 4: Architecture Issues -->
-    <section>
-      <h2>Architecture Issues <span class="badge high">HIGH</span></h2>
-
-      <h3>Dual Space Registry Problem</h3>
-      <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-        Two separate space registry systems exist and don't work together:
-      </p>
-
-      <table>
-        <thead>
-          <tr>
-            <th>Registry</th>
-            <th>Location</th>
-            <th>Spaces Defined</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><code>SPACE_REGISTRY</code></td>
-            <td><code>src/main/spaces/space-registry.ts</code></td>
-            <td>product-swap, steal-the-look, sketch-to-product, background-remover, store-display-banner</td>
-            <td><span class="severity high">Used by space-selector</span></td>
-          </tr>
-          <tr>
-            <td><code>AVAILABLE_SPACES</code></td>
-            <td><code>src/main/spaces/index.ts</code></td>
-            <td>product-photography, catalog-generator, competitor-research, shopify-manager</td>
-            <td><span class="severity high">Never accessed</span></td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div class="recommendation critical">
-        <h4>Critical Issue</h4>
-        <p>The <code>AVAILABLE_SPACES</code> registry defines local TypeScript implementations that are NEVER matched by the space-selector because it only uses <code>SPACE_REGISTRY</code>. This is dead code masquerading as a feature.</p>
-      </div>
-
-      <h3>Missing Backend Implementation</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>Space</th>
-            <th>Desktop Registry</th>
-            <th>Python Backend</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><code>store-display-banner</code></td>
-            <td>Defined in space-registry.ts</td>
-            <td>Not implemented</td>
-            <td><span class="severity high">Will fail if selected</span></td>
-          </tr>
-        </tbody>
-      </table>
-
-      <h3>Registry Sync Issue</h3>
-      <p style="color: var(--text-secondary);">
-        The comment in <code>space-registry.ts</code> says "kept in sync with services/space-runtime/spaces/registry.json" but they are NOT in sync:
-      </p>
-      <ul style="color: var(--text-secondary); margin: 1rem 0; padding-left: 1.5rem;">
-        <li>Python registry: 4 spaces (product-swap, steal-the-look, sketch-to-product, background-remover)</li>
-        <li>Desktop registry: 5 spaces (adds store-display-banner)</li>
-      </ul>
-    </section>
-
-    <!-- Section 5: Unused Assets -->
-    <section>
-      <h2>Unused Assets <span class="badge low">LOW</span></h2>
-      <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-        These image files in <code>public/assets/</code> are not imported anywhere in the codebase.
-      </p>
-
-      <details>
-        <summary>View unused usecase images (20 files)</summary>
-        <div>
-          <div class="file-list">
-            <ul>
-              <li>public/assets/usecases/clean-data-output.webp</li>
-              <li>public/assets/usecases/staging-vs-prod-visual.png</li>
-              <li>public/assets/usecases/job-application-automation.png</li>
-              <li>public/assets/usecases/document-translation.webp</li>
-              <li>public/assets/usecases/polish-writing.webp</li>
-              <li>public/assets/usecases/event-calendar-builder.png</li>
-              <li>public/assets/usecases/calendar-events.webp</li>
-              <li>public/assets/usecases/inbox-promo-cleanup.png</li>
-              <li>public/assets/usecases/personal-website.webp</li>
-              <li>public/assets/usecases/portfolio-presentation.webp</li>
-              <li>public/assets/usecases/export-to-table.webp</li>
-              <li>public/assets/usecases/stock-portfolio-alerts.png</li>
-              <li>public/assets/usecases/professional-emails.webp</li>
-              <li>public/assets/usecases/organize-data.webp</li>
-              <li>public/assets/usecases/prod-broken-links.png</li>
-              <li>public/assets/usecases/notion-api-audit.png</li>
-              <li>public/assets/usecases/career-document.webp</li>
-              <li>public/assets/usecases/localize-content.webp</li>
-              <li>public/assets/usecases/calendar-prep-notes.png</li>
-              <li>public/assets/usecases/automated-reminders.webp</li>
-            </ul>
+        <div class="stats-bar">
+          <div class="stat">
+            <span class="stat-value">6</span>
+            <span class="stat-label">Dead main process files</span>
           </div>
-          <p style="color: var(--text-secondary); margin-top: 1rem;">
-            <strong>Used images (9):</strong> ai-image-wizard.webp, competitor-pricing-deck.png, landing-page-copy.webp, course-announcement.webp, professional-headshot.webp, pitch-deck.webp, custom-web-tool.webp, bilingual-output.webp, batch-file-renaming.webp
+          <div class="stat">
+            <span class="stat-value">20+</span>
+            <span class="stat-label">Orphaned components</span>
+          </div>
+          <div class="stat">
+            <span class="stat-value">20</span>
+            <span class="stat-label">Unused asset files</span>
+          </div>
+          <div class="stat">
+            <span class="stat-value">8</span>
+            <span class="stat-label">Unused IPC handlers</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 1: Dead Code - Main Process -->
+      <section>
+        <h2>Dead Code - Main Process <span class="badge high">HIGH</span></h2>
+        <p style="color: var(--text-secondary); margin-bottom: 1rem">
+          These files in <code>apps/desktop/src/main/</code> are never imported
+          or used anywhere in the codebase. They represent ~1,500 lines of dead
+          code that should be deleted.
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>File Path</th>
+              <th>Lines</th>
+              <th>Description</th>
+              <th>Severity</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>src/main/shopify/client.ts</code></td>
+              <td>~543</td>
+              <td>
+                Complete Shopify Admin REST API client - never imported. Shopify
+                is handled via MCP server instead.
+              </td>
+              <td><span class="severity high">High</span></td>
+            </tr>
+            <tr>
+              <td><code>src/main/spaces/index.ts</code></td>
+              <td>~76</td>
+              <td>
+                Exports <code>AVAILABLE_SPACES</code>,
+                <code>getAvailableSpaces()</code>, <code>isSpaceReady()</code> -
+                none are used anywhere.
+              </td>
+              <td><span class="severity high">High</span></td>
+            </tr>
+            <tr>
+              <td><code>src/main/spaces/product-photography.ts</code></td>
+              <td>~200</td>
+              <td>
+                Fal.ai image generation implementation - never called. Spaces
+                use Python runtime instead.
+              </td>
+              <td><span class="severity high">High</span></td>
+            </tr>
+            <tr>
+              <td><code>src/main/spaces/catalog-generator.ts</code></td>
+              <td>~220</td>
+              <td>Catalog content generation - never called.</td>
+              <td><span class="severity high">High</span></td>
+            </tr>
+            <tr>
+              <td><code>src/main/spaces/competitor-research.ts</code></td>
+              <td>~260</td>
+              <td>Competitor research prompts - never called.</td>
+              <td><span class="severity high">High</span></td>
+            </tr>
+            <tr>
+              <td><code>src/main/prompts/system-prompt.ts</code></td>
+              <td>~192</td>
+              <td>
+                System prompt definitions - replaced by
+                <code>opencode/config-generator.ts</code>.
+              </td>
+              <td><span class="severity high">High</span></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="recommendation critical">
+          <h4>Recommended Action</h4>
+          <p>
+            Delete all 6 files listed above. These were likely early
+            implementations that were superseded by the Python space runtime and
+            MCP server architecture.
           </p>
         </div>
-      </details>
+      </section>
 
-      <details>
-        <summary>View other unused assets (2 files)</summary>
-        <div>
-          <div class="file-list">
-            <ul>
-              <li>public/assets/logo-1.png (logo.png and shopos-logo.png are used instead)</li>
-              <li>public/assets/ai-logos/provider-logos.svg</li>
-            </ul>
+      <!-- Section 2: Orphaned Renderer Components -->
+      <section>
+        <h2>
+          Orphaned Renderer Components <span class="badge high">HIGH</span>
+        </h2>
+        <p style="color: var(--text-secondary); margin-bottom: 1rem">
+          These React components are never imported or rendered anywhere in the
+          application.
+        </p>
+
+        <h3>History Page (Not Routed)</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>File Path</th>
+              <th>Issue</th>
+              <th>Severity</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>src/renderer/pages/History.tsx</code></td>
+              <td>
+                Page component exists but no route defined in
+                <code>App.tsx</code>. Only <code>/</code> and
+                <code>/execution/:id</code> are routed.
+              </td>
+              <td><span class="severity high">High</span></td>
+            </tr>
+            <tr>
+              <td><code>src/renderer/components/layout/Header.tsx</code></td>
+              <td>Only imported by orphaned <code>History.tsx</code>.</td>
+              <td><span class="severity high">High</span></td>
+            </tr>
+            <tr>
+              <td>
+                <code>src/renderer/components/history/TaskHistory.tsx</code>
+              </td>
+              <td>Only imported by orphaned <code>History.tsx</code>.</td>
+              <td><span class="severity high">High</span></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Unused Settings System (~19 files)</h3>
+        <p style="color: var(--text-secondary); margin-bottom: 1rem">
+          An entire settings system was built under
+          <code>src/renderer/components/settings/</code> but was never
+          integrated. The app uses <code>SettingsDialog.tsx</code> in the layout
+          folder instead.
+        </p>
+
+        <details>
+          <summary>
+            View all unused settings files (19 files)
+            <span class="severity medium">Medium</span>
+          </summary>
+          <div>
+            <div class="file-list">
+              <ul>
+                <li>components/settings/ProviderGrid.tsx</li>
+                <li>components/settings/ProviderSettingsPanel.tsx</li>
+                <li>components/settings/ProviderCard.tsx</li>
+                <li>components/settings/hooks/useProviderSettings.ts</li>
+                <li>components/settings/shared/index.ts</li>
+                <li>components/settings/shared/ConnectionStatus.tsx</li>
+                <li>components/settings/shared/ApiKeyInput.tsx</li>
+                <li>components/settings/shared/ModelSelector.tsx</li>
+                <li>components/settings/shared/RegionSelector.tsx</li>
+                <li>components/settings/shared/ConnectButton.tsx</li>
+                <li>components/settings/shared/ConnectedControls.tsx</li>
+                <li>components/settings/shared/ProviderFormHeader.tsx</li>
+                <li>components/settings/shared/FormError.tsx</li>
+                <li>components/settings/providers/ClassicProviderForm.tsx</li>
+                <li>components/settings/providers/BedrockProviderForm.tsx</li>
+                <li>components/settings/providers/OllamaProviderForm.tsx</li>
+                <li>
+                  components/settings/providers/OpenRouterProviderForm.tsx
+                </li>
+                <li>components/settings/providers/LiteLLMProviderForm.tsx</li>
+                <li>components/settings/providers/index.ts</li>
+              </ul>
+            </div>
+            <div class="recommendation warning">
+              <h4>Decision Required</h4>
+              <p>
+                Either integrate this new settings system (it appears more
+                modular) OR delete the entire
+                <code>components/settings/</code> folder. Currently there are
+                two complete settings implementations causing confusion.
+              </p>
+            </div>
           </div>
+        </details>
+
+        <h3>Unused shadcn/ui Components</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Component</th>
+              <th>Status</th>
+              <th>Severity</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>components/ui/skeleton.tsx</code></td>
+              <td>Never imported</td>
+              <td><span class="severity medium">Medium</span></td>
+            </tr>
+            <tr>
+              <td><code>components/ui/dropdown-menu.tsx</code></td>
+              <td>Never imported</td>
+              <td><span class="severity medium">Medium</span></td>
+            </tr>
+            <tr>
+              <td><code>components/ui/separator.tsx</code></td>
+              <td>Never imported</td>
+              <td><span class="severity medium">Medium</span></td>
+            </tr>
+            <tr>
+              <td><code>components/ui/avatar.tsx</code></td>
+              <td>Never imported</td>
+              <td><span class="severity medium">Medium</span></td>
+            </tr>
+            <tr>
+              <td><code>components/ui/textarea.tsx</code></td>
+              <td>Never imported (native textarea used)</td>
+              <td><span class="severity low">Low</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Section 3: Unused IPC Handlers -->
+      <section>
+        <h2>Unused IPC Handlers <span class="badge medium">MEDIUM</span></h2>
+        <p style="color: var(--text-secondary); margin-bottom: 1rem">
+          These IPC handlers are registered in the main process but never called
+          from the renderer.
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Handler Name</th>
+              <th>Exposed As</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>space-runtime:match</code></td>
+              <td><code>matchPromptToSpace()</code></td>
+              <td>Registered but never called from renderer</td>
+            </tr>
+            <tr>
+              <td><code>space-runtime:suggestions</code></td>
+              <td><code>getSuggestedSpaces()</code></td>
+              <td>Registered but never called from renderer</td>
+            </tr>
+            <tr>
+              <td><code>space-runtime:is-available</code></td>
+              <td><code>isSpaceRuntimeAvailable()</code></td>
+              <td>Registered but never called from renderer</td>
+            </tr>
+            <tr>
+              <td><code>space-runtime:list-remote</code></td>
+              <td><code>listRemoteSpaces()</code></td>
+              <td>Registered but never called from renderer</td>
+            </tr>
+            <tr>
+              <td><code>space-runtime:execute</code></td>
+              <td><code>executeSpace()</code></td>
+              <td>Registered but never called from renderer</td>
+            </tr>
+            <tr>
+              <td><code>space-runtime:registry</code></td>
+              <td><code>getLocalSpaceRegistry()</code></td>
+              <td>Registered but never called from renderer</td>
+            </tr>
+            <tr>
+              <td><code>opencode:check</code></td>
+              <td><code>checkOpenCodeCli()</code></td>
+              <td>Only in type definitions, never called</td>
+            </tr>
+            <tr>
+              <td><code>opencode:version</code></td>
+              <td><code>getOpenCodeVersion()</code></td>
+              <td>Only in type definitions, never called</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="recommendation warning">
+          <h4>Recommended Action</h4>
+          <p>
+            Either implement UI features that use these handlers (e.g., a space
+            selector UI) or remove the handlers to reduce code complexity. The
+            space-runtime handlers suggest a planned feature that was never
+            completed.
+          </p>
         </div>
-      </details>
-    </section>
+      </section>
 
-    <!-- Section 6: Structural Issues -->
-    <section>
-      <h2>Structural Issues <span class="badge low">LOW</span></h2>
+      <!-- Section 4: Architecture Issues -->
+      <section>
+        <h2>Architecture Issues <span class="badge high">HIGH</span></h2>
 
-      <h3>Naming Inconsistencies</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>Location</th>
-            <th>Issue</th>
-            <th>Recommendation</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><code>components/TaskLauncher/</code></td>
-            <td>Uses PascalCase while all other folders use kebab-case</td>
-            <td>Rename to <code>task-launcher/</code></td>
-          </tr>
-          <tr>
-            <td><code>src/main/opencode/</code></td>
-            <td>AGENTS.md documents it as <code>Claude/</code></td>
-            <td>Update AGENTS.md to say <code>opencode/</code></td>
-          </tr>
-        </tbody>
-      </table>
+        <h3>Dual Space Registry Problem</h3>
+        <p style="color: var(--text-secondary); margin-bottom: 1rem">
+          Two separate space registry systems exist and don't work together:
+        </p>
 
-      <h3>Test File Organization</h3>
-      <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-        Test files are inconsistently placed. Some are in <code>__tests__/unit/</code> and <code>__tests__/integration/</code>, others are directly in <code>__tests__/main/</code>.
-      </p>
-      <div class="file-list">
-        <ul>
-          <li>__tests__/main/opencode/stream-parser.unit.test.ts (should be in __tests__/unit/main/)</li>
-          <li>__tests__/main/config.unit.test.ts (should be in __tests__/unit/main/)</li>
-          <li>__tests__/main/ipc/handlers-utils.unit.test.ts (should be in __tests__/unit/main/ipc/)</li>
-          <li>__tests__/main/ipc/validation.unit.test.ts (should be in __tests__/unit/main/ipc/)</li>
-          <li>__tests__/renderer/lib/utils.unit.test.ts (should be in __tests__/unit/renderer/lib/)</li>
+        <table>
+          <thead>
+            <tr>
+              <th>Registry</th>
+              <th>Location</th>
+              <th>Spaces Defined</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>SPACE_REGISTRY</code></td>
+              <td><code>src/main/spaces/space-registry.ts</code></td>
+              <td>
+                product-swap, steal-the-look, sketch-to-product,
+                background-remover, store-display-banner
+              </td>
+              <td><span class="severity high">Used by space-selector</span></td>
+            </tr>
+            <tr>
+              <td><code>AVAILABLE_SPACES</code></td>
+              <td><code>src/main/spaces/index.ts</code></td>
+              <td>
+                product-photography, catalog-generator, competitor-research,
+                shopify-manager
+              </td>
+              <td><span class="severity high">Never accessed</span></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="recommendation critical">
+          <h4>Critical Issue</h4>
+          <p>
+            The <code>AVAILABLE_SPACES</code> registry defines local TypeScript
+            implementations that are NEVER matched by the space-selector because
+            it only uses <code>SPACE_REGISTRY</code>. This is dead code
+            masquerading as a feature.
+          </p>
+        </div>
+
+        <h3>Missing Backend Implementation</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Space</th>
+              <th>Desktop Registry</th>
+              <th>Python Backend</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>store-display-banner</code></td>
+              <td>Defined in space-registry.ts</td>
+              <td>Not implemented</td>
+              <td><span class="severity high">Will fail if selected</span></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Registry Sync Issue</h3>
+        <p style="color: var(--text-secondary)">
+          The comment in <code>space-registry.ts</code> says "kept in sync with
+          services/space-runtime/spaces/registry.json" but they are NOT in sync:
+        </p>
+        <ul
+          style="
+            color: var(--text-secondary);
+            margin: 1rem 0;
+            padding-left: 1.5rem;
+          "
+        >
+          <li>
+            Python registry: 4 spaces (product-swap, steal-the-look,
+            sketch-to-product, background-remover)
+          </li>
+          <li>Desktop registry: 5 spaces (adds store-display-banner)</li>
         </ul>
-      </div>
+      </section>
 
-      <h3>Vitest Config Redundancy</h3>
-      <p style="color: var(--text-secondary);">
-        Three Vitest config files (<code>vitest.config.ts</code>, <code>vitest.unit.config.ts</code>, <code>vitest.integration.config.ts</code>) 
-        duplicate ~80% of their configuration. They should use <code>mergeConfig()</code> to extend a base config.
-      </p>
-    </section>
+      <!-- Section 5: Unused Assets -->
+      <section>
+        <h2>Unused Assets <span class="badge low">LOW</span></h2>
+        <p style="color: var(--text-secondary); margin-bottom: 1rem">
+          These image files in <code>public/assets/</code> are not imported
+          anywhere in the codebase.
+        </p>
 
-    <!-- Section 7: Skills Audit -->
-    <section>
-      <h2>Skills Audit <span class="badge low">LOW</span></h2>
+        <details>
+          <summary>View unused usecase images (20 files)</summary>
+          <div>
+            <div class="file-list">
+              <ul>
+                <li>public/assets/usecases/clean-data-output.webp</li>
+                <li>public/assets/usecases/staging-vs-prod-visual.png</li>
+                <li>public/assets/usecases/job-application-automation.png</li>
+                <li>public/assets/usecases/document-translation.webp</li>
+                <li>public/assets/usecases/polish-writing.webp</li>
+                <li>public/assets/usecases/event-calendar-builder.png</li>
+                <li>public/assets/usecases/calendar-events.webp</li>
+                <li>public/assets/usecases/inbox-promo-cleanup.png</li>
+                <li>public/assets/usecases/personal-website.webp</li>
+                <li>public/assets/usecases/portfolio-presentation.webp</li>
+                <li>public/assets/usecases/export-to-table.webp</li>
+                <li>public/assets/usecases/stock-portfolio-alerts.png</li>
+                <li>public/assets/usecases/professional-emails.webp</li>
+                <li>public/assets/usecases/organize-data.webp</li>
+                <li>public/assets/usecases/prod-broken-links.png</li>
+                <li>public/assets/usecases/notion-api-audit.png</li>
+                <li>public/assets/usecases/career-document.webp</li>
+                <li>public/assets/usecases/localize-content.webp</li>
+                <li>public/assets/usecases/calendar-prep-notes.png</li>
+                <li>public/assets/usecases/automated-reminders.webp</li>
+              </ul>
+            </div>
+            <p style="color: var(--text-secondary); margin-top: 1rem">
+              <strong>Used images (9):</strong> ai-image-wizard.webp,
+              competitor-pricing-deck.png, landing-page-copy.webp,
+              course-announcement.webp, professional-headshot.webp,
+              pitch-deck.webp, custom-web-tool.webp, bilingual-output.webp,
+              batch-file-renaming.webp
+            </p>
+          </div>
+        </details>
 
-      <h3>Skill Registration Status</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>Skill</th>
-            <th>Type</th>
-            <th>Registered</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><code>dev-browser-mcp</code></td>
-            <td>MCP Server</td>
-            <td>config-generator.ts</td>
-            <td><span class="severity" style="background: rgba(34, 197, 94, 0.2); color: var(--accent-green);">Active</span></td>
-          </tr>
-          <tr>
-            <td><code>dev-browser</code></td>
-            <td>Browser Server</td>
-            <td>task-manager.ts</td>
-            <td><span class="severity" style="background: rgba(34, 197, 94, 0.2); color: var(--accent-green);">Active</span></td>
-          </tr>
-          <tr>
-            <td><code>file-permission</code></td>
-            <td>MCP Server</td>
-            <td>config-generator.ts</td>
-            <td><span class="severity" style="background: rgba(34, 197, 94, 0.2); color: var(--accent-green);">Active</span></td>
-          </tr>
-          <tr>
-            <td><code>ask-user-question</code></td>
-            <td>MCP Server</td>
-            <td>config-generator.ts</td>
-            <td><span class="severity" style="background: rgba(34, 197, 94, 0.2); color: var(--accent-green);">Active</span></td>
-          </tr>
-          <tr>
-            <td><code>skill-loader</code></td>
-            <td>MCP Server</td>
-            <td>config-generator.ts</td>
-            <td><span class="severity" style="background: rgba(34, 197, 94, 0.2); color: var(--accent-green);">Active</span></td>
-          </tr>
-          <tr>
-            <td><code>shopify</code></td>
-            <td>MCP Server</td>
-            <td>config-generator.ts (conditional)</td>
-            <td><span class="severity" style="background: rgba(34, 197, 94, 0.2); color: var(--accent-green);">Active</span></td>
-          </tr>
-          <tr>
-            <td><code>marketing-skills/*</code></td>
-            <td>SKILL.md files (23)</td>
-            <td>skill-loader</td>
-            <td><span class="severity" style="background: rgba(34, 197, 94, 0.2); color: var(--accent-green);">Active</span></td>
-          </tr>
-          <tr>
-            <td><code>safe-file-deletion</code></td>
-            <td>SKILL.md only</td>
-            <td>Not registered</td>
-            <td><span class="severity low">Orphaned</span></td>
-          </tr>
-        </tbody>
-      </table>
+        <details>
+          <summary>View other unused assets (2 files)</summary>
+          <div>
+            <div class="file-list">
+              <ul>
+                <li>
+                  public/assets/logo-1.png (logo.png and shopos-logo.svg are
+                  used instead)
+                </li>
+                <li>public/assets/ai-logos/provider-logos.svg</li>
+              </ul>
+            </div>
+          </div>
+        </details>
+      </section>
 
-      <div class="recommendation">
-        <h4>Note</h4>
-        <p>The <code>safe-file-deletion</code> skill has a SKILL.md file but is not in the <code>marketing-skills/</code> folder, so the skill-loader doesn't load it. Either move it to marketing-skills or remove it.</p>
-      </div>
-    </section>
+      <!-- Section 6: Structural Issues -->
+      <section>
+        <h2>Structural Issues <span class="badge low">LOW</span></h2>
 
-    <!-- Cleanup Checklist -->
-    <section>
-      <h2>Cleanup Checklist</h2>
-      <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
-        Prioritized actions to clean up the codebase before client handover.
-      </p>
+        <h3>Naming Inconsistencies</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Location</th>
+              <th>Issue</th>
+              <th>Recommendation</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>components/TaskLauncher/</code></td>
+              <td>Uses PascalCase while all other folders use kebab-case</td>
+              <td>Rename to <code>task-launcher/</code></td>
+            </tr>
+            <tr>
+              <td><code>src/main/opencode/</code></td>
+              <td>AGENTS.md documents it as <code>Claude/</code></td>
+              <td>Update AGENTS.md to say <code>opencode/</code></td>
+            </tr>
+          </tbody>
+        </table>
 
-      <div class="checklist">
-        <div class="checklist-item">
-          <div class="checkbox"></div>
-          <div class="checklist-content">
-            <div class="checklist-title">1. Delete dead main process files (~1,500 lines)</div>
-            <div class="checklist-desc">
-              Remove: <code>shopify/client.ts</code>, <code>spaces/index.ts</code>, <code>spaces/product-photography.ts</code>, 
-              <code>spaces/catalog-generator.ts</code>, <code>spaces/competitor-research.ts</code>, <code>prompts/system-prompt.ts</code>
+        <h3>Test File Organization</h3>
+        <p style="color: var(--text-secondary); margin-bottom: 1rem">
+          Test files are inconsistently placed. Some are in
+          <code>__tests__/unit/</code> and <code>__tests__/integration/</code>,
+          others are directly in <code>__tests__/main/</code>.
+        </p>
+        <div class="file-list">
+          <ul>
+            <li>
+              __tests__/main/opencode/stream-parser.unit.test.ts (should be in
+              __tests__/unit/main/)
+            </li>
+            <li>
+              __tests__/main/config.unit.test.ts (should be in
+              __tests__/unit/main/)
+            </li>
+            <li>
+              __tests__/main/ipc/handlers-utils.unit.test.ts (should be in
+              __tests__/unit/main/ipc/)
+            </li>
+            <li>
+              __tests__/main/ipc/validation.unit.test.ts (should be in
+              __tests__/unit/main/ipc/)
+            </li>
+            <li>
+              __tests__/renderer/lib/utils.unit.test.ts (should be in
+              __tests__/unit/renderer/lib/)
+            </li>
+          </ul>
+        </div>
+
+        <h3>Vitest Config Redundancy</h3>
+        <p style="color: var(--text-secondary)">
+          Three Vitest config files (<code>vitest.config.ts</code>,
+          <code>vitest.unit.config.ts</code>,
+          <code>vitest.integration.config.ts</code>) duplicate ~80% of their
+          configuration. They should use <code>mergeConfig()</code> to extend a
+          base config.
+        </p>
+      </section>
+
+      <!-- Section 7: Skills Audit -->
+      <section>
+        <h2>Skills Audit <span class="badge low">LOW</span></h2>
+
+        <h3>Skill Registration Status</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Skill</th>
+              <th>Type</th>
+              <th>Registered</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>dev-browser-mcp</code></td>
+              <td>MCP Server</td>
+              <td>config-generator.ts</td>
+              <td>
+                <span
+                  class="severity"
+                  style="
+                    background: rgba(34, 197, 94, 0.2);
+                    color: var(--accent-green);
+                  "
+                  >Active</span
+                >
+              </td>
+            </tr>
+            <tr>
+              <td><code>dev-browser</code></td>
+              <td>Browser Server</td>
+              <td>task-manager.ts</td>
+              <td>
+                <span
+                  class="severity"
+                  style="
+                    background: rgba(34, 197, 94, 0.2);
+                    color: var(--accent-green);
+                  "
+                  >Active</span
+                >
+              </td>
+            </tr>
+            <tr>
+              <td><code>file-permission</code></td>
+              <td>MCP Server</td>
+              <td>config-generator.ts</td>
+              <td>
+                <span
+                  class="severity"
+                  style="
+                    background: rgba(34, 197, 94, 0.2);
+                    color: var(--accent-green);
+                  "
+                  >Active</span
+                >
+              </td>
+            </tr>
+            <tr>
+              <td><code>ask-user-question</code></td>
+              <td>MCP Server</td>
+              <td>config-generator.ts</td>
+              <td>
+                <span
+                  class="severity"
+                  style="
+                    background: rgba(34, 197, 94, 0.2);
+                    color: var(--accent-green);
+                  "
+                  >Active</span
+                >
+              </td>
+            </tr>
+            <tr>
+              <td><code>skill-loader</code></td>
+              <td>MCP Server</td>
+              <td>config-generator.ts</td>
+              <td>
+                <span
+                  class="severity"
+                  style="
+                    background: rgba(34, 197, 94, 0.2);
+                    color: var(--accent-green);
+                  "
+                  >Active</span
+                >
+              </td>
+            </tr>
+            <tr>
+              <td><code>shopify</code></td>
+              <td>MCP Server</td>
+              <td>config-generator.ts (conditional)</td>
+              <td>
+                <span
+                  class="severity"
+                  style="
+                    background: rgba(34, 197, 94, 0.2);
+                    color: var(--accent-green);
+                  "
+                  >Active</span
+                >
+              </td>
+            </tr>
+            <tr>
+              <td><code>marketing-skills/*</code></td>
+              <td>SKILL.md files (23)</td>
+              <td>skill-loader</td>
+              <td>
+                <span
+                  class="severity"
+                  style="
+                    background: rgba(34, 197, 94, 0.2);
+                    color: var(--accent-green);
+                  "
+                  >Active</span
+                >
+              </td>
+            </tr>
+            <tr>
+              <td><code>safe-file-deletion</code></td>
+              <td>SKILL.md only</td>
+              <td>Not registered</td>
+              <td><span class="severity low">Orphaned</span></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="recommendation">
+          <h4>Note</h4>
+          <p>
+            The <code>safe-file-deletion</code> skill has a SKILL.md file but is
+            not in the <code>marketing-skills/</code> folder, so the
+            skill-loader doesn't load it. Either move it to marketing-skills or
+            remove it.
+          </p>
+        </div>
+      </section>
+
+      <!-- Cleanup Checklist -->
+      <section>
+        <h2>Cleanup Checklist</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem">
+          Prioritized actions to clean up the codebase before client handover.
+        </p>
+
+        <div class="checklist">
+          <div class="checklist-item">
+            <div class="checkbox"></div>
+            <div class="checklist-content">
+              <div class="checklist-title">
+                1. Delete dead main process files (~1,500 lines)
+              </div>
+              <div class="checklist-desc">
+                Remove: <code>shopify/client.ts</code>,
+                <code>spaces/index.ts</code>,
+                <code>spaces/product-photography.ts</code>,
+                <code>spaces/catalog-generator.ts</code>,
+                <code>spaces/competitor-research.ts</code>,
+                <code>prompts/system-prompt.ts</code>
+              </div>
+            </div>
+          </div>
+
+          <div class="checklist-item">
+            <div class="checkbox"></div>
+            <div class="checklist-content">
+              <div class="checklist-title">2. Delete or route History page</div>
+              <div class="checklist-desc">
+                Either add <code>/history</code> route to App.tsx OR delete
+                <code>History.tsx</code>, <code>Header.tsx</code>,
+                <code>TaskHistory.tsx</code>
+              </div>
+            </div>
+          </div>
+
+          <div class="checklist-item">
+            <div class="checkbox"></div>
+            <div class="checklist-content">
+              <div class="checklist-title">
+                3. Decide on settings architecture
+              </div>
+              <div class="checklist-desc">
+                Either integrate <code>components/settings/</code> system OR
+                delete the entire folder (~19 files). Keep
+                <code>SettingsDialog.tsx</code>.
+              </div>
+            </div>
+          </div>
+
+          <div class="checklist-item">
+            <div class="checkbox"></div>
+            <div class="checklist-content">
+              <div class="checklist-title">4. Fix space registry</div>
+              <div class="checklist-desc">
+                Remove <code>store-display-banner</code> from
+                <code>space-registry.ts</code> (no backend) OR implement the
+                Python backend.
+              </div>
+            </div>
+          </div>
+
+          <div class="checklist-item">
+            <div class="checkbox"></div>
+            <div class="checklist-content">
+              <div class="checklist-title">5. Remove unused IPC handlers</div>
+              <div class="checklist-desc">
+                Remove the 6 space-runtime handlers and 2 CLI check handlers
+                from <code>handlers.ts</code> if not implementing their UIs.
+              </div>
+            </div>
+          </div>
+
+          <div class="checklist-item">
+            <div class="checkbox"></div>
+            <div class="checklist-content">
+              <div class="checklist-title">6. Delete unused assets</div>
+              <div class="checklist-desc">
+                Remove 20 unused images from
+                <code>public/assets/usecases/</code> and 2 from
+                <code>public/assets/</code>.
+              </div>
+            </div>
+          </div>
+
+          <div class="checklist-item">
+            <div class="checkbox"></div>
+            <div class="checklist-content">
+              <div class="checklist-title">
+                7. Clean up unused UI components
+              </div>
+              <div class="checklist-desc">
+                Consider removing <code>skeleton.tsx</code>,
+                <code>dropdown-menu.tsx</code>, <code>separator.tsx</code>,
+                <code>avatar.tsx</code>, <code>textarea.tsx</code>
+              </div>
+            </div>
+          </div>
+
+          <div class="checklist-item">
+            <div class="checkbox"></div>
+            <div class="checklist-content">
+              <div class="checklist-title">8. Rename TaskLauncher folder</div>
+              <div class="checklist-desc">
+                Rename <code>components/TaskLauncher/</code> to
+                <code>components/task-launcher/</code> for consistency.
+              </div>
+            </div>
+          </div>
+
+          <div class="checklist-item">
+            <div class="checkbox"></div>
+            <div class="checklist-content">
+              <div class="checklist-title">9. Update AGENTS.md</div>
+              <div class="checklist-desc">
+                Change <code>Claude/</code> reference to
+                <code>opencode/</code> to match actual folder name.
+              </div>
+            </div>
+          </div>
+
+          <div class="checklist-item">
+            <div class="checkbox"></div>
+            <div class="checklist-content">
+              <div class="checklist-title">10. Consolidate Vitest configs</div>
+              <div class="checklist-desc">
+                Refactor the three Vitest configs to use
+                <code>mergeConfig()</code> with a shared base.
+              </div>
             </div>
           </div>
         </div>
+      </section>
 
-        <div class="checklist-item">
-          <div class="checkbox"></div>
-          <div class="checklist-content">
-            <div class="checklist-title">2. Delete or route History page</div>
-            <div class="checklist-desc">
-              Either add <code>/history</code> route to App.tsx OR delete <code>History.tsx</code>, <code>Header.tsx</code>, <code>TaskHistory.tsx</code>
-            </div>
+      <!-- Estimated Impact -->
+      <section>
+        <h2>Estimated Cleanup Impact</h2>
+        <div class="summary-grid">
+          <div class="summary-card success">
+            <div class="summary-number">-3,500</div>
+            <div class="summary-label">Lines of Code</div>
+          </div>
+          <div class="summary-card success">
+            <div class="summary-number">-40</div>
+            <div class="summary-label">Files Removed</div>
+          </div>
+          <div class="summary-card success">
+            <div class="summary-number">-2MB</div>
+            <div class="summary-label">Asset Size (est.)</div>
+          </div>
+          <div class="summary-card success">
+            <div class="summary-number">Cleaner</div>
+            <div class="summary-label">Architecture</div>
           </div>
         </div>
+      </section>
 
-        <div class="checklist-item">
-          <div class="checkbox"></div>
-          <div class="checklist-content">
-            <div class="checklist-title">3. Decide on settings architecture</div>
-            <div class="checklist-desc">
-              Either integrate <code>components/settings/</code> system OR delete the entire folder (~19 files). Keep <code>SettingsDialog.tsx</code>.
-            </div>
-          </div>
-        </div>
-
-        <div class="checklist-item">
-          <div class="checkbox"></div>
-          <div class="checklist-content">
-            <div class="checklist-title">4. Fix space registry</div>
-            <div class="checklist-desc">
-              Remove <code>store-display-banner</code> from <code>space-registry.ts</code> (no backend) OR implement the Python backend.
-            </div>
-          </div>
-        </div>
-
-        <div class="checklist-item">
-          <div class="checkbox"></div>
-          <div class="checklist-content">
-            <div class="checklist-title">5. Remove unused IPC handlers</div>
-            <div class="checklist-desc">
-              Remove the 6 space-runtime handlers and 2 CLI check handlers from <code>handlers.ts</code> if not implementing their UIs.
-            </div>
-          </div>
-        </div>
-
-        <div class="checklist-item">
-          <div class="checkbox"></div>
-          <div class="checklist-content">
-            <div class="checklist-title">6. Delete unused assets</div>
-            <div class="checklist-desc">
-              Remove 20 unused images from <code>public/assets/usecases/</code> and 2 from <code>public/assets/</code>.
-            </div>
-          </div>
-        </div>
-
-        <div class="checklist-item">
-          <div class="checkbox"></div>
-          <div class="checklist-content">
-            <div class="checklist-title">7. Clean up unused UI components</div>
-            <div class="checklist-desc">
-              Consider removing <code>skeleton.tsx</code>, <code>dropdown-menu.tsx</code>, <code>separator.tsx</code>, <code>avatar.tsx</code>, <code>textarea.tsx</code>
-            </div>
-          </div>
-        </div>
-
-        <div class="checklist-item">
-          <div class="checkbox"></div>
-          <div class="checklist-content">
-            <div class="checklist-title">8. Rename TaskLauncher folder</div>
-            <div class="checklist-desc">
-              Rename <code>components/TaskLauncher/</code> to <code>components/task-launcher/</code> for consistency.
-            </div>
-          </div>
-        </div>
-
-        <div class="checklist-item">
-          <div class="checkbox"></div>
-          <div class="checklist-content">
-            <div class="checklist-title">9. Update AGENTS.md</div>
-            <div class="checklist-desc">
-              Change <code>Claude/</code> reference to <code>opencode/</code> to match actual folder name.
-            </div>
-          </div>
-        </div>
-
-        <div class="checklist-item">
-          <div class="checkbox"></div>
-          <div class="checklist-content">
-            <div class="checklist-title">10. Consolidate Vitest configs</div>
-            <div class="checklist-desc">
-              Refactor the three Vitest configs to use <code>mergeConfig()</code> with a shared base.
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Estimated Impact -->
-    <section>
-      <h2>Estimated Cleanup Impact</h2>
-      <div class="summary-grid">
-        <div class="summary-card success">
-          <div class="summary-number">-3,500</div>
-          <div class="summary-label">Lines of Code</div>
-        </div>
-        <div class="summary-card success">
-          <div class="summary-number">-40</div>
-          <div class="summary-label">Files Removed</div>
-        </div>
-        <div class="summary-card success">
-          <div class="summary-number">-2MB</div>
-          <div class="summary-label">Asset Size (est.)</div>
-        </div>
-        <div class="summary-card success">
-          <div class="summary-number">Cleaner</div>
-          <div class="summary-label">Architecture</div>
-        </div>
-      </div>
-    </section>
-
-    <footer>
-      <p>Shop OS Codebase Audit Report</p>
-      <p>Generated by Claude Code | January 21, 2026</p>
-    </footer>
-  </div>
-</body>
+      <footer>
+        <p>Shop OS Codebase Audit Report</p>
+        <p>Generated by Claude Code | January 21, 2026</p>
+      </footer>
+    </div>
+  </body>
 </html>

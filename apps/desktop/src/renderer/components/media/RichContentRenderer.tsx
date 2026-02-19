@@ -11,7 +11,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Copy, Check } from 'lucide-react';
 import { extractMediaUrls, MediaType, type ExtractedMedia, isLocalPath, normalizeLocalPath } from '@/lib/media-utils';
-import { ImageRenderer, ImageGallery } from './ImageRenderer';
+import { ImageRenderer, ImageGallery, GalleryImageItem } from './ImageRenderer';
 import { VideoRenderer } from './VideoRenderer';
 import { PDFRenderer } from './PDFRenderer';
 import { cn } from '@/lib/utils';
@@ -71,13 +71,15 @@ function CodeBlock({ children, className }: { children: ReactNode; className?: s
 interface RichContentRendererProps {
   content: string;
   className?: string;
-  /** Enable image selection mode with letter labels */
+  /** Enable image selection mode with number labels */
   imageSelectable?: boolean;
   /** Callback when an image is selected */
   onImageSelect?: (label: string, url: string, index: number) => void;
 }
 
+
 export function RichContentRenderer({ content, className, imageSelectable, onImageSelect }: RichContentRendererProps) {
+
   // Extract media URLs from content
   const mediaItems = useMemo(() => {
     if (!content) return [];
@@ -111,9 +113,9 @@ export function RichContentRenderer({ content, className, imageSelectable, onIma
   // This ensures images render inline instead of as clickable links
   const textContent = useMemo(() => {
     if (!content) return '';
-    
+
     let processed = content;
-    
+
     // Convert markdown links that point to images into markdown image syntax
     // [filename](https://...png) → ![filename](https://...png)
     // This makes ReactMarkdown render them as <img> tags natively
@@ -121,7 +123,7 @@ export function RichContentRenderer({ content, className, imageSelectable, onIma
       /(?<!!)\[([^\]]+)\]\((https?:\/\/[^\s)]+\.(?:png|jpg|jpeg|gif|webp|svg|bmp|avif)(?:\?[^\s)]*)?)\)/gi,
       '![$1]($2)'
     );
-    
+
     // Also convert bare image URLs that are auto-linked by remark-gfm
     // https://...png → ![image](https://...png)
     // But only if they're on their own line or surrounded by whitespace
@@ -129,7 +131,7 @@ export function RichContentRenderer({ content, className, imageSelectable, onIma
       /(?<=^|\s)(https?:\/\/[^\s<>]+\.(?:png|jpg|jpeg|gif|webp|svg|bmp|avif)(?:\?[^\s<>]*)?)(?=\s|$)/gim,
       '![]($1)'
     );
-    
+
     return processed;
   }, [content]);
 
@@ -137,58 +139,94 @@ export function RichContentRenderer({ content, className, imageSelectable, onIma
 
   return (
     <div data-testid="rich-content" className="space-y-4">
-      {/* Text content with markdown */}
+      {/* Text content with markdown - images render inline */}
       <div className={className}>
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
-            // Override img - skip inline images when we have images in the gallery
-            // This prevents duplicate rendering
-            img: ({ src, alt }) => {
+            // Render images inline using the same GalleryImageItem component
+            img: ({ src }) => {
               if (!src) return null;
-              
-              // If we have images extracted (will show in gallery), skip inline rendering
-              if (images.length > 0) {
-                return null;
-              }
-              
-              // Normalize local paths to local-media:// protocol
+
               const normalizedSrc = isLocalPath(src) ? normalizeLocalPath(src) : src;
-              
-              // For local files, use ImageRenderer which handles IPC loading
-              if (isLocalPath(src)) {
-                return <ImageRenderer url={normalizedSrc} alt={alt || 'Image'} maxWidth={600} />;
+              // Look up this image in the extracted images array so inline and gallery numbers match
+              let index = images.indexOf(normalizedSrc);
+              if (index === -1) {
+                // Fallback: try matching by filename (ignoring query params)
+                const srcBase = normalizedSrc.split('?')[0];
+                index = images.findIndex(img => img.split('?')[0] === srcBase);
               }
-              
-              // Render remote images with proper styling
+
               return (
-                <img 
-                  src={src} 
-                  alt={alt || 'Image'} 
-                  className="max-w-[600px] w-full h-auto rounded-lg border border-border shadow-sm my-2"
-                  loading="lazy"
+                <GalleryImageItem
+                  url={normalizedSrc}
+                  index={index >= 0 ? index : 0}
+                  selectable={imageSelectable}
+                  onSelect={onImageSelect}
+                  className="max-w-[50%] my-2"
                 />
               );
             },
             // Ensure paragraphs have proper text color
-            p: ({ children }) => {
+            p: ({ children, node }) => {
               // Hide empty paragraphs (e.g., after hiding "Generated Images:")
-              if (!children || (Array.isArray(children) && children.every(c => c === null))) {
+              if (!children || (Array.isArray(children) && children.every(c => c === null || c === ''))) {
                 return null;
               }
+
+              // Hide paragraphs that are just image labels like "Image 1:" or "Image A:"
+              // These appear as paragraphs with only whitespace/colon after the strong tag is hidden
+              if (images.length > 0 && node) {
+                const rawText = node.children
+                  ?.map((c: { type: string; value?: string }) => c.type === 'text' ? c.value : '')
+                  .join('')
+                  .trim();
+                // If the only remaining text is a colon or empty, and there was a strong child, hide it
+                if (rawText !== undefined && /^:?\s*$/.test(rawText)) {
+                  const hasStrongChild = node.children?.some(
+                    (c: { type: string; tagName?: string }) => c.type === 'element' && c.tagName === 'strong'
+                  );
+                  if (hasStrongChild) {
+                    return null;
+                  }
+                }
+              }
+
+              // Use <div> instead of <p> when paragraph contains images (block elements)
+              // to avoid invalid HTML (<div> inside <p>) which causes layout issues
+              const imageChildren = node?.children?.filter(
+                (c: { type: string; tagName?: string }) => c.type === 'element' && c.tagName === 'img'
+              );
+              const hasImage = imageChildren && imageChildren.length > 0;
+              if (hasImage) {
+                // Check if paragraph is ONLY images (no meaningful text)
+                const textContent = node?.children
+                  ?.filter((c: { type: string }) => c.type === 'text')
+                  .map((c: { value?: string }) => c.value || '')
+                  .join('')
+                  .trim();
+                const isImagesOnly = !textContent;
+
+                // If only images, use flex row so consecutive images sit side by side
+                if (isImagesOnly) {
+                  return <div className="flex flex-wrap gap-2 py-1.5">{children}</div>;
+                }
+                return <div className="text-foreground py-1.5">{children}</div>;
+              }
+
               return <p className="text-foreground">{children}</p>;
             },
             li: ({ children, node }) => {
               // Hide list items that only contain images (these are duplicates from "Generated Images:")
               // Check if the original node only had an image
-              const hasOnlyImage = node?.children?.length === 1 && 
-                node?.children?.[0]?.type === 'element' && 
+              const hasOnlyImage = node?.children?.length === 1 &&
+                node?.children?.[0]?.type === 'element' &&
                 (node?.children?.[0] as { tagName?: string })?.tagName === 'img';
-              
+
               if (hasOnlyImage && images.length > 0) {
                 return null;
               }
-              
+
               if (!children || (Array.isArray(children) && children.every(c => c === null || c === undefined))) {
                 return null;
               }
@@ -198,26 +236,27 @@ export function RichContentRenderer({ content, className, imageSelectable, onIma
               // Hide empty lists or lists where all children are null
               const childArray = Array.isArray(children) ? children : [children];
               const hasVisibleChildren = childArray.some(c => c !== null && c !== undefined);
-              
+
               if (!hasVisibleChildren) {
                 return null;
               }
               return <ul>{children}</ul>;
             },
-            // Handle "Image A", "Image B" etc. and "Generated Images:"
+            // Handle "Image 1", "Image 2" etc. and "Generated Images:"
             strong: ({ children }) => {
               const text = String(children);
-              
-              // Hide "Generated Images:" header - images shown in gallery
+
+              // Hide "Generated Images:" header - images shown inline
               if (text === 'Generated Images:') {
                 return null;
               }
-              
-              // Hide "Image A", "Image B" etc labels when we have gallery - images shown there
-              if (images.length > 0 && /^Image\s+[A-Z]$/i.test(text)) {
+
+              // Hide "Image 1", "Image 2" etc labels (with optional colon) when images are inline
+              // Also match legacy letter labels "Image A", "Image B" etc.
+              if (images.length > 0 && /^Image\s+(?:[A-Z]|\d+):?$/i.test(text)) {
                 return null;
               }
-              
+
               // Default rendering
               return <strong className="text-foreground font-semibold">{children}</strong>;
             },
@@ -323,13 +362,13 @@ export function RichContentRenderer({ content, className, imageSelectable, onIma
         </ReactMarkdown>
       </div>
 
-      {/* Media section - only show gallery for selectable mode or videos/pdfs */}
+      {/* Media section - gallery + videos/pdfs */}
       {hasMedia && (
         <div className="space-y-4">
-          {/* Images - only show gallery in selectable mode (images are already rendered inline) */}
+          {/* Image gallery for selection */}
           {images.length >= 1 && imageSelectable && (
-            <ImageGallery 
-              urls={images} 
+            <ImageGallery
+              urls={images}
               selectable={imageSelectable}
               onSelect={onImageSelect}
             />

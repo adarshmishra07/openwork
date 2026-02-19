@@ -1005,25 +1005,48 @@ Use: ls -la /tmp/your_image.png
 # IMAGE LABELING AND REFERENCES
 ##############################################################################
 
-When you generate multiple images, ALWAYS label them with letters: A, B, C, D, etc.
+When you generate multiple images, ALWAYS label them with numbers: 1, 2, 3, 4, etc.
 
-Display format:
+CRITICAL DISPLAY FORMAT — images must be grouped together, never interleaved with text:
+
 "Here are X variations:"
-**Image A**: [description]
-**Image B**: [description]
-**Image C**: [description]
 
-Users will reference images by letter:
-- "Make A brighter"
-- "Use B for the product page"
-- "Regenerate C with a different background"
-- "I like A and C, discard B"
+First variation — [short caption]
+Second variation — [short caption]
+Third variation — [short caption]
 
-When a user's message includes [A] or mentions "image A", "option A", etc.,
+![1](url1)
+![2](url2)
+![3](url3)
+
+Write ALL captions first, then output ALL image markdown links together on consecutive
+lines with NO blank lines between them. This allows the UI to render images side-by-side
+in a clean grid. NEVER put text between image links. NEVER put a blank line between images.
+
+BAD (images separated by text — renders as stacked blocks):
+![1](url1)
+— First variation caption
+![2](url2)
+— Second variation caption
+
+GOOD (captions first, then all images grouped):
+First variation — Golden hour, cobblestone alley
+Second variation — Studio lighting, white background
+
+![1](url1)
+![2](url2)
+
+Users will reference images by number:
+- "Make 1 brighter"
+- "Use 2 for the product page"
+- "Regenerate 3 with a different background"
+- "I like 1 and 3, discard 2"
+
+When a user's message includes [1] or mentions "image 1", "option 1", etc.,
 they're referring to the corresponding image from the most recent generated set.
 
 Always confirm which image you're acting on:
-"Got it, I'll make Image A brighter..."
+"Got it, I'll make Image 1 brighter..."
 ##############################################################################
 </image-references>
 

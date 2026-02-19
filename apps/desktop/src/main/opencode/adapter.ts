@@ -1,7 +1,7 @@
 import * as pty from 'node-pty';
 import { EventEmitter } from 'events';
 import { app } from 'electron';
-import fs from 'fs';
+import fs, { createWriteStream, type WriteStream } from 'fs';
 import { StreamParser } from './stream-parser';
 import { OpenCodeLogWatcher, createLogWatcher, OpenCodeLogError } from './log-watcher';
 import {
@@ -78,6 +78,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
   private autoContinueCount: number = 0; // Prevent infinite auto-continue loops
   private static MAX_AUTO_CONTINUES = 3; // Max times to auto-continue
   private lastAssistantMessage: string = ''; // Track last text for completion detection
+  private rawLogStream: WriteStream | null = null;
 
   /**
    * Create a new OpenCodeAdapter instance
@@ -258,8 +259,18 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
       console.log('[OpenCode CLI]', pidMsg);
       this.emit('debug', { type: 'info', message: pidMsg });
 
+      // Open raw PTY log file for this task
+      const logDir = app.getPath('logs');
+      const logFile = path.join(logDir, `pty-raw-${taskId}-${Date.now()}.log`);
+      this.rawLogStream = createWriteStream(logFile, { flags: 'a' });
+      console.log('[OpenCode CLI] Logging raw PTY output to:', logFile);
+      this.emit('debug', { type: 'info', message: `Raw PTY log: ${logFile}` });
+
       // Handle PTY data (combines stdout/stderr)
       this.ptyProcess.onData((data: string) => {
+        // Write raw PTY data to log file before any processing
+        this.rawLogStream?.write(data);
+
         // Filter out ANSI escape codes and control characters for cleaner parsing
         // Enhanced to handle Windows PowerShell sequences (cursor visibility, window titles)
         const cleanData = data
@@ -401,6 +412,12 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
       this.logWatcher.stop().catch((err) => {
         console.warn('[OpenCode Adapter] Error stopping log watcher:', err);
       });
+    }
+
+    // Close raw PTY log stream
+    if (this.rawLogStream) {
+      this.rawLogStream.end();
+      this.rawLogStream = null;
     }
 
     // Kill PTY process if running

@@ -1,20 +1,16 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useTaskStore } from '@/stores/taskStore';
-import { getAccomplish } from '@/lib/accomplish';
-import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import SettingsDialog from './SettingsDialog';
-import ConversationListItem from './ConversationListItem';
-import { 
-  Plus, 
-  Settings,
-  MessageSquare
-} from 'lucide-react';
-import logoImage from '/assets/shopos-logo.png';
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { useTaskStore } from "@/stores/taskStore";
+import { getAccomplish } from "@/lib/accomplish";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import SettingsDialog from "./SettingsDialog";
+import ConversationListItem from "./ConversationListItem";
+import { Plus, Settings, MessageSquare } from "lucide-react";
+import logoImage from "/assets/shopos-logo.svg";
 
 export default function Sidebar() {
   const navigate = useNavigate();
@@ -45,16 +41,23 @@ export default function Sidebar() {
   }, [updateTaskStatus, addTaskUpdate, accomplish]);
 
   const handleNewConversation = () => {
-    navigate('/');
+    navigate("/");
   };
 
   return (
     <>
-      <div className="flex h-screen w-[260px] flex-col border-r border-border bg-card pt-12 z-20">
+      <div
+        className="flex h-screen w-[260px] flex-col border-r border-border pt-12 z-20"
+        style={{ backgroundColor: "hsl(var(--sidebar))" }}
+      >
         {/* Header with Logo */}
         <div className="px-4 pb-4 flex items-center gap-3">
           <div className="h-8 w-8 overflow-hidden">
-             <img src={logoImage} alt="Shop OS" className="h-full w-full object-contain" />
+            <img
+              src={logoImage}
+              alt="Shop OS"
+              className="h-full w-full object-contain"
+            />
           </div>
           <span className="font-semibold text-lg">Shop OS</span>
         </div>
@@ -64,9 +67,8 @@ export default function Sidebar() {
           <Button
             data-testid="sidebar-new-task-button"
             onClick={handleNewConversation}
-            variant="outline"
             size="sm"
-            className="w-full justify-start gap-2 rounded-xl h-10"
+            className="w-full justify-start gap-2 rounded-xl h-10 bg-foreground text-background hover:bg-foreground/90"
           >
             <Plus className="h-4 w-4" />
             New Chat

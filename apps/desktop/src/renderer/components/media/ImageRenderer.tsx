@@ -151,7 +151,7 @@ export function ImageRenderer({
       <div
         data-testid="image-renderer"
         className={cn(
-          'relative rounded-lg overflow-hidden bg-muted/30 group',
+          'relative rounded-lg overflow-hidden group',
           loadingState === 'loaded' && 'cursor-pointer',
           className
         )}
@@ -311,10 +311,127 @@ function Lightbox({ url, alt, onClose, onPrev, onNext, counter }: LightboxProps)
   );
 }
 
+/**
+ * Standalone image card with number badge, select/download overlays, and lightbox.
+ * Shared between ImageGallery and inline rendering.
+ */
+export interface GalleryImageItemProps {
+  url: string;
+  index: number;
+  selectable?: boolean;
+  onSelect?: (label: string, url: string, index: number) => void;
+  className?: string;
+}
+
+export function GalleryImageItem({ url, index, selectable, onSelect, className }: GalleryImageItemProps) {
+  const [loadState, setLoadState] = useState<LoadingState>('loading');
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const { resolvedUrl, isLoading: isLoadingLocal, error: localError } = useLocalFileLoader(url);
+
+  const showLoading = isLoadingLocal || (loadState !== 'loaded' && loadState !== 'error' && !localError);
+  const showError = !!localError || loadState === 'error';
+  const canRender = !isLoadingLocal && !localError && resolvedUrl;
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isLightboxOpen) setIsLightboxOpen(false);
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [isLightboxOpen]);
+
+  return (
+    <>
+      <div className={cn('relative rounded-lg overflow-hidden group cursor-pointer h-fit', className)}>
+        {/* Loading */}
+        {showLoading && (
+          <div className="flex items-center justify-center min-h-[120px] bg-muted/30 rounded-lg">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        )}
+
+        {/* Error */}
+        {showError && (
+          <div className={cn(
+            'flex items-center justify-center gap-2 p-4 min-h-[80px]',
+            localError === 'File no longer exists' ? 'text-muted-foreground' : 'text-destructive'
+          )}>
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <span className="text-sm">{localError || 'Failed to load'}</span>
+          </div>
+        )}
+
+        {/* Image */}
+        {canRender && (
+          <img
+            src={resolvedUrl}
+            alt={`Image ${index + 1}`}
+            onLoad={() => setLoadState('loaded')}
+            onError={() => setLoadState('error')}
+            onClick={() => loadState === 'loaded' && setIsLightboxOpen(true)}
+            className={cn(
+              'w-full h-auto block transition-opacity !m-0',
+              loadState !== 'loaded' && 'opacity-0 absolute',
+              loadState === 'loaded' && 'opacity-100',
+              loadState === 'error' && 'hidden'
+            )}
+          />
+        )}
+
+        {/* Number badge */}
+        {selectable && loadState === 'loaded' && (
+          <div className="absolute top-2 left-2 w-6 h-6 rounded-full bg-black/70 flex items-center justify-center text-white text-xs font-bold z-10">
+            {index + 1}
+          </div>
+        )}
+
+        {/* Action buttons */}
+        {loadState === 'loaded' && (
+          <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            {selectable && onSelect && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelect(String(index + 1), resolvedUrl, index);
+                }}
+                className="p-1.5 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors"
+                title={`Select image ${index + 1}`}
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                window.open(resolvedUrl, '_blank');
+              }}
+              className="p-1.5 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors"
+              title="Download image"
+            >
+              <Download className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Lightbox */}
+      <AnimatePresence>
+        {isLightboxOpen && resolvedUrl && (
+          <Lightbox
+            url={resolvedUrl}
+            alt={`Image ${index + 1}`}
+            onClose={() => setIsLightboxOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
 interface ImageGalleryProps {
   urls: string[];
   className?: string;
-  /** Enable selection mode with letter labels (A, B, C...) */
+  /** Enable selection mode with number labels (1, 2, 3...) */
   selectable?: boolean;
   /** Callback when an image is selected */
   onSelect?: (label: string, url: string, index: number) => void;
@@ -386,179 +503,34 @@ function useLocalFilesLoader(urls: string[]): {
 }
 
 export function ImageGallery({ urls, className, selectable = false, onSelect }: ImageGalleryProps) {
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const [loadedStates, setLoadedStates] = useState<Record<number, LoadingState>>({});
-  
-  // Load local files via IPC
-  const { resolvedUrls, isLoading: isLoadingLocal, errors: localErrors } = useLocalFilesLoader(urls);
-
   if (urls.length === 0) {
     return null;
   }
 
-  const handleImageLoad = (index: number) => {
-    setLoadedStates(prev => ({ ...prev, [index]: 'loaded' }));
-  };
-
-  const handleImageError = (index: number) => {
-    setLoadedStates(prev => ({ ...prev, [index]: 'error' }));
-  };
-
-  const handleImageClick = (index: number) => {
-    if (loadedStates[index] === 'loaded') {
-      setLightboxIndex(index);
-    }
-  };
-
-  const handleCloseLightbox = () => {
-    setLightboxIndex(null);
-  };
-
-  const handlePrev = () => {
-    if (lightboxIndex !== null) {
-      setLightboxIndex(lightboxIndex === 0 ? urls.length - 1 : lightboxIndex - 1);
-    }
-  };
-
-  const handleNext = () => {
-    if (lightboxIndex !== null) {
-      setLightboxIndex(lightboxIndex === urls.length - 1 ? 0 : lightboxIndex + 1);
-    }
-  };
-
-  // Handle keyboard navigation
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (lightboxIndex === null) return;
-
-      if (e.key === 'Escape') {
-        handleCloseLightbox();
-      } else if (e.key === 'ArrowLeft') {
-        handlePrev();
-      } else if (e.key === 'ArrowRight') {
-        handleNext();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [lightboxIndex]);
-
-  // Determine grid columns based on number of images
-  const gridCols = urls.length === 1 ? 'grid-cols-1' : urls.length === 2 ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-3';
+  // Gallery: up to 4 per row
+  const gridCols = urls.length === 1
+    ? 'grid-cols-1 max-w-xs'
+    : urls.length === 2
+      ? 'grid-cols-2'
+      : urls.length === 3
+        ? 'grid-cols-3'
+        : 'grid-cols-4';
 
   return (
-    <>
-      <div
-        data-testid="image-gallery"
-        className={cn('grid gap-2', gridCols, className)}
-      >
-        {resolvedUrls.map((resolvedUrl, index) => {
-          const hasLocalError = localErrors[index];
-          const showLoading = isLoadingLocal || (loadedStates[index] !== 'loaded' && loadedStates[index] !== 'error' && !hasLocalError);
-          const showError = hasLocalError || loadedStates[index] === 'error';
-          const canRenderImage = !isLoadingLocal && !hasLocalError && resolvedUrl;
-
-          return (
-            <div
-              key={urls[index]} // Use original URL as key for stability
-              className={cn(
-                'relative rounded-lg overflow-hidden group cursor-pointer',
-                'aspect-square', // 1:1 aspect ratio container
-                'bg-gray-200/50 dark:bg-gray-700/50', // Light gray with 50% opacity
-                'border border-gray-300/50 dark:border-gray-600/50' // Border with 50% opacity
-              )}
-            >
-              {/* Loading spinner */}
-              {showLoading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-muted/50">
-                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                </div>
-              )}
-
-              {/* Error state */}
-              {showError && (
-                <div className={cn(
-                  "absolute inset-0 flex items-center justify-center gap-2 p-4",
-                  hasLocalError === 'File no longer exists' ? "text-muted-foreground" : "text-destructive"
-                )}>
-                  <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                  <span className="text-sm">{hasLocalError || 'Failed to load'}</span>
-                </div>
-              )}
-
-              {canRenderImage && (
-                <img
-                  src={resolvedUrl}
-                  alt={`Image ${index + 1}`}
-                  onLoad={() => handleImageLoad(index)}
-                  onError={() => handleImageError(index)}
-                  onClick={() => handleImageClick(index)}
-                  className={cn(
-                    'absolute inset-0 w-full h-full object-contain transition-opacity',
-                    loadedStates[index] !== 'loaded' && 'opacity-0',
-                    loadedStates[index] === 'loaded' && 'opacity-100',
-                    loadedStates[index] === 'error' && 'hidden'
-                  )}
-                />
-              )}
-
-              {/* Letter label for selection mode */}
-              {selectable && loadedStates[index] === 'loaded' && (
-                <div className="absolute top-2 left-2 w-6 h-6 rounded-full bg-black/70 flex items-center justify-center text-white text-xs font-bold z-10">
-                  {String.fromCharCode(65 + index)}
-                </div>
-              )}
-
-              {/* Action buttons overlay */}
-              {loadedStates[index] === 'loaded' && (
-                <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {/* Select button */}
-                  {selectable && onSelect && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const label = String.fromCharCode(65 + index);
-                        onSelect(label, resolvedUrl, index);
-                      }}
-                      className="p-1.5 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground transition-colors"
-                      title={`Select image ${String.fromCharCode(65 + index)}`}
-                    >
-                      <Plus className="w-3 h-3" />
-                    </button>
-                  )}
-                  {/* Download button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      window.open(resolvedUrl, '_blank');
-                    }}
-                    className="p-1.5 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors"
-                    title="Download image"
-                  >
-                    <Download className="w-3 h-3" />
-                  </button>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Gallery Lightbox */}
-      <AnimatePresence>
-        {lightboxIndex !== null && resolvedUrls[lightboxIndex] && (
-          <Lightbox
-            url={resolvedUrls[lightboxIndex]}
-            alt={`Image ${lightboxIndex + 1}`}
-            onClose={handleCloseLightbox}
-            onPrev={urls.length > 1 ? handlePrev : undefined}
-            onNext={urls.length > 1 ? handleNext : undefined}
-            counter={`${lightboxIndex + 1} / ${urls.length}`}
-          />
-        )}
-      </AnimatePresence>
-    </>
+    <div
+      data-testid="image-gallery"
+      className={cn('grid gap-2 items-start', gridCols, className)}
+    >
+      {urls.map((url, index) => (
+        <GalleryImageItem
+          key={url}
+          url={url}
+          index={index}
+          selectable={selectable}
+          onSelect={onSelect}
+        />
+      ))}
+    </div>
   );
 }
 

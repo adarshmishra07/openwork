@@ -2,7 +2,8 @@
 
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { getAccomplish } from '../../lib/accomplish';
-import { ArrowUp, Loader2, Store, Check } from 'lucide-react';
+import { ArrowUp, Loader2, Check } from 'lucide-react';
+import shopifyIcon from '/assets/shopify-icon.svg';
 import { AttachmentButton, AttachmentList, AttachmentDropzone } from '../attachments';
 import { useAttachmentStore } from '../../stores/attachmentStore';
 import type { FileAttachment } from '@shopos/shared';
@@ -223,8 +224,8 @@ export default function TaskInputBar({
           onPaste={handlePaste}
           placeholder={placeholder}
           disabled={isDisabled}
-          rows={1}
-          className={`max-h-[200px] min-h-[28px] w-full resize-none bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${large ? 'text-base' : 'text-sm'}`}
+          rows={large ? 2 : 1}
+          className={`max-h-[200px] w-full resize-none bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${large ? 'text-base min-h-[56px]' : 'text-sm min-h-[28px]'}`}
         />
 
         {/* Bottom Actions Row */}
@@ -253,16 +254,13 @@ export default function TaskInputBar({
               }`}
               title={shopifyConnected ? `Connected to ${shopDomain}` : 'Click to connect a store'}
             >
+              <span className="flex items-center justify-center h-5 w-5 rounded-full bg-[#96bf48]/10 p-0.5 shrink-0">
+                <img src={shopifyIcon} alt="Shopify" className="h-full w-full object-contain" />
+              </span>
               {shopifyConnected ? (
-                <>
-                  <Check className="h-4 w-4" />
-                  <span>{shopDomain?.replace('.myshopify.com', '') || 'Connected'}</span>
-                </>
+                <span>{shopDomain?.replace('.myshopify.com', '') || 'Connected'}</span>
               ) : (
-                <>
-                  <Store className="h-4 w-4" />
-                  <span>Connect Store</span>
-                </>
+                <span>Connect Store</span>
               )}
             </button>
           </div>

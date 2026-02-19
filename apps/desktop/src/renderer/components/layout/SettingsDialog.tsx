@@ -1,18 +1,29 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { getAccomplish } from '@/lib/accomplish';
+import { useState, useEffect } from "react";
+import { getAccomplish } from "@/lib/accomplish";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Trash2, Store, CheckCircle2, XCircle, Loader2, Building2 } from 'lucide-react';
-import type { ApiKeyConfig, SelectedModel, ProviderId as SharedProviderId } from '@shopos/shared';
-import { DEFAULT_PROVIDERS, DEFAULT_MODELS } from '@shopos/shared';
-import logoImage from '/assets/logo.png';
-import { BrandSettingsSection } from '@/components/settings/BrandSettingsSection';
+} from "@/components/ui/dialog";
+import {
+  Trash2,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  Building2,
+} from "lucide-react";
+import shopifyIcon from "/assets/shopify-icon.svg";
+import type {
+  ApiKeyConfig,
+  SelectedModel,
+  ProviderId as SharedProviderId,
+} from "@shopos/shared";
+import { DEFAULT_PROVIDERS, DEFAULT_MODELS } from "@shopos/shared";
+import logoImage from "/assets/shopos-logo.svg";
+import { BrandSettingsSection } from "@/components/settings/BrandSettingsSection";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -23,49 +34,74 @@ interface SettingsDialogProps {
 
 // Provider configuration
 const API_KEY_PROVIDERS = [
-  { id: 'anthropic', name: 'Anthropic', prefix: 'sk-ant-', placeholder: 'sk-ant-...' },
-  { id: 'openai', name: 'OpenAI', prefix: 'sk-', placeholder: 'sk-...' },
-  { id: 'openrouter', name: 'OpenRouter', prefix: 'sk-or-', placeholder: 'sk-or-...' },
-  { id: 'google', name: 'Google AI', prefix: 'AIza', placeholder: 'AIza...' },
-  { id: 'xai', name: 'xAI (Grok)', prefix: 'xai-', placeholder: 'xai-...' },
-  { id: 'deepseek', name: 'DeepSeek', prefix: 'sk-', placeholder: 'sk-...' },
-  { id: 'zai', name: 'Z.AI Coding Plan', prefix: '', placeholder: 'Your Z.AI API key...' },
-  { id: 'minimax', name: 'Minimax', prefix: 'eyJ', placeholder: 'Your Minimax API key...' },
+  {
+    id: "anthropic",
+    name: "Anthropic",
+    prefix: "sk-ant-",
+    placeholder: "sk-ant-...",
+  },
+  { id: "openai", name: "OpenAI", prefix: "sk-", placeholder: "sk-..." },
+  {
+    id: "openrouter",
+    name: "OpenRouter",
+    prefix: "sk-or-",
+    placeholder: "sk-or-...",
+  },
+  { id: "google", name: "Google AI", prefix: "AIza", placeholder: "AIza..." },
+  { id: "xai", name: "xAI (Grok)", prefix: "xai-", placeholder: "xai-..." },
+  { id: "deepseek", name: "DeepSeek", prefix: "sk-", placeholder: "sk-..." },
+  {
+    id: "zai",
+    name: "Z.AI Coding Plan",
+    prefix: "",
+    placeholder: "Your Z.AI API key...",
+  },
+  {
+    id: "minimax",
+    name: "Minimax",
+    prefix: "eyJ",
+    placeholder: "Your Minimax API key...",
+  },
 ] as const;
 
-type ProviderId = typeof API_KEY_PROVIDERS[number]['id'];
+type ProviderId = (typeof API_KEY_PROVIDERS)[number]["id"];
 
 // Priority order for OpenRouter providers (lower index = higher priority)
 const OPENROUTER_PROVIDER_PRIORITY = [
-  'anthropic',
-  'openai',
-  'google',
-  'meta-llama',
-  'mistralai',
-  'x-ai',
-  'deepseek',
-  'cohere',
-  'perplexity',
-  'amazon',
+  "anthropic",
+  "openai",
+  "google",
+  "meta-llama",
+  "mistralai",
+  "x-ai",
+  "deepseek",
+  "cohere",
+  "perplexity",
+  "amazon",
 ];
 
 // Priority order for LiteLLM providers (lower index = higher priority)
 const LITELLM_PROVIDER_PRIORITY = [
-  'anthropic',
-  'openai',
-  'google',
-  'meta-llama',
-  'mistralai',
-  'x-ai',
-  'deepseek',
-  'cohere',
-  'perplexity',
-  'amazon',
+  "anthropic",
+  "openai",
+  "google",
+  "meta-llama",
+  "mistralai",
+  "x-ai",
+  "deepseek",
+  "cohere",
+  "perplexity",
+  "amazon",
 ];
 
-export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, initialTab }: SettingsDialogProps) {
-  const [apiKey, setApiKey] = useState('');
-  const [provider, setProvider] = useState<ProviderId>('anthropic');
+export default function SettingsDialog({
+  open,
+  onOpenChange,
+  onApiKeySaved,
+  initialTab,
+}: SettingsDialogProps) {
+  const [apiKey, setApiKey] = useState("");
+  const [provider, setProvider] = useState<ProviderId>("anthropic");
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -73,48 +109,67 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
   const [loadingKeys, setLoadingKeys] = useState(true);
   const [debugMode, setDebugMode] = useState(false);
   const [loadingDebug, setLoadingDebug] = useState(true);
-  const [appVersion, setAppVersion] = useState('');
-  const [selectedModel, setSelectedModel] = useState<SelectedModel | null>(null);
+  const [appVersion, setAppVersion] = useState("");
+  const [selectedModel, setSelectedModel] = useState<SelectedModel | null>(
+    null,
+  );
   const [loadingModel, setLoadingModel] = useState(true);
-  const [modelStatusMessage, setModelStatusMessage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'cloud' | 'local' | 'proxy'>('cloud');
-  const [mainTab, setMainTab] = useState<'model' | 'brand' | 'integrations' | 'developer'>('model');
-  const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
-  const [ollamaModels, setOllamaModels] = useState<Array<{ id: string; displayName: string; size: number }>>([]);
+  const [modelStatusMessage, setModelStatusMessage] = useState<string | null>(
+    null,
+  );
+  const [activeTab, setActiveTab] = useState<"cloud" | "local" | "proxy">(
+    "cloud",
+  );
+  const [mainTab, setMainTab] = useState<
+    "model" | "brand" | "integrations" | "developer"
+  >("model");
+  const [ollamaUrl, setOllamaUrl] = useState("http://localhost:11434");
+  const [ollamaModels, setOllamaModels] = useState<
+    Array<{ id: string; displayName: string; size: number }>
+  >([]);
   const [ollamaConnected, setOllamaConnected] = useState(false);
   const [ollamaError, setOllamaError] = useState<string | null>(null);
   const [testingOllama, setTestingOllama] = useState(false);
-  const [selectedOllamaModel, setSelectedOllamaModel] = useState<string>('');
+  const [selectedOllamaModel, setSelectedOllamaModel] = useState<string>("");
   const [savingOllama, setSavingOllama] = useState(false);
   const [keyToDelete, setKeyToDelete] = useState<string | null>(null);
 
   // OpenRouter state
-  const [selectedProxyPlatform, setSelectedProxyPlatform] = useState<'openrouter' | 'litellm'>('openrouter');
-  const [openrouterModels, setOpenrouterModels] = useState<Array<{ id: string; name: string; provider: string; contextLength: number }>>([]);
+  const [selectedProxyPlatform, setSelectedProxyPlatform] = useState<
+    "openrouter" | "litellm"
+  >("openrouter");
+  const [openrouterModels, setOpenrouterModels] = useState<
+    Array<{ id: string; name: string; provider: string; contextLength: number }>
+  >([]);
   const [openrouterLoading, setOpenrouterLoading] = useState(false);
   const [openrouterError, setOpenrouterError] = useState<string | null>(null);
-  const [openrouterSearch, setOpenrouterSearch] = useState('');
-  const [selectedOpenrouterModel, setSelectedOpenrouterModel] = useState<string>('');
+  const [openrouterSearch, setOpenrouterSearch] = useState("");
+  const [selectedOpenrouterModel, setSelectedOpenrouterModel] =
+    useState<string>("");
   const [savingOpenrouter, setSavingOpenrouter] = useState(false);
   // OpenRouter inline API key entry (for Proxy Platforms tab)
-  const [openrouterApiKey, setOpenrouterApiKey] = useState('');
-  const [openrouterApiKeyError, setOpenrouterApiKeyError] = useState<string | null>(null);
+  const [openrouterApiKey, setOpenrouterApiKey] = useState("");
+  const [openrouterApiKeyError, setOpenrouterApiKeyError] = useState<
+    string | null
+  >(null);
   const [savingOpenrouterApiKey, setSavingOpenrouterApiKey] = useState(false);
 
   // LiteLLM state
-  const [litellmUrl, setLitellmUrl] = useState('http://localhost:4000');
-  const [litellmApiKey, setLitellmApiKey] = useState('');
-  const [litellmModels, setLitellmModels] = useState<Array<{ id: string; name: string; provider: string; contextLength: number }>>([]);
+  const [litellmUrl, setLitellmUrl] = useState("http://localhost:4000");
+  const [litellmApiKey, setLitellmApiKey] = useState("");
+  const [litellmModels, setLitellmModels] = useState<
+    Array<{ id: string; name: string; provider: string; contextLength: number }>
+  >([]);
   const [litellmConnected, setLitellmConnected] = useState(false);
   const [litellmError, setLitellmError] = useState<string | null>(null);
   const [testingLitellm, setTestingLitellm] = useState(false);
-  const [selectedLitellmModel, setSelectedLitellmModel] = useState<string>('');
+  const [selectedLitellmModel, setSelectedLitellmModel] = useState<string>("");
   const [savingLitellm, setSavingLitellm] = useState(false);
-  const [litellmSearch, setLitellmSearch] = useState('');
+  const [litellmSearch, setLitellmSearch] = useState("");
 
   // Shopify state
-  const [shopifyDomain, setShopifyDomain] = useState('');
-  const [shopifyAccessToken, setShopifyAccessToken] = useState('');
+  const [shopifyDomain, setShopifyDomain] = useState("");
+  const [shopifyAccessToken, setShopifyAccessToken] = useState("");
   const [shopifyConnected, setShopifyConnected] = useState(false);
   const [shopifyShopName, setShopifyShopName] = useState<string | null>(null);
   const [shopifyError, setShopifyError] = useState<string | null>(null);
@@ -124,17 +179,17 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
 
   // Sync selectedProxyPlatform and selected model radio button with the actual selected model
   useEffect(() => {
-    if (selectedModel?.provider === 'litellm') {
-      setSelectedProxyPlatform('litellm');
+    if (selectedModel?.provider === "litellm") {
+      setSelectedProxyPlatform("litellm");
       // Extract model ID from "litellm/anthropic/claude-haiku" -> "anthropic/claude-haiku"
-      const modelId = selectedModel.model?.replace(/^litellm\//, '') || '';
+      const modelId = selectedModel.model?.replace(/^litellm\//, "") || "";
       if (modelId) {
         setSelectedLitellmModel(modelId);
       }
-    } else if (selectedModel?.provider === 'openrouter') {
-      setSelectedProxyPlatform('openrouter');
+    } else if (selectedModel?.provider === "openrouter") {
+      setSelectedProxyPlatform("openrouter");
       // Extract model ID from "openrouter/anthropic/..." -> "anthropic/..."
-      const modelId = selectedModel.model?.replace(/^openrouter\//, '') || '';
+      const modelId = selectedModel.model?.replace(/^openrouter\//, "") || "";
       if (modelId) {
         setSelectedOpenrouterModel(modelId);
       }
@@ -151,7 +206,7 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
         const keys = await accomplish.getApiKeys();
         setSavedKeys(keys);
       } catch (err) {
-        console.error('Failed to fetch API keys:', err);
+        console.error("Failed to fetch API keys:", err);
       } finally {
         setLoadingKeys(false);
       }
@@ -162,7 +217,7 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
         const enabled = await accomplish.getDebugMode();
         setDebugMode(enabled);
       } catch (err) {
-        console.error('Failed to fetch debug setting:', err);
+        console.error("Failed to fetch debug setting:", err);
       } finally {
         setLoadingDebug(false);
       }
@@ -173,7 +228,7 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
         const version = await accomplish.getVersion();
         setAppVersion(version);
       } catch (err) {
-        console.error('Failed to fetch version:', err);
+        console.error("Failed to fetch version:", err);
       }
     };
 
@@ -182,7 +237,7 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
         const model = await accomplish.getSelectedModel();
         setSelectedModel(model as SelectedModel | null);
       } catch (err) {
-        console.error('Failed to fetch selected model:', err);
+        console.error("Failed to fetch selected model:", err);
       } finally {
         setLoadingModel(false);
       }
@@ -195,7 +250,9 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
           setOllamaUrl(config.baseUrl);
           // Auto-test connection if previously configured
           if (config.enabled) {
-            const result = await accomplish.testOllamaConnection(config.baseUrl);
+            const result = await accomplish.testOllamaConnection(
+              config.baseUrl,
+            );
             if (result.success && result.models) {
               setOllamaConnected(true);
               setOllamaModels(result.models);
@@ -203,7 +260,7 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
           }
         }
       } catch (err) {
-        console.error('Failed to fetch Ollama config:', err);
+        console.error("Failed to fetch Ollama config:", err);
       }
     };
 
@@ -222,7 +279,7 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
           }
         }
       } catch (err) {
-        console.error('Failed to fetch LiteLLM config:', err);
+        console.error("Failed to fetch LiteLLM config:", err);
       }
     };
 
@@ -239,7 +296,7 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
           }
         }
       } catch (err) {
-        console.error('Failed to fetch Shopify status:', err);
+        console.error("Failed to fetch Shopify status:", err);
       }
     };
 
@@ -256,14 +313,14 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
   useEffect(() => {
     if (open && initialTab) {
       // Map initialTab values to mainTab values
-      if (initialTab === 'integrations') {
-        setMainTab('integrations');
-      } else if (initialTab === 'brand') {
-        setMainTab('brand');
-      } else if (initialTab === 'developer') {
-        setMainTab('developer');
-      } else if (initialTab === 'model') {
-        setMainTab('model');
+      if (initialTab === "integrations") {
+        setMainTab("integrations");
+      } else if (initialTab === "brand") {
+        setMainTab("brand");
+      } else if (initialTab === "developer") {
+        setMainTab("developer");
+      } else if (initialTab === "model") {
+        setMainTab("model");
       }
     }
   }, [open, initialTab]);
@@ -275,7 +332,7 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
     try {
       await accomplish.setDebugMode(newValue);
     } catch (err) {
-      console.error('Failed to save debug setting:', err);
+      console.error("Failed to save debug setting:", err);
       setDebugMode(!newValue);
     }
   };
@@ -296,10 +353,13 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
         // Also update active provider to match the selected model
         await accomplish.setActiveProvider(model.provider as SharedProviderId);
         // Update the connected provider's selected model so SDK adapter uses correct model
-        await accomplish.updateProviderModel(model.provider as SharedProviderId, model.fullId);
+        await accomplish.updateProviderModel(
+          model.provider as SharedProviderId,
+          model.fullId,
+        );
         setModelStatusMessage(`Model updated to ${model.displayName}`);
       } catch (err) {
-        console.error('Failed to save model selection:', err);
+        console.error("Failed to save model selection:", err);
       }
     }
   };
@@ -310,13 +370,18 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
     const currentProvider = API_KEY_PROVIDERS.find((p) => p.id === provider)!;
 
     if (!trimmedKey) {
-      setError('Please enter an API key.');
+      setError("Please enter an API key.");
       return;
     }
 
     // Only validate prefix if the provider has a defined prefix
-    if (currentProvider.prefix && !trimmedKey.startsWith(currentProvider.prefix)) {
-      setError(`Invalid API key format. Key should start with ${currentProvider.prefix}`);
+    if (
+      currentProvider.prefix &&
+      !trimmedKey.startsWith(currentProvider.prefix)
+    ) {
+      setError(
+        `Invalid API key format. Key should start with ${currentProvider.prefix}`,
+      );
       return;
     }
 
@@ -326,33 +391,36 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
 
     try {
       // Validate first
-      const validation = await accomplish.validateApiKeyForProvider(provider, trimmedKey);
+      const validation = await accomplish.validateApiKeyForProvider(
+        provider,
+        trimmedKey,
+      );
       if (!validation.valid) {
-        setError(validation.error || 'Invalid API key');
+        setError(validation.error || "Invalid API key");
         setIsSaving(false);
         return;
       }
 
       const savedKey = await accomplish.addApiKey(provider, trimmedKey);
-      
+
       // Auto-connect the provider with a default model
       const providerId = provider as SharedProviderId;
       const defaultModel = DEFAULT_MODELS[providerId] || null;
       await accomplish.setConnectedProvider(providerId, {
         providerId,
-        connectionStatus: 'connected',
+        connectionStatus: "connected",
         selectedModelId: defaultModel,
-        credentials: { type: 'api_key', keyPrefix: trimmedKey.substring(0, 8) },
+        credentials: { type: "api_key", keyPrefix: trimmedKey.substring(0, 8) },
         lastConnectedAt: new Date().toISOString(),
       });
-      
+
       // Set as active provider if none is active
       const settings = await accomplish.getProviderSettings();
       if (!settings.activeProviderId) {
         await accomplish.setActiveProvider(providerId);
       }
 
-      setApiKey('');
+      setApiKey("");
       setStatusMessage(`${currentProvider.name} API key saved and connected.`);
       setSavedKeys((prev) => {
         const filtered = prev.filter((k) => k.provider !== savedKey.provider);
@@ -360,7 +428,8 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
       });
       onApiKeySaved?.();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to save API key.';
+      const message =
+        err instanceof Error ? err.message : "Failed to save API key.";
       setError(message);
     } finally {
       setIsSaving(false);
@@ -373,9 +442,12 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
     try {
       await accomplish.removeApiKey(id);
       setSavedKeys((prev) => prev.filter((k) => k.id !== id));
-      setStatusMessage(`${providerConfig?.name || providerName} API key removed.`);
+      setStatusMessage(
+        `${providerConfig?.name || providerName} API key removed.`,
+      );
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to remove API key.';
+      const message =
+        err instanceof Error ? err.message : "Failed to remove API key.";
       setError(message);
     }
   };
@@ -396,10 +468,10 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
           setSelectedOllamaModel(result.models[0].id);
         }
       } else {
-        setOllamaError(result.error || 'Connection failed');
+        setOllamaError(result.error || "Connection failed");
       }
     } catch (err) {
-      setOllamaError(err instanceof Error ? err.message : 'Connection failed');
+      setOllamaError(err instanceof Error ? err.message : "Connection failed");
     } finally {
       setTestingOllama(false);
     }
@@ -415,25 +487,25 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
         baseUrl: ollamaUrl,
         enabled: true,
         lastValidated: Date.now(),
-        models: ollamaModels,  // Include discovered models
+        models: ollamaModels, // Include discovered models
       });
 
       // Set as selected model
       await accomplish.setSelectedModel({
-        provider: 'ollama',
+        provider: "ollama",
         model: `ollama/${selectedOllamaModel}`,
         baseUrl: ollamaUrl,
       });
 
       setSelectedModel({
-        provider: 'ollama',
+        provider: "ollama",
         model: `ollama/${selectedOllamaModel}`,
         baseUrl: ollamaUrl,
       });
 
       setModelStatusMessage(`Model updated to ${selectedOllamaModel}`);
     } catch (err) {
-      setOllamaError(err instanceof Error ? err.message : 'Failed to save');
+      setOllamaError(err instanceof Error ? err.message : "Failed to save");
     } finally {
       setSavingOllama(false);
     }
@@ -453,10 +525,12 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
           setSelectedOpenrouterModel(result.models[0].id);
         }
       } else {
-        setOpenrouterError(result.error || 'Failed to fetch models');
+        setOpenrouterError(result.error || "Failed to fetch models");
       }
     } catch (err) {
-      setOpenrouterError(err instanceof Error ? err.message : 'Failed to fetch models');
+      setOpenrouterError(
+        err instanceof Error ? err.message : "Failed to fetch models",
+      );
     } finally {
       setOpenrouterLoading(false);
     }
@@ -468,22 +542,24 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
 
     try {
       await accomplish.setSelectedModel({
-        provider: 'openrouter',
+        provider: "openrouter",
         model: `openrouter/${selectedOpenrouterModel}`,
       });
 
       setSelectedModel({
-        provider: 'openrouter',
+        provider: "openrouter",
         model: `openrouter/${selectedOpenrouterModel}`,
       });
 
-      const modelName = openrouterModels.find(m => m.id === selectedOpenrouterModel)?.name || selectedOpenrouterModel;
+      const modelName =
+        openrouterModels.find((m) => m.id === selectedOpenrouterModel)?.name ||
+        selectedOpenrouterModel;
       setModelStatusMessage(`Model updated to ${modelName}`);
 
       // Now that model is selected, trigger the callback to close dialog and execute task
       onApiKeySaved?.();
     } catch (err) {
-      setOpenrouterError(err instanceof Error ? err.message : 'Failed to save');
+      setOpenrouterError(err instanceof Error ? err.message : "Failed to save");
     } finally {
       setSavingOpenrouter(false);
     }
@@ -494,12 +570,14 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
     const trimmedKey = openrouterApiKey.trim();
 
     if (!trimmedKey) {
-      setOpenrouterApiKeyError('Please enter an API key.');
+      setOpenrouterApiKeyError("Please enter an API key.");
       return;
     }
 
-    if (!trimmedKey.startsWith('sk-or-')) {
-      setOpenrouterApiKeyError('Invalid API key format. Key should start with sk-or-');
+    if (!trimmedKey.startsWith("sk-or-")) {
+      setOpenrouterApiKeyError(
+        "Invalid API key format. Key should start with sk-or-",
+      );
       return;
     }
 
@@ -508,27 +586,31 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
 
     try {
       // Validate the API key
-      const validation = await accomplish.validateApiKeyForProvider('openrouter', trimmedKey);
+      const validation = await accomplish.validateApiKeyForProvider(
+        "openrouter",
+        trimmedKey,
+      );
       if (!validation.valid) {
-        setOpenrouterApiKeyError(validation.error || 'Invalid API key.');
+        setOpenrouterApiKeyError(validation.error || "Invalid API key.");
         setSavingOpenrouterApiKey(false);
         return;
       }
 
       // Save the API key
-      const savedKey = await accomplish.addApiKey('openrouter', trimmedKey);
+      const savedKey = await accomplish.addApiKey("openrouter", trimmedKey);
       setSavedKeys((prev) => {
-        const filtered = prev.filter((k) => k.provider !== 'openrouter');
+        const filtered = prev.filter((k) => k.provider !== "openrouter");
         return [...filtered, savedKey];
       });
 
       // Clear input and auto-fetch models
-      setOpenrouterApiKey('');
+      setOpenrouterApiKey("");
 
       // Auto-fetch models after saving key (user still needs to select a model)
       await handleFetchOpenRouterModels();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to save API key.';
+      const message =
+        err instanceof Error ? err.message : "Failed to save API key.";
       setOpenrouterApiKeyError(message);
     } finally {
       setSavingOpenrouterApiKey(false);
@@ -553,13 +635,13 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
         }
         // Save API key if provided
         if (apiKey) {
-          await accomplish.addApiKey('litellm', apiKey);
+          await accomplish.addApiKey("litellm", apiKey);
         }
       } else {
-        setLitellmError(result.error || 'Connection failed');
+        setLitellmError(result.error || "Connection failed");
       }
     } catch (err) {
-      setLitellmError(err instanceof Error ? err.message : 'Connection failed');
+      setLitellmError(err instanceof Error ? err.message : "Connection failed");
     } finally {
       setTestingLitellm(false);
     }
@@ -580,24 +662,26 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
 
       // Set as selected model
       await accomplish.setSelectedModel({
-        provider: 'litellm',
+        provider: "litellm",
         model: `litellm/${selectedLitellmModel}`,
         baseUrl: litellmUrl,
       });
 
       setSelectedModel({
-        provider: 'litellm',
+        provider: "litellm",
         model: `litellm/${selectedLitellmModel}`,
         baseUrl: litellmUrl,
       });
 
-      const modelName = litellmModels.find(m => m.id === selectedLitellmModel)?.name || selectedLitellmModel;
+      const modelName =
+        litellmModels.find((m) => m.id === selectedLitellmModel)?.name ||
+        selectedLitellmModel;
       setModelStatusMessage(`Model updated to ${modelName}`);
 
       // Now that model is selected, trigger the callback to close dialog and execute task
       onApiKeySaved?.();
     } catch (err) {
-      setLitellmError(err instanceof Error ? err.message : 'Failed to save');
+      setLitellmError(err instanceof Error ? err.message : "Failed to save");
     } finally {
       setSavingLitellm(false);
     }
@@ -617,11 +701,11 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
         setShopifyShopName(result.shop.name);
         setShopifyError(null);
       } else {
-        setShopifyError(result.error || 'Connection failed');
+        setShopifyError(result.error || "Connection failed");
         setShopifyShopName(null);
       }
     } catch (err) {
-      setShopifyError(err instanceof Error ? err.message : 'Connection failed');
+      setShopifyError(err instanceof Error ? err.message : "Connection failed");
       setShopifyShopName(null);
     } finally {
       setTestingShopify(false);
@@ -639,9 +723,9 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
         shopDomain: shopifyDomain.trim(),
         accessToken: shopifyAccessToken.trim(),
       });
-      
+
       if (!testResult.success) {
-        setShopifyError(testResult.error || 'Invalid credentials');
+        setShopifyError(testResult.error || "Invalid credentials");
         setSavingShopify(false);
         return;
       }
@@ -654,9 +738,9 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
 
       setShopifyConnected(true);
       setShopifyShopName(testResult.shop?.name || null);
-      setShopifyAccessToken(''); // Clear token from input
+      setShopifyAccessToken(""); // Clear token from input
     } catch (err) {
-      setShopifyError(err instanceof Error ? err.message : 'Failed to connect');
+      setShopifyError(err instanceof Error ? err.message : "Failed to connect");
     } finally {
       setSavingShopify(false);
     }
@@ -670,10 +754,10 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
       await accomplish.disconnectShopify();
       setShopifyConnected(false);
       setShopifyShopName(null);
-      setShopifyDomain('');
-      setShopifyAccessToken('');
+      setShopifyDomain("");
+      setShopifyAccessToken("");
     } catch (err) {
-      console.error('Failed to disconnect Shopify:', err);
+      console.error("Failed to disconnect Shopify:", err);
     } finally {
       setDisconnectingShopify(false);
     }
@@ -681,35 +765,43 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
 
   // Group LiteLLM models by provider (same pattern as OpenRouter)
   const groupedLitellmModels = litellmModels
-    .filter(m =>
-      litellmSearch === '' ||
-      m.name.toLowerCase().includes(litellmSearch.toLowerCase()) ||
-      m.id.toLowerCase().includes(litellmSearch.toLowerCase())
+    .filter(
+      (m) =>
+        litellmSearch === "" ||
+        m.name.toLowerCase().includes(litellmSearch.toLowerCase()) ||
+        m.id.toLowerCase().includes(litellmSearch.toLowerCase()),
     )
-    .reduce((acc, model) => {
-      if (!acc[model.provider]) {
-        acc[model.provider] = [];
-      }
-      acc[model.provider].push(model);
-      return acc;
-    }, {} as Record<string, typeof litellmModels>);
+    .reduce(
+      (acc, model) => {
+        if (!acc[model.provider]) {
+          acc[model.provider] = [];
+        }
+        acc[model.provider].push(model);
+        return acc;
+      },
+      {} as Record<string, typeof litellmModels>,
+    );
 
   // Group OpenRouter models by provider
   const groupedOpenrouterModels = openrouterModels
-    .filter(m =>
-      openrouterSearch === '' ||
-      m.name.toLowerCase().includes(openrouterSearch.toLowerCase()) ||
-      m.id.toLowerCase().includes(openrouterSearch.toLowerCase())
+    .filter(
+      (m) =>
+        openrouterSearch === "" ||
+        m.name.toLowerCase().includes(openrouterSearch.toLowerCase()) ||
+        m.id.toLowerCase().includes(openrouterSearch.toLowerCase()),
     )
-    .reduce((acc, model) => {
-      if (!acc[model.provider]) {
-        acc[model.provider] = [];
-      }
-      acc[model.provider].push(model);
-      return acc;
-    }, {} as Record<string, typeof openrouterModels>);
+    .reduce(
+      (acc, model) => {
+        if (!acc[model.provider]) {
+          acc[model.provider] = [];
+        }
+        acc[model.provider].push(model);
+        return acc;
+      },
+      {} as Record<string, typeof openrouterModels>,
+    );
 
-  const hasOpenRouterKey = savedKeys.some(k => k.provider === 'openrouter');
+  const hasOpenRouterKey = savedKeys.some((k) => k.provider === "openrouter");
 
   const formatBytes = (bytes: number): string => {
     const gb = bytes / (1024 * 1024 * 1024);
@@ -726,41 +818,41 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
         {/* Main Tab Navigation */}
         <div className="flex gap-1 border-b border-border pb-0 mt-2">
           <button
-            onClick={() => setMainTab('model')}
+            onClick={() => setMainTab("model")}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              mainTab === 'model'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
+              mainTab === "model"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             Model
           </button>
           <button
-            onClick={() => setMainTab('brand')}
+            onClick={() => setMainTab("brand")}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              mainTab === 'brand'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
+              mainTab === "brand"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
-            Brand
+            Brand Memory
           </button>
           <button
-            onClick={() => setMainTab('integrations')}
+            onClick={() => setMainTab("integrations")}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              mainTab === 'integrations'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
+              mainTab === "integrations"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             Integrations
           </button>
           <button
-            onClick={() => setMainTab('developer')}
+            onClick={() => setMainTab("developer")}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              mainTab === 'developer'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
+              mainTab === "developer"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             Developer
@@ -768,323 +860,639 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
         </div>
 
         <div className="flex-1 overflow-y-auto mt-4">
-        {/* Model Tab Content */}
-        {mainTab === 'model' && (
-          <div className="space-y-6">
-            {/* Model Selection Section */}
-            <section>
-              <div className="rounded-lg border border-border bg-card p-5">
-                {/* Tabs */}
-                <div className="flex gap-2 mb-5">
-                  <button
-                    onClick={() => setActiveTab('cloud')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'cloud'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted text-muted-foreground hover:text-foreground'
-                      }`}
-                  >
-                    Cloud Providers
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('local')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'local'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted text-muted-foreground hover:text-foreground'
-                      }`}
-                  >
-                    Local Models
-                  </button>
-                  <button
-                  onClick={() => setActiveTab('proxy')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'proxy'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:text-foreground'
-                    }`}
-                >
-                  Proxy Platforms
-                </button>
-              </div>
-
-              {activeTab === 'cloud' && (
-                <>
-                  <p className="mb-4 text-sm text-muted-foreground leading-relaxed">
-                    Select a cloud AI model. Requires an API key for the provider.
-                  </p>
-                  {loadingModel ? (
-                    <div className="h-10 animate-pulse rounded-md bg-muted" />
-                  ) : (
-                    <select
-                      data-testid="settings-model-select"
-                      value={selectedModel?.provider !== 'ollama' ? selectedModel?.model || '' : ''}
-                      onChange={(e) => handleModelChange(e.target.value)}
-                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    >
-                      <option value="" disabled>Select a model...</option>
-                      {DEFAULT_PROVIDERS.filter((p) => p.requiresApiKey).map((provider) => {
-                        const hasApiKey = savedKeys.some((k) => k.provider === provider.id);
-                        return (
-                          <optgroup key={provider.id} label={provider.name}>
-                            {provider.models.map((model) => (
-                              <option
-                                key={model.fullId}
-                                value={model.fullId}
-                                disabled={!hasApiKey}
-                              >
-                                {model.displayName}{!hasApiKey ? ' (No API key)' : ''}
-                              </option>
-                            ))}
-                          </optgroup>
-                        );
-                      })}
-                    </select>
-                  )}
-                  {modelStatusMessage && (
-                    <p className="mt-3 text-sm text-success">{modelStatusMessage}</p>
-                  )}
-                  {selectedModel && selectedModel.provider !== 'ollama' && !savedKeys.some((k) => k.provider === selectedModel.provider) && (
-                    <p className="mt-3 text-sm text-warning">
-                      No API key configured for {DEFAULT_PROVIDERS.find((p) => p.id === selectedModel.provider)?.name}. Add one below.
-                    </p>
-                  )}
-                </>
-              )}
-
-              {activeTab === 'local' && (
-                <>
-                  <p className="mb-4 text-sm text-muted-foreground leading-relaxed">
-                    Connect to a local Ollama server to use models running on your machine.
-                  </p>
-
-                  {/* Ollama URL Input */}
-                  <div className="mb-4">
-                    <label className="mb-2 block text-sm font-medium text-foreground">
-                      Ollama Server URL
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={ollamaUrl}
-                        onChange={(e) => {
-                          setOllamaUrl(e.target.value);
-                          setOllamaConnected(false);
-                          setOllamaModels([]);
-                        }}
-                        placeholder="http://localhost:11434"
-                        className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      />
-                      <button
-                        onClick={handleTestOllama}
-                        disabled={testingOllama}
-                        className="rounded-md bg-muted px-4 py-2 text-sm font-medium hover:bg-muted/80 disabled:opacity-50"
-                      >
-                        {testingOllama ? 'Testing...' : 'Test'}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Connection Status */}
-                  {ollamaConnected && (
-                    <div className="mb-4 flex items-center gap-2 text-sm text-success">
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      Connected - {ollamaModels.length} model{ollamaModels.length !== 1 ? 's' : ''} available
-                    </div>
-                  )}
-
-                  {ollamaError && (
-                    <div className="mb-4 flex items-center gap-2 text-sm text-destructive">
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                      {ollamaError}
-                    </div>
-                  )}
-
-                  {/* Model Selection (only show when connected) */}
-                  {ollamaConnected && ollamaModels.length > 0 && (
-                    <div className="mb-4">
-                      <label className="mb-2 block text-sm font-medium text-foreground">
-                        Select Model
-                      </label>
-                      <select
-                        value={selectedOllamaModel}
-                        onChange={(e) => setSelectedOllamaModel(e.target.value)}
-                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      >
-                        {ollamaModels.map((model) => (
-                          <option key={model.id} value={model.id}>
-                            {model.displayName} ({formatBytes(model.size)})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {/* Save Button */}
-                  {ollamaConnected && selectedOllamaModel && (
-                    <button
-                      onClick={handleSaveOllama}
-                      disabled={savingOllama}
-                      className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                    >
-                      {savingOllama ? 'Saving...' : 'Use This Model'}
-                    </button>
-                  )}
-
-                  {/* Help text when not connected */}
-                  {!ollamaConnected && !ollamaError && (
-                    <p className="text-sm text-muted-foreground">
-                      Make sure{' '}
-                      <a
-                        href="https://ollama.ai"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline"
-                      >
-                        Ollama
-                      </a>{' '}
-                      is installed and running, then click Test to connect.
-                    </p>
-                  )}
-
-                  {/* Current Ollama selection indicator */}
-                  {selectedModel?.provider === 'ollama' && (
-                    <div className="mt-4 rounded-lg bg-muted p-3">
-                      <p className="text-sm text-foreground">
-                        <span className="font-medium">Currently using:</span>{' '}
-                        {selectedModel.model.replace('ollama/', '')}
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {activeTab === 'proxy' && (
-                <>
-                  <p className="mb-4 text-sm text-muted-foreground leading-relaxed">
-                    Connect through proxy platforms to access multiple AI providers with a single API key.
-                  </p>
-
-                  {/* Platform Selector */}
+          {/* Model Tab Content */}
+          {mainTab === "model" && (
+            <div className="space-y-6">
+              {/* Model Selection Section */}
+              <section>
+                <div className="rounded-lg border border-border bg-card p-5">
+                  {/* Tabs */}
                   <div className="flex gap-2 mb-5">
                     <button
-                      onClick={() => setSelectedProxyPlatform('openrouter')}
-                      className={`flex-1 rounded-xl border p-4 text-center transition-all duration-200 ${
-                        selectedProxyPlatform === 'openrouter'
-                          ? 'border-primary bg-muted'
-                          : 'border-border hover:border-ring'
+                      onClick={() => setActiveTab("cloud")}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        activeTab === "cloud"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:text-foreground"
                       }`}
                     >
-                      <div className="font-medium text-foreground">OpenRouter</div>
-                      <div className="text-xs text-muted-foreground mt-1">200+ models</div>
+                      Cloud Providers
                     </button>
                     <button
-                      onClick={() => setSelectedProxyPlatform('litellm')}
-                      className={`flex-1 rounded-xl border p-4 text-center transition-all duration-200 ${
-                        selectedProxyPlatform === 'litellm'
-                          ? 'border-primary bg-muted'
-                          : 'border-border hover:border-ring'
+                      onClick={() => setActiveTab("local")}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        activeTab === "local"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:text-foreground"
                       }`}
                     >
-                      <div className="font-medium text-foreground">LiteLLM</div>
-                      <div className="text-xs text-muted-foreground mt-1">Self-hosted proxy</div>
+                      Local Models
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("proxy")}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        activeTab === "proxy"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Proxy Platforms
                     </button>
                   </div>
 
-                  {selectedProxyPlatform === 'openrouter' && (
+                  {activeTab === "cloud" && (
                     <>
-                      {!hasOpenRouterKey ? (
-                        <div className="space-y-4">
-                          <p className="text-sm text-muted-foreground">
-                            Enter your OpenRouter API key to access 200+ models from multiple providers.
+                      <p className="mb-4 text-sm text-muted-foreground leading-relaxed">
+                        Select a cloud AI model. Requires an API key for the
+                        provider.
+                      </p>
+                      {loadingModel ? (
+                        <div className="h-10 animate-pulse rounded-md bg-muted" />
+                      ) : (
+                        <select
+                          data-testid="settings-model-select"
+                          value={
+                            selectedModel?.provider !== "ollama"
+                              ? selectedModel?.model || ""
+                              : ""
+                          }
+                          onChange={(e) => handleModelChange(e.target.value)}
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        >
+                          <option value="" disabled>
+                            Select a model...
+                          </option>
+                          {DEFAULT_PROVIDERS.filter(
+                            (p) => p.requiresApiKey,
+                          ).map((provider) => {
+                            const hasApiKey = savedKeys.some(
+                              (k) => k.provider === provider.id,
+                            );
+                            return (
+                              <optgroup key={provider.id} label={provider.name}>
+                                {provider.models.map((model) => (
+                                  <option
+                                    key={model.fullId}
+                                    value={model.fullId}
+                                    disabled={!hasApiKey}
+                                  >
+                                    {model.displayName}
+                                    {!hasApiKey ? " (No API key)" : ""}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            );
+                          })}
+                        </select>
+                      )}
+                      {modelStatusMessage && (
+                        <p className="mt-3 text-sm text-success">
+                          {modelStatusMessage}
+                        </p>
+                      )}
+                      {selectedModel &&
+                        selectedModel.provider !== "ollama" &&
+                        !savedKeys.some(
+                          (k) => k.provider === selectedModel.provider,
+                        ) && (
+                          <p className="mt-3 text-sm text-warning">
+                            No API key configured for{" "}
+                            {
+                              DEFAULT_PROVIDERS.find(
+                                (p) => p.id === selectedModel.provider,
+                              )?.name
+                            }
+                            . Add one below.
                           </p>
-                          <div>
-                            <label className="mb-2 block text-sm font-medium text-foreground">
-                              OpenRouter API Key
-                            </label>
-                            <input
-                              type="password"
-                              value={openrouterApiKey}
-                              onChange={(e) => {
-                                setOpenrouterApiKey(e.target.value);
-                                setOpenrouterApiKeyError(null);
-                              }}
-                              placeholder="sk-or-..."
-                              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                            />
-                          </div>
-                          {openrouterApiKeyError && (
-                            <p className="text-sm text-destructive">{openrouterApiKeyError}</p>
-                          )}
+                        )}
+                    </>
+                  )}
+
+                  {activeTab === "local" && (
+                    <>
+                      <p className="mb-4 text-sm text-muted-foreground leading-relaxed">
+                        Connect to a local Ollama server to use models running
+                        on your machine.
+                      </p>
+
+                      {/* Ollama URL Input */}
+                      <div className="mb-4">
+                        <label className="mb-2 block text-sm font-medium text-foreground">
+                          Ollama Server URL
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={ollamaUrl}
+                            onChange={(e) => {
+                              setOllamaUrl(e.target.value);
+                              setOllamaConnected(false);
+                              setOllamaModels([]);
+                            }}
+                            placeholder="http://localhost:11434"
+                            className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
                           <button
-                            onClick={handleSaveOpenRouterApiKey}
-                            disabled={savingOpenrouterApiKey || !openrouterApiKey.trim()}
-                            className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                            onClick={handleTestOllama}
+                            disabled={testingOllama}
+                            className="rounded-md bg-muted px-4 py-2 text-sm font-medium hover:bg-muted/80 disabled:opacity-50"
                           >
-                            {savingOpenrouterApiKey ? 'Validating...' : 'Save API Key & Fetch Models'}
+                            {testingOllama ? "Testing..." : "Test"}
                           </button>
-                          <p className="text-xs text-muted-foreground">
-                            Get your API key at{' '}
-                            <a
-                              href="https://openrouter.ai/keys"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline"
-                            >
-                              openrouter.ai/keys
-                            </a>
+                        </div>
+                      </div>
+
+                      {/* Connection Status */}
+                      {ollamaConnected && (
+                        <div className="mb-4 flex items-center gap-2 text-sm text-success">
+                          <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M5 13l4 4L19 7"
+                            />
+                          </svg>
+                          Connected - {ollamaModels.length} model
+                          {ollamaModels.length !== 1 ? "s" : ""} available
+                        </div>
+                      )}
+
+                      {ollamaError && (
+                        <div className="mb-4 flex items-center gap-2 text-sm text-destructive">
+                          <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M6 18L18 6M6 6l12 12"
+                            />
+                          </svg>
+                          {ollamaError}
+                        </div>
+                      )}
+
+                      {/* Model Selection (only show when connected) */}
+                      {ollamaConnected && ollamaModels.length > 0 && (
+                        <div className="mb-4">
+                          <label className="mb-2 block text-sm font-medium text-foreground">
+                            Select Model
+                          </label>
+                          <select
+                            value={selectedOllamaModel}
+                            onChange={(e) =>
+                              setSelectedOllamaModel(e.target.value)
+                            }
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          >
+                            {ollamaModels.map((model) => (
+                              <option key={model.id} value={model.id}>
+                                {model.displayName} ({formatBytes(model.size)})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Save Button */}
+                      {ollamaConnected && selectedOllamaModel && (
+                        <button
+                          onClick={handleSaveOllama}
+                          disabled={savingOllama}
+                          className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                        >
+                          {savingOllama ? "Saving..." : "Use This Model"}
+                        </button>
+                      )}
+
+                      {/* Help text when not connected */}
+                      {!ollamaConnected && !ollamaError && (
+                        <p className="text-sm text-muted-foreground">
+                          Make sure{" "}
+                          <a
+                            href="https://ollama.ai"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline"
+                          >
+                            Ollama
+                          </a>{" "}
+                          is installed and running, then click Test to connect.
+                        </p>
+                      )}
+
+                      {/* Current Ollama selection indicator */}
+                      {selectedModel?.provider === "ollama" && (
+                        <div className="mt-4 rounded-lg bg-muted p-3">
+                          <p className="text-sm text-foreground">
+                            <span className="font-medium">
+                              Currently using:
+                            </span>{" "}
+                            {selectedModel.model.replace("ollama/", "")}
                           </p>
                         </div>
-                      ) : (
-                        <>
-                          {/* Connected Status */}
-                          <div className="mb-4 flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-sm text-success">
-                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                              API key configured
-                            </div>
-                            <button
-                              onClick={handleFetchOpenRouterModels}
-                              disabled={openrouterLoading}
-                              className="rounded-md bg-muted px-4 py-2 text-sm font-medium hover:bg-muted/80 disabled:opacity-50"
-                            >
-                              {openrouterLoading ? 'Fetching...' : openrouterModels.length > 0 ? 'Refresh' : 'Fetch Models'}
-                            </button>
+                      )}
+                    </>
+                  )}
+
+                  {activeTab === "proxy" && (
+                    <>
+                      <p className="mb-4 text-sm text-muted-foreground leading-relaxed">
+                        Connect through proxy platforms to access multiple AI
+                        providers with a single API key.
+                      </p>
+
+                      {/* Platform Selector */}
+                      <div className="flex gap-2 mb-5">
+                        <button
+                          onClick={() => setSelectedProxyPlatform("openrouter")}
+                          className={`flex-1 rounded-xl border p-4 text-center transition-all duration-200 ${
+                            selectedProxyPlatform === "openrouter"
+                              ? "border-primary bg-muted"
+                              : "border-border hover:border-ring"
+                          }`}
+                        >
+                          <div className="font-medium text-foreground">
+                            OpenRouter
                           </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            200+ models
+                          </div>
+                        </button>
+                        <button
+                          onClick={() => setSelectedProxyPlatform("litellm")}
+                          className={`flex-1 rounded-xl border p-4 text-center transition-all duration-200 ${
+                            selectedProxyPlatform === "litellm"
+                              ? "border-primary bg-muted"
+                              : "border-border hover:border-ring"
+                          }`}
+                        >
+                          <div className="font-medium text-foreground">
+                            LiteLLM
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            Self-hosted proxy
+                          </div>
+                        </button>
+                      </div>
 
-                          {openrouterError && (
-                            <div className="mb-4 flex items-center gap-2 text-sm text-destructive">
-                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                              {openrouterError}
+                      {selectedProxyPlatform === "openrouter" && (
+                        <>
+                          {!hasOpenRouterKey ? (
+                            <div className="space-y-4">
+                              <p className="text-sm text-muted-foreground">
+                                Enter your OpenRouter API key to access 200+
+                                models from multiple providers.
+                              </p>
+                              <div>
+                                <label className="mb-2 block text-sm font-medium text-foreground">
+                                  OpenRouter API Key
+                                </label>
+                                <input
+                                  type="password"
+                                  value={openrouterApiKey}
+                                  onChange={(e) => {
+                                    setOpenrouterApiKey(e.target.value);
+                                    setOpenrouterApiKeyError(null);
+                                  }}
+                                  placeholder="sk-or-..."
+                                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                />
+                              </div>
+                              {openrouterApiKeyError && (
+                                <p className="text-sm text-destructive">
+                                  {openrouterApiKeyError}
+                                </p>
+                              )}
+                              <button
+                                onClick={handleSaveOpenRouterApiKey}
+                                disabled={
+                                  savingOpenrouterApiKey ||
+                                  !openrouterApiKey.trim()
+                                }
+                                className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                              >
+                                {savingOpenrouterApiKey
+                                  ? "Validating..."
+                                  : "Save API Key & Fetch Models"}
+                              </button>
+                              <p className="text-xs text-muted-foreground">
+                                Get your API key at{" "}
+                                <a
+                                  href="https://openrouter.ai/keys"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline"
+                                >
+                                  openrouter.ai/keys
+                                </a>
+                              </p>
                             </div>
-                          )}
-
-                          {openrouterModels.length > 0 && (
+                          ) : (
                             <>
+                              {/* Connected Status */}
+                              <div className="mb-4 flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-sm text-success">
+                                  <svg
+                                    className="h-4 w-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M5 13l4 4L19 7"
+                                    />
+                                  </svg>
+                                  API key configured
+                                </div>
+                                <button
+                                  onClick={handleFetchOpenRouterModels}
+                                  disabled={openrouterLoading}
+                                  className="rounded-md bg-muted px-4 py-2 text-sm font-medium hover:bg-muted/80 disabled:opacity-50"
+                                >
+                                  {openrouterLoading
+                                    ? "Fetching..."
+                                    : openrouterModels.length > 0
+                                      ? "Refresh"
+                                      : "Fetch Models"}
+                                </button>
+                              </div>
+
+                              {openrouterError && (
+                                <div className="mb-4 flex items-center gap-2 text-sm text-destructive">
+                                  <svg
+                                    className="h-4 w-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M6 18L18 6M6 6l12 12"
+                                    />
+                                  </svg>
+                                  {openrouterError}
+                                </div>
+                              )}
+
+                              {openrouterModels.length > 0 && (
+                                <>
+                                  {/* Search */}
+                                  <div className="mb-4">
+                                    <input
+                                      type="text"
+                                      value={openrouterSearch}
+                                      onChange={(e) =>
+                                        setOpenrouterSearch(e.target.value)
+                                      }
+                                      placeholder="Search models..."
+                                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                    />
+                                  </div>
+
+                                  {/* Grouped Model List */}
+                                  <div className="mb-4 max-h-64 overflow-y-auto rounded-md border border-input">
+                                    {Object.entries(groupedOpenrouterModels)
+                                      .sort(([a], [b]) => {
+                                        const priorityA =
+                                          OPENROUTER_PROVIDER_PRIORITY.indexOf(
+                                            a,
+                                          );
+                                        const priorityB =
+                                          OPENROUTER_PROVIDER_PRIORITY.indexOf(
+                                            b,
+                                          );
+                                        // If both have priority, sort by priority
+                                        if (
+                                          priorityA !== -1 &&
+                                          priorityB !== -1
+                                        )
+                                          return priorityA - priorityB;
+                                        // Priority providers come first
+                                        if (priorityA !== -1) return -1;
+                                        if (priorityB !== -1) return 1;
+                                        // Otherwise alphabetical
+                                        return a.localeCompare(b);
+                                      })
+                                      .map(([provider, models]) => (
+                                        <div key={provider}>
+                                          <div className="sticky top-0 bg-muted px-3 py-2 text-xs font-semibold text-muted-foreground uppercase">
+                                            {provider}
+                                          </div>
+                                          {models.map((model) => (
+                                            <label
+                                              key={model.id}
+                                              className={`flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-muted/50 ${
+                                                selectedOpenrouterModel ===
+                                                model.id
+                                                  ? "bg-muted"
+                                                  : ""
+                                              }`}
+                                            >
+                                              <input
+                                                type="radio"
+                                                name="openrouter-model"
+                                                value={model.id}
+                                                checked={
+                                                  selectedOpenrouterModel ===
+                                                  model.id
+                                                }
+                                                onChange={(e) =>
+                                                  setSelectedOpenrouterModel(
+                                                    e.target.value,
+                                                  )
+                                                }
+                                                className="h-4 w-4"
+                                              />
+                                              <div className="flex-1 min-w-0">
+                                                <div className="text-sm font-medium text-foreground truncate">
+                                                  {model.name}
+                                                </div>
+                                                <div className="text-xs text-muted-foreground truncate">
+                                                  {model.id}
+                                                </div>
+                                              </div>
+                                            </label>
+                                          ))}
+                                        </div>
+                                      ))}
+                                  </div>
+
+                                  {/* Save Button */}
+                                  <button
+                                    onClick={handleSaveOpenRouter}
+                                    disabled={
+                                      savingOpenrouter ||
+                                      !selectedOpenrouterModel
+                                    }
+                                    className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                                  >
+                                    {savingOpenrouter
+                                      ? "Saving..."
+                                      : "Use This Model"}
+                                  </button>
+                                </>
+                              )}
+
+                              {/* Current OpenRouter selection indicator */}
+                              {selectedModel?.provider === "openrouter" && (
+                                <div className="mt-4 rounded-lg bg-muted p-3">
+                                  <p className="text-sm text-foreground">
+                                    <span className="font-medium">
+                                      Currently using:
+                                    </span>{" "}
+                                    {selectedModel.model.replace(
+                                      "openrouter/",
+                                      "",
+                                    )}
+                                  </p>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </>
+                      )}
+
+                      {selectedProxyPlatform === "litellm" && (
+                        <>
+                          {!litellmConnected ? (
+                            <div className="space-y-4">
+                              <p className="text-sm text-muted-foreground">
+                                Connect to your LiteLLM proxy to access multiple
+                                providers through a unified interface.
+                              </p>
+                              <div>
+                                <label className="mb-1.5 block text-sm font-medium text-foreground">
+                                  LiteLLM Proxy URL
+                                </label>
+                                <input
+                                  type="url"
+                                  value={litellmUrl}
+                                  onChange={(e) =>
+                                    setLitellmUrl(e.target.value)
+                                  }
+                                  placeholder="http://localhost:4000"
+                                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                                  data-testid="litellm-url-input"
+                                />
+                              </div>
+                              <div>
+                                <label className="mb-1.5 block text-sm font-medium text-foreground">
+                                  API Key (Optional)
+                                </label>
+                                <input
+                                  type="password"
+                                  value={litellmApiKey}
+                                  onChange={(e) =>
+                                    setLitellmApiKey(e.target.value)
+                                  }
+                                  placeholder="sk-... (leave empty if not required)"
+                                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                                  data-testid="litellm-api-key-input"
+                                />
+                              </div>
+                              {litellmError && (
+                                <p className="text-sm text-destructive">
+                                  {litellmError}
+                                </p>
+                              )}
+                              <button
+                                onClick={handleTestLiteLLM}
+                                disabled={testingLitellm || !litellmUrl.trim()}
+                                className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                                data-testid="litellm-test-button"
+                              >
+                                {testingLitellm
+                                  ? "Connecting..."
+                                  : "Test Connection"}
+                              </button>
+                              <p className="text-xs text-muted-foreground">
+                                Learn more at{" "}
+                                <a
+                                  href="https://docs.litellm.ai/docs/"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline"
+                                >
+                                  docs.litellm.ai
+                                </a>
+                              </p>
+                            </div>
+                          ) : (
+                            <>
+                              {/* Connected Status */}
+                              <div className="mb-4 flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-sm text-success">
+                                  <svg
+                                    className="h-4 w-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M5 13l4 4L19 7"
+                                    />
+                                  </svg>
+                                  Connected to {litellmUrl}
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    setLitellmConnected(false);
+                                    setLitellmModels([]);
+                                    setLitellmError(null);
+                                  }}
+                                  className="text-xs text-muted-foreground hover:text-foreground"
+                                >
+                                  Disconnect
+                                </button>
+                              </div>
+
                               {/* Search */}
                               <div className="mb-4">
                                 <input
                                   type="text"
-                                  value={openrouterSearch}
-                                  onChange={(e) => setOpenrouterSearch(e.target.value)}
+                                  value={litellmSearch}
+                                  onChange={(e) =>
+                                    setLitellmSearch(e.target.value)
+                                  }
                                   placeholder="Search models..."
-                                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                                  data-testid="litellm-search-input"
                                 />
                               </div>
 
                               {/* Grouped Model List */}
-                              <div className="mb-4 max-h-64 overflow-y-auto rounded-md border border-input">
-                                {Object.entries(groupedOpenrouterModels)
+                              <div
+                                className="mb-4 max-h-64 overflow-y-auto rounded-md border border-input"
+                                data-testid="litellm-model-list"
+                              >
+                                {Object.entries(groupedLitellmModels)
                                   .sort(([a], [b]) => {
-                                    const priorityA = OPENROUTER_PROVIDER_PRIORITY.indexOf(a);
-                                    const priorityB = OPENROUTER_PROVIDER_PRIORITY.indexOf(b);
+                                    const priorityA =
+                                      LITELLM_PROVIDER_PRIORITY.indexOf(a);
+                                    const priorityB =
+                                      LITELLM_PROVIDER_PRIORITY.indexOf(b);
                                     // If both have priority, sort by priority
-                                    if (priorityA !== -1 && priorityB !== -1) return priorityA - priorityB;
+                                    if (priorityA !== -1 && priorityB !== -1)
+                                      return priorityA - priorityB;
                                     // Priority providers come first
                                     if (priorityA !== -1) return -1;
                                     if (priorityB !== -1) return 1;
@@ -1100,16 +1508,25 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
                                         <label
                                           key={model.id}
                                           className={`flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-muted/50 ${
-                                            selectedOpenrouterModel === model.id ? 'bg-muted' : ''
+                                            selectedLitellmModel === model.id
+                                              ? "bg-muted"
+                                              : ""
                                           }`}
                                         >
                                           <input
                                             type="radio"
-                                            name="openrouter-model"
+                                            name="litellm-model"
                                             value={model.id}
-                                            checked={selectedOpenrouterModel === model.id}
-                                            onChange={(e) => setSelectedOpenrouterModel(e.target.value)}
+                                            checked={
+                                              selectedLitellmModel === model.id
+                                            }
+                                            onChange={(e) =>
+                                              setSelectedLitellmModel(
+                                                e.target.value,
+                                              )
+                                            }
                                             className="h-4 w-4"
+                                            data-testid={`litellm-model-${model.id}`}
                                           />
                                           <div className="flex-1 min-w-0">
                                             <div className="text-sm font-medium text-foreground truncate">
@@ -1125,549 +1542,456 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved, init
                                   ))}
                               </div>
 
-                              {/* Save Button */}
-                              <button
-                                onClick={handleSaveOpenRouter}
-                                disabled={savingOpenrouter || !selectedOpenrouterModel}
-                                className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                              >
-                                {savingOpenrouter ? 'Saving...' : 'Use This Model'}
-                              </button>
-                            </>
-                          )}
+                              {/* Save button */}
+                              {selectedLitellmModel && (
+                                <>
+                                  <button
+                                    onClick={handleSaveLiteLLM}
+                                    disabled={savingLitellm}
+                                    className="mt-4 w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                                    data-testid="litellm-save-button"
+                                  >
+                                    {savingLitellm
+                                      ? "Saving..."
+                                      : "Use This Model"}
+                                  </button>
+                                </>
+                              )}
 
-                          {/* Current OpenRouter selection indicator */}
-                          {selectedModel?.provider === 'openrouter' && (
-                            <div className="mt-4 rounded-lg bg-muted p-3">
-                              <p className="text-sm text-foreground">
-                                <span className="font-medium">Currently using:</span>{' '}
-                                {selectedModel.model.replace('openrouter/', '')}
-                              </p>
-                            </div>
+                              {/* Current LiteLLM selection indicator */}
+                              {selectedModel?.provider === "litellm" && (
+                                <div className="mt-4 rounded-lg bg-muted p-3">
+                                  <p className="text-sm text-foreground">
+                                    <span className="font-medium">
+                                      Currently using:
+                                    </span>{" "}
+                                    {selectedModel.model.replace(
+                                      "litellm/",
+                                      "",
+                                    )}
+                                  </p>
+                                </div>
+                              )}
+                            </>
                           )}
                         </>
                       )}
                     </>
                   )}
+                </div>
+              </section>
 
-                  {selectedProxyPlatform === 'litellm' && (
-                    <>
-                      {!litellmConnected ? (
-                        <div className="space-y-4">
-                          <p className="text-sm text-muted-foreground">
-                            Connect to your LiteLLM proxy to access multiple providers through a unified interface.
+              {/* API Key Section - Only show for cloud providers */}
+              {activeTab === "cloud" && (
+                <section>
+                  <h2 className="mb-4 text-base font-medium text-foreground">
+                    Bring Your Own Model/API Key
+                  </h2>
+                  <div className="rounded-lg border border-border bg-card p-5">
+                    <p className="mb-5 text-sm text-muted-foreground leading-relaxed">
+                      Setup the API key and model for your own AI coworker.
+                    </p>
+
+                    {/* Provider Selection */}
+                    <div className="mb-5">
+                      <label className="mb-2.5 block text-sm font-medium text-foreground">
+                        Provider
+                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                        {API_KEY_PROVIDERS.map((p) => (
+                          <button
+                            key={p.id}
+                            onClick={() => setProvider(p.id)}
+                            className={`rounded-xl border p-4 text-center transition-all duration-200 ease-accomplish ${
+                              provider === p.id
+                                ? "border-primary bg-muted"
+                                : "border-border hover:border-ring"
+                            }`}
+                          >
+                            <div className="font-medium text-foreground">
+                              {p.name}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* API Key Input */}
+                    <div className="mb-5">
+                      <label className="mb-2.5 block text-sm font-medium text-foreground">
+                        {API_KEY_PROVIDERS.find((p) => p.id === provider)?.name}{" "}
+                        API Key
+                      </label>
+                      <input
+                        data-testid="settings-api-key-input"
+                        type="password"
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                        placeholder={
+                          API_KEY_PROVIDERS.find((p) => p.id === provider)
+                            ?.placeholder
+                        }
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      />
+                      {provider === "openrouter" && (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Uses the OpenAI-compatible endpoint at{" "}
+                          <span className="font-mono">
+                            https://openrouter.ai/api/v1
+                          </span>
+                          . Select an OpenAI model below.
+                        </p>
+                      )}
+                    </div>
+
+                    {error && (
+                      <p className="mb-4 text-sm text-destructive">{error}</p>
+                    )}
+                    {statusMessage && (
+                      <p className="mb-4 text-sm text-success">
+                        {statusMessage}
+                      </p>
+                    )}
+
+                    <button
+                      className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                      onClick={handleSaveApiKey}
+                      disabled={isSaving}
+                    >
+                      {isSaving ? "Saving..." : "Save API Key"}
+                    </button>
+
+                    {/* Saved Keys */}
+                    {loadingKeys ? (
+                      <div className="mt-6 animate-pulse">
+                        <div className="h-4 w-24 rounded bg-muted mb-3" />
+                        <div className="h-14 rounded-xl bg-muted" />
+                      </div>
+                    ) : (
+                      savedKeys.length > 0 && (
+                        <div className="mt-6">
+                          <h3 className="mb-3 text-sm font-medium text-foreground">
+                            Saved Keys
+                          </h3>
+                          <div className="space-y-2">
+                            {savedKeys.map((key) => {
+                              const providerConfig = API_KEY_PROVIDERS.find(
+                                (p) => p.id === key.provider,
+                              );
+                              return (
+                                <div
+                                  key={key.id}
+                                  className="flex items-center justify-between rounded-xl border border-border bg-muted p-3.5"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                                      <span className="text-xs font-bold text-primary">
+                                        {providerConfig?.name.charAt(0) ||
+                                          key.provider.charAt(0).toUpperCase()}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <div className="text-sm font-medium text-foreground">
+                                        {providerConfig?.name || key.provider}
+                                      </div>
+                                      <div className="text-xs text-muted-foreground font-mono">
+                                        {key.keyPrefix}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {keyToDelete === key.id ? (
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs text-muted-foreground">
+                                        Are you sure?
+                                      </span>
+                                      <button
+                                        onClick={() => {
+                                          handleDeleteApiKey(
+                                            key.id,
+                                            key.provider,
+                                          );
+                                          setKeyToDelete(null);
+                                        }}
+                                        className="rounded px-2 py-1 text-xs font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
+                                      >
+                                        Yes
+                                      </button>
+                                      <button
+                                        onClick={() => setKeyToDelete(null)}
+                                        className="rounded px-2 py-1 text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+                                      >
+                                        No
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => setKeyToDelete(key.id)}
+                                      className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors duration-200 ease-accomplish"
+                                      title="Remove API key"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )
+                    )}
+                  </div>
+                </section>
+              )}
+            </div>
+          )}
+
+          {/* Brand Tab Content */}
+          {mainTab === "brand" && (
+            <div className="space-y-6">
+              <BrandSettingsSection />
+            </div>
+          )}
+
+          {/* Integrations Tab Content */}
+          {mainTab === "integrations" && (
+            <div className="space-y-6">
+              {/* Integrations Section */}
+              <section id="settings-integrations-section">
+                <div className="rounded-lg border border-border bg-card p-5">
+                  {/* Shopify Connection */}
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#96bf48]/10 p-2">
+                      <img
+                        src={shopifyIcon}
+                        alt="Shopify"
+                        className="h-full w-full object-contain"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-medium text-foreground">
+                            Shopify
+                          </h3>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {shopifyConnected
+                              ? `Connected to ${shopifyShopName || shopifyDomain}`
+                              : "Connect your store to manage products, orders, and inventory"}
                           </p>
+                        </div>
+                        {shopifyConnected && (
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="h-5 w-5 text-success" />
+                            <button
+                              onClick={handleDisconnectShopify}
+                              disabled={disconnectingShopify}
+                              className="text-sm text-muted-foreground hover:text-destructive transition-colors"
+                            >
+                              {disconnectingShopify
+                                ? "Disconnecting..."
+                                : "Disconnect"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {!shopifyConnected && (
+                        <div className="mt-4 space-y-3">
                           <div>
                             <label className="mb-1.5 block text-sm font-medium text-foreground">
-                              LiteLLM Proxy URL
+                              Store Domain
                             </label>
                             <input
-                              type="url"
-                              value={litellmUrl}
-                              onChange={(e) => setLitellmUrl(e.target.value)}
-                              placeholder="http://localhost:4000"
-                              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                              data-testid="litellm-url-input"
+                              type="text"
+                              value={shopifyDomain}
+                              onChange={(e) => {
+                                setShopifyDomain(e.target.value);
+                                setShopifyError(null);
+                                setShopifyShopName(null);
+                              }}
+                              placeholder="your-store.myshopify.com"
+                              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                              data-testid="shopify-domain-input"
                             />
                           </div>
                           <div>
                             <label className="mb-1.5 block text-sm font-medium text-foreground">
-                              API Key (Optional)
+                              Admin API Access Token
                             </label>
                             <input
                               type="password"
-                              value={litellmApiKey}
-                              onChange={(e) => setLitellmApiKey(e.target.value)}
-                              placeholder="sk-... (leave empty if not required)"
-                              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                              data-testid="litellm-api-key-input"
-                            />
-                          </div>
-                          {litellmError && (
-                            <p className="text-sm text-destructive">{litellmError}</p>
-                          )}
-                          <button
-                            onClick={handleTestLiteLLM}
-                            disabled={testingLitellm || !litellmUrl.trim()}
-                            className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                            data-testid="litellm-test-button"
-                          >
-                            {testingLitellm ? 'Connecting...' : 'Test Connection'}
-                          </button>
-                          <p className="text-xs text-muted-foreground">
-                            Learn more at{' '}
-                            <a
-                              href="https://docs.litellm.ai/docs/"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline"
-                            >
-                              docs.litellm.ai
-                            </a>
-                          </p>
-                        </div>
-                      ) : (
-                        <>
-                          {/* Connected Status */}
-                          <div className="mb-4 flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-sm text-success">
-                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                              Connected to {litellmUrl}
-                            </div>
-                            <button
-                              onClick={() => {
-                                setLitellmConnected(false);
-                                setLitellmModels([]);
-                                setLitellmError(null);
+                              value={shopifyAccessToken}
+                              onChange={(e) => {
+                                setShopifyAccessToken(e.target.value);
+                                setShopifyError(null);
                               }}
-                              className="text-xs text-muted-foreground hover:text-foreground"
+                              placeholder="shpat_..."
+                              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                              data-testid="shopify-token-input"
+                            />
+                            <p className="mt-1.5 text-xs text-muted-foreground">
+                              Create a custom app in your Shopify admin to get
+                              an access token.{" "}
+                              <a
+                                href="https://help.shopify.com/en/manual/apps/app-types/custom-apps"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary hover:underline"
+                              >
+                                Learn how
+                              </a>
+                            </p>
+                          </div>
+
+                          {shopifyShopName && !shopifyError && (
+                            <div className="flex items-center gap-2 text-sm text-success">
+                              <CheckCircle2 className="h-4 w-4" />
+                              Connection verified: {shopifyShopName}
+                            </div>
+                          )}
+
+                          {shopifyError && (
+                            <div className="flex items-center gap-2 text-sm text-destructive">
+                              <XCircle className="h-4 w-4" />
+                              {shopifyError}
+                            </div>
+                          )}
+
+                          <div className="flex gap-2">
+                            <button
+                              onClick={handleTestShopify}
+                              disabled={
+                                testingShopify ||
+                                !shopifyDomain.trim() ||
+                                !shopifyAccessToken.trim()
+                              }
+                              className="rounded-md bg-muted px-4 py-2 text-sm font-medium hover:bg-muted/80 disabled:opacity-50"
+                              data-testid="shopify-test-button"
                             >
-                              Disconnect
+                              {testingShopify ? (
+                                <span className="flex items-center gap-2">
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  Testing...
+                                </span>
+                              ) : (
+                                "Test Connection"
+                              )}
+                            </button>
+                            <button
+                              onClick={handleConnectShopify}
+                              disabled={
+                                savingShopify ||
+                                !shopifyDomain.trim() ||
+                                !shopifyAccessToken.trim()
+                              }
+                              className="flex-1 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                              data-testid="shopify-connect-button"
+                            >
+                              {savingShopify ? (
+                                <span className="flex items-center justify-center gap-2">
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  Connecting...
+                                </span>
+                              ) : (
+                                "Connect Store"
+                              )}
                             </button>
                           </div>
-
-                          {/* Search */}
-                          <div className="mb-4">
-                            <input
-                              type="text"
-                              value={litellmSearch}
-                              onChange={(e) => setLitellmSearch(e.target.value)}
-                              placeholder="Search models..."
-                              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                              data-testid="litellm-search-input"
-                            />
-                          </div>
-
-                          {/* Grouped Model List */}
-                          <div className="mb-4 max-h-64 overflow-y-auto rounded-md border border-input" data-testid="litellm-model-list">
-                            {Object.entries(groupedLitellmModels)
-                              .sort(([a], [b]) => {
-                                const priorityA = LITELLM_PROVIDER_PRIORITY.indexOf(a);
-                                const priorityB = LITELLM_PROVIDER_PRIORITY.indexOf(b);
-                                // If both have priority, sort by priority
-                                if (priorityA !== -1 && priorityB !== -1) return priorityA - priorityB;
-                                // Priority providers come first
-                                if (priorityA !== -1) return -1;
-                                if (priorityB !== -1) return 1;
-                                // Otherwise alphabetical
-                                return a.localeCompare(b);
-                              })
-                              .map(([provider, models]) => (
-                                <div key={provider}>
-                                  <div className="sticky top-0 bg-muted px-3 py-2 text-xs font-semibold text-muted-foreground uppercase">
-                                    {provider}
-                                  </div>
-                                  {models.map((model) => (
-                                    <label
-                                      key={model.id}
-                                      className={`flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-muted/50 ${
-                                        selectedLitellmModel === model.id ? 'bg-muted' : ''
-                                      }`}
-                                    >
-                                      <input
-                                        type="radio"
-                                        name="litellm-model"
-                                        value={model.id}
-                                        checked={selectedLitellmModel === model.id}
-                                        onChange={(e) => setSelectedLitellmModel(e.target.value)}
-                                        className="h-4 w-4"
-                                        data-testid={`litellm-model-${model.id}`}
-                                      />
-                                      <div className="flex-1 min-w-0">
-                                        <div className="text-sm font-medium text-foreground truncate">
-                                          {model.name}
-                                        </div>
-                                        <div className="text-xs text-muted-foreground truncate">
-                                          {model.id}
-                                        </div>
-                                      </div>
-                                    </label>
-                                  ))}
-                                </div>
-                              ))}
-                          </div>
-
-                          {/* Save button */}
-                          {selectedLitellmModel && (
-                            <>
-                              <button
-                                onClick={handleSaveLiteLLM}
-                                disabled={savingLitellm}
-                                className="mt-4 w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                                data-testid="litellm-save-button"
-                              >
-                                {savingLitellm ? 'Saving...' : 'Use This Model'}
-                              </button>
-                            </>
-                          )}
-
-                          {/* Current LiteLLM selection indicator */}
-                          {selectedModel?.provider === 'litellm' && (
-                            <div className="mt-4 rounded-lg bg-muted p-3">
-                              <p className="text-sm text-foreground">
-                                <span className="font-medium">Currently using:</span>{' '}
-                                {selectedModel.model.replace('litellm/', '')}
-                              </p>
-                            </div>
-                          )}
-                        </>
+                        </div>
                       )}
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          </section>
-
-          {/* API Key Section - Only show for cloud providers */}
-          {activeTab === 'cloud' && (
-            <section>
-              <h2 className="mb-4 text-base font-medium text-foreground">Bring Your Own Model/API Key</h2>
-              <div className="rounded-lg border border-border bg-card p-5">
-                <p className="mb-5 text-sm text-muted-foreground leading-relaxed">
-                  Setup the API key and model for your own AI coworker.
-                </p>
-
-                {/* Provider Selection */}
-                <div className="mb-5">
-                  <label className="mb-2.5 block text-sm font-medium text-foreground">
-                    Provider
-                  </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    {API_KEY_PROVIDERS.map((p) => (
-                      <button
-                        key={p.id}
-                        onClick={() => setProvider(p.id)}
-                        className={`rounded-xl border p-4 text-center transition-all duration-200 ease-accomplish ${provider === p.id
-                            ? 'border-primary bg-muted'
-                            : 'border-border hover:border-ring'
-                          }`}
-                      >
-                        <div className="font-medium text-foreground">{p.name}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* API Key Input */}
-                <div className="mb-5">
-                  <label className="mb-2.5 block text-sm font-medium text-foreground">
-                    {API_KEY_PROVIDERS.find((p) => p.id === provider)?.name} API Key
-                  </label>
-                  <input
-                    data-testid="settings-api-key-input"
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder={API_KEY_PROVIDERS.find((p) => p.id === provider)?.placeholder}
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  />
-                  {provider === 'openrouter' && (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Uses the OpenAI-compatible endpoint at <span className="font-mono">https://openrouter.ai/api/v1</span>. Select an OpenAI model below.
-                    </p>
-                  )}
-                </div>
-
-                {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
-                {statusMessage && (
-                  <p className="mb-4 text-sm text-success">{statusMessage}</p>
-                )}
-
-                <button
-                  className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-                  onClick={handleSaveApiKey}
-                  disabled={isSaving}
-                >
-                  {isSaving ? 'Saving...' : 'Save API Key'}
-                </button>
-
-                {/* Saved Keys */}
-                {loadingKeys ? (
-                  <div className="mt-6 animate-pulse">
-                    <div className="h-4 w-24 rounded bg-muted mb-3" />
-                    <div className="h-14 rounded-xl bg-muted" />
-                  </div>
-                ) : savedKeys.length > 0 && (
-                  <div className="mt-6">
-                    <h3 className="mb-3 text-sm font-medium text-foreground">Saved Keys</h3>
-                    <div className="space-y-2">
-                      {savedKeys.map((key) => {
-                        const providerConfig = API_KEY_PROVIDERS.find((p) => p.id === key.provider);
-                        return (
-                          <div
-                            key={key.id}
-                            className="flex items-center justify-between rounded-xl border border-border bg-muted p-3.5"
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-                                <span className="text-xs font-bold text-primary">
-                                  {providerConfig?.name.charAt(0) || key.provider.charAt(0).toUpperCase()}
-                                </span>
-                              </div>
-                              <div>
-                                <div className="text-sm font-medium text-foreground">
-                                  {providerConfig?.name || key.provider}
-                                </div>
-                                <div className="text-xs text-muted-foreground font-mono">
-                                  {key.keyPrefix}
-                                </div>
-                              </div>
-                            </div>
-                            {keyToDelete === key.id ? (
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground">Are you sure?</span>
-                                <button
-                                  onClick={() => {
-                                    handleDeleteApiKey(key.id, key.provider);
-                                    setKeyToDelete(null);
-                                  }}
-                                  className="rounded px-2 py-1 text-xs font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
-                                >
-                                  Yes
-                                </button>
-                                <button
-                                  onClick={() => setKeyToDelete(null)}
-                                  className="rounded px-2 py-1 text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
-                                >
-                                  No
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => setKeyToDelete(key.id)}
-                                className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors duration-200 ease-accomplish"
-                                title="Remove API key"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
                     </div>
                   </div>
-                )}
-              </div>
-            </section>
-          )}
-          </div>
-        )}
-
-        {/* Brand Tab Content */}
-        {mainTab === 'brand' && (
-          <div className="space-y-6">
-            <BrandSettingsSection />
-          </div>
-        )}
-
-        {/* Integrations Tab Content */}
-        {mainTab === 'integrations' && (
-          <div className="space-y-6">
-          {/* Integrations Section */}
-          <section id="settings-integrations-section">
-            <div className="rounded-lg border border-border bg-card p-5">
-              {/* Shopify Connection */}
-              <div className="flex items-start gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#96bf48]/10">
-                  <Store className="h-5 w-5 text-[#96bf48]" />
                 </div>
-                <div className="flex-1">
+              </section>
+            </div>
+          )}
+
+          {/* Developer Tab Content */}
+          {mainTab === "developer" && (
+            <div className="space-y-6">
+              {/* Developer Section */}
+              <section>
+                <div className="rounded-lg border border-border bg-card p-5">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-medium text-foreground">Shopify</h3>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {shopifyConnected
-                          ? `Connected to ${shopifyShopName || shopifyDomain}`
-                          : 'Connect your store to manage products, orders, and inventory'}
+                    <div className="flex-1">
+                      <div className="font-medium text-foreground">
+                        Debug Mode
+                      </div>
+                      <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
+                        Show detailed backend logs including Claude CLI
+                        commands, flags, and stdout/stderr output in the task
+                        view.
                       </p>
                     </div>
-                    {shopifyConnected && (
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="h-5 w-5 text-success" />
+                    <div className="ml-4">
+                      {loadingDebug ? (
+                        <div className="h-6 w-11 animate-pulse rounded-full bg-muted" />
+                      ) : (
                         <button
-                          onClick={handleDisconnectShopify}
-                          disabled={disconnectingShopify}
-                          className="text-sm text-muted-foreground hover:text-destructive transition-colors"
+                          data-testid="settings-debug-toggle"
+                          onClick={handleDebugToggle}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-accomplish ${
+                            debugMode ? "bg-primary" : "bg-muted"
+                          }`}
                         >
-                          {disconnectingShopify ? 'Disconnecting...' : 'Disconnect'}
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform duration-200 ease-accomplish ${
+                              debugMode ? "translate-x-6" : "translate-x-1"
+                            }`}
+                          />
                         </button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
-
-                  {!shopifyConnected && (
-                    <div className="mt-4 space-y-3">
-                      <div>
-                        <label className="mb-1.5 block text-sm font-medium text-foreground">
-                          Store Domain
-                        </label>
-                        <input
-                          type="text"
-                          value={shopifyDomain}
-                          onChange={(e) => {
-                            setShopifyDomain(e.target.value);
-                            setShopifyError(null);
-                            setShopifyShopName(null);
-                          }}
-                          placeholder="your-store.myshopify.com"
-                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                          data-testid="shopify-domain-input"
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-1.5 block text-sm font-medium text-foreground">
-                          Admin API Access Token
-                        </label>
-                        <input
-                          type="password"
-                          value={shopifyAccessToken}
-                          onChange={(e) => {
-                            setShopifyAccessToken(e.target.value);
-                            setShopifyError(null);
-                          }}
-                          placeholder="shpat_..."
-                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                          data-testid="shopify-token-input"
-                        />
-                        <p className="mt-1.5 text-xs text-muted-foreground">
-                          Create a custom app in your Shopify admin to get an access token.{' '}
-                          <a
-                            href="https://help.shopify.com/en/manual/apps/app-types/custom-apps"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary hover:underline"
-                          >
-                            Learn how
-                          </a>
-                        </p>
-                      </div>
-
-                      {shopifyShopName && !shopifyError && (
-                        <div className="flex items-center gap-2 text-sm text-success">
-                          <CheckCircle2 className="h-4 w-4" />
-                          Connection verified: {shopifyShopName}
-                        </div>
-                      )}
-
-                      {shopifyError && (
-                        <div className="flex items-center gap-2 text-sm text-destructive">
-                          <XCircle className="h-4 w-4" />
-                          {shopifyError}
-                        </div>
-                      )}
-
-                      <div className="flex gap-2">
-                        <button
-                          onClick={handleTestShopify}
-                          disabled={testingShopify || !shopifyDomain.trim() || !shopifyAccessToken.trim()}
-                          className="rounded-md bg-muted px-4 py-2 text-sm font-medium hover:bg-muted/80 disabled:opacity-50"
-                          data-testid="shopify-test-button"
-                        >
-                          {testingShopify ? (
-                            <span className="flex items-center gap-2">
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              Testing...
-                            </span>
-                          ) : (
-                            'Test Connection'
-                          )}
-                        </button>
-                        <button
-                          onClick={handleConnectShopify}
-                          disabled={savingShopify || !shopifyDomain.trim() || !shopifyAccessToken.trim()}
-                          className="flex-1 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                          data-testid="shopify-connect-button"
-                        >
-                          {savingShopify ? (
-                            <span className="flex items-center justify-center gap-2">
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              Connecting...
-                            </span>
-                          ) : (
-                            'Connect Store'
-                          )}
-                        </button>
-                      </div>
+                  {debugMode && (
+                    <div className="mt-4 rounded-xl bg-warning/10 p-3.5">
+                      <p className="text-sm text-warning">
+                        Debug mode is enabled. Backend logs will appear in the
+                        task view when running tasks.
+                      </p>
                     </div>
                   )}
                 </div>
-              </div>
-            </div>
-          </section>
-          </div>
-        )}
+              </section>
 
-        {/* Developer Tab Content */}
-        {mainTab === 'developer' && (
-          <div className="space-y-6">
-          {/* Developer Section */}
-          <section>
-            <div className="rounded-lg border border-border bg-card p-5">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="font-medium text-foreground">Debug Mode</div>
-                  <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
-                    Show detailed backend logs including Claude CLI commands, flags,
-                    and stdout/stderr output in the task view.
+              {/* About Section */}
+              <section>
+                <h2 className="mb-4 text-base font-medium text-foreground">
+                  About
+                </h2>
+                <div className="rounded-lg border border-border bg-card p-5">
+                  <div className="flex items-center gap-4">
+                    <img
+                      src={logoImage}
+                      alt="Shop OS"
+                      className="h-12 w-12 rounded-xl"
+                    />
+                    <div>
+                      <div className="font-medium text-foreground">Shop OS</div>
+                      <div className="text-sm text-muted-foreground">
+                        Version {appVersion || "Error: unavailable"}
+                      </div>
+                    </div>
+                  </div>
+                  <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
+                    Shop OS is an AI-powered operating system for e-commerce
+                    brands. Create content, manage your store, market your
+                    products, and sell anything like a pro.
                   </p>
-                </div>
-                <div className="ml-4">
-                  {loadingDebug ? (
-                    <div className="h-6 w-11 animate-pulse rounded-full bg-muted" />
-                  ) : (
-                    <button
-                      data-testid="settings-debug-toggle"
-                      onClick={handleDebugToggle}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-accomplish ${debugMode ? 'bg-primary' : 'bg-muted'
-                        }`}
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Any questions or feedback?{" "}
+                    <a
+                      href="mailto:support@shopos.ai"
+                      className="text-primary hover:underline"
                     >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform duration-200 ease-accomplish ${debugMode ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                      />
-                    </button>
-                  )}
-                </div>
-              </div>
-              {debugMode && (
-                <div className="mt-4 rounded-xl bg-warning/10 p-3.5">
-                  <p className="text-sm text-warning">
-                    Debug mode is enabled. Backend logs will appear in the task view
-                    when running tasks.
+                      Click here to contact us
+                    </a>
+                    .
                   </p>
                 </div>
-              )}
+              </section>
             </div>
-          </section>
-
-          {/* About Section */}
-          <section>
-            <h2 className="mb-4 text-base font-medium text-foreground">About</h2>
-            <div className="rounded-lg border border-border bg-card p-5">
-              <div className="flex items-center gap-4">
-                <img
-                  src={logoImage}
-                  alt="Shop OS"
-                  className="h-12 w-12 rounded-xl"
-                />
-                <div>
-                  <div className="font-medium text-foreground">Shop OS</div>
-                  <div className="text-sm text-muted-foreground">Version {appVersion || 'Error: unavailable'}</div>
-                </div>
-              </div>
-              <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
-                Shop OS is an AI-powered operating system for e-commerce brands. Create content, manage your store, market your products, and sell anything like a pro.
-              </p>
-              <p className="mt-3 text-sm text-muted-foreground">
-                Any questions or feedback? <a href="mailto:support@shopos.ai" className="text-primary hover:underline">Click here to contact us</a>.
-              </p>
-            </div>
-          </section>
-          </div>
-        )}
+          )}
         </div>
       </DialogContent>
     </Dialog>
