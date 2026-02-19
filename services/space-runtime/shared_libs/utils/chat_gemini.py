@@ -43,13 +43,15 @@ async def chat_gemini(
     temperature: float = 0.7,
     timeout: int = 120,
     max_tokens: Optional[int] = None,
+    api_key: Optional[str] = None,
 ) -> GeminiResponse:
     """
     Chat with Gemini model using direct HTTP API.
     """
-    if not config.GEMINI_API_KEY:
-        raise ValueError("GEMINI_API_KEY not configured")
-    
+    effective_key = api_key or config.get_gemini_api_key()
+    if not effective_key:
+        raise ValueError("GEMINI_API_KEY not configured and no api_key provided")
+
     log.info(f"Calling Gemini model: {model}")
     
     # Map model names - use latest available models
@@ -118,7 +120,7 @@ async def chat_gemini(
         request_body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
     
     # Make API request
-    url = f"{GEMINI_API_BASE}/models/{actual_model}:generateContent?key={config.GEMINI_API_KEY}"
+    url = f"{GEMINI_API_BASE}/models/{actual_model}:generateContent?key={effective_key}"
     
     async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.post(

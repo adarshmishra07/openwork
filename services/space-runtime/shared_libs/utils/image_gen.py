@@ -58,6 +58,7 @@ async def generate_image(
     tag: str = "generated",
     aspect_ratio: AspectRatio = AspectRatio.RATIO_1_1,
     output_format: OutputFormat = OutputFormat.JPEG,
+    api_key: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Generate an image using Gemini's image generation capabilities.
@@ -72,8 +73,9 @@ async def generate_image(
     Returns:
         Dict with 'url', 'id', 'tag', 'source' or 'error'
     """
-    if not config.GEMINI_API_KEY:
-        return {"error": "GEMINI_API_KEY not configured"}
+    effective_key = api_key or config.get_gemini_api_key()
+    if not effective_key:
+        return {"error": "GEMINI_API_KEY not configured and no api_key provided"}
     
     log.info(f"Generating image with prompt: {prompt[:100]}...")
     
@@ -114,7 +116,7 @@ async def generate_image(
     
     # Use Gemini 3 Pro Image Preview for image generation
     model = "gemini-3-pro-image-preview"
-    url = f"{GEMINI_API_BASE}/models/{model}:generateContent?key={config.GEMINI_API_KEY}"
+    url = f"{GEMINI_API_BASE}/models/{model}:generateContent?key={effective_key}"
     
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:

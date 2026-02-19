@@ -163,7 +163,7 @@ export function RichContentRenderer({ content, className, imageSelectable, onIma
                   index={index >= 0 ? index : 0}
                   selectable={imageSelectable}
                   onSelect={onImageSelect}
-                  className="max-w-[50%] my-2"
+                  className="w-full"
                 />
               );
             },
@@ -202,14 +202,22 @@ export function RichContentRenderer({ content, className, imageSelectable, onIma
                 // Check if paragraph is ONLY images (no meaningful text)
                 const textContent = node?.children
                   ?.filter((c: { type: string }) => c.type === 'text')
-                  .map((c: { value?: string }) => c.value || '')
+                  .map((c: unknown) => (c as { value?: string }).value || '')
                   .join('')
                   .trim();
                 const isImagesOnly = !textContent;
 
-                // If only images, use flex row so consecutive images sit side by side
+                // If only images, use grid so consecutive images sit side by side
                 if (isImagesOnly) {
-                  return <div className="flex flex-wrap gap-2 py-1.5">{children}</div>;
+                  const imgCount = imageChildren.length;
+                  const gridClass = imgCount === 1
+                    ? 'grid-cols-1 max-w-xs'
+                    : imgCount === 2
+                      ? 'grid-cols-2'
+                      : imgCount === 3
+                        ? 'grid-cols-3'
+                        : 'grid-cols-4';
+                  return <div className={`grid ${gridClass} gap-2 py-1.5`}>{children}</div>;
                 }
                 return <div className="text-foreground py-1.5">{children}</div>;
               }
@@ -365,8 +373,8 @@ export function RichContentRenderer({ content, className, imageSelectable, onIma
       {/* Media section - gallery + videos/pdfs */}
       {hasMedia && (
         <div className="space-y-4">
-          {/* Image gallery for selection */}
-          {images.length >= 1 && imageSelectable && (
+          {/* Image gallery for selection - hidden, images render inline via markdown */}
+          {false && images.length >= 1 && imageSelectable && (
             <ImageGallery
               urls={images}
               selectable={imageSelectable}

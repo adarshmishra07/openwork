@@ -16,11 +16,16 @@ import os
 import json
 import asyncio
 import importlib
+import config
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+import time
+from collections import defaultdict
+
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from mangum import Mangum
 from dotenv import load_dotenv
@@ -37,11 +42,69 @@ app = FastAPI(
 # CORS for Electron app
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, restrict to your app's origin
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*", "X-Gemini-Api-Key", "X-OpenAI-Api-Key"],
 )
+
+
+# === Rate Limiter ===
+
+class RateLimiter:
+    """Simple in-memory rate limiter per API key."""
+
+    def __init__(self, max_requests: int = 30, window_seconds: int = 60):
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self._requests: Dict[str, list] = defaultdict(list)
+
+    def is_allowed(self, key: str) -> bool:
+        now = time.time()
+        window_start = now - self.window_seconds
+        self._requests[key] = [t for t in self._requests[key] if t > window_start]
+        if len(self._requests[key]) >= self.max_requests:
+            return False
+        self._requests[key].append(now)
+        return True
+
+rate_limiter = RateLimiter(max_requests=30, window_seconds=60)
+
+
+# === BYOK Middleware ===
+
+# Endpoints that don't require API keys
+OPEN_PATHS = {'/', '/health', '/spaces'}
+
+from fastapi import Depends
+
+def _extract_api_keys(request: Request):
+    """FastAPI dependency: extract API keys from headers, enforce auth & rate limits.
+
+    Using a dependency instead of BaseHTTPMiddleware because Starlette's
+    BaseHTTPMiddleware runs call_next in a threadpool, breaking contextvars.
+    """
+    path = request.url.path
+    method = request.method
+
+    # Skip auth for read-only / health endpoints
+    if path in OPEN_PATHS or (path.startswith('/spaces') and method == 'GET' and '/execute' not in path):
+        return
+
+    gemini_key = request.headers.get("x-gemini-api-key")
+    openai_key = request.headers.get("x-openai-api-key")
+
+    # Require Gemini key for execution and mutation endpoints
+    if not gemini_key:
+        raise HTTPException(status_code=401, detail="X-Gemini-Api-Key header required")
+
+    # Rate limit by key prefix
+    rate_key = gemini_key[:16]
+    if not rate_limiter.is_allowed(rate_key):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Please wait before trying again.")
+
+    # Set keys for request scope (contextvars work correctly in dependencies)
+    config.set_request_keys(gemini_key=gemini_key, openai_key=openai_key)
 
 # Load space registry
 REGISTRY_PATH = Path(__file__).parent / "spaces" / "registry.json"
@@ -175,12 +238,16 @@ class SpaceExecutor:
                 else:
                     result = await func(**inputs)
             else:
-                # Run sync function in executor
+                # Run sync function in executor with context propagation
+                # contextvars don't propagate to threads by default, so we
+                # copy the current context and run the function inside it
+                import contextvars
+                ctx = contextvars.copy_context()
                 loop = asyncio.get_event_loop()
                 if call_style == "body":
-                    result = await loop.run_in_executor(None, lambda: func(inputs))
+                    result = await loop.run_in_executor(None, lambda: ctx.run(func, inputs))
                 else:
-                    result = await loop.run_in_executor(None, lambda: func(**inputs))
+                    result = await loop.run_in_executor(None, lambda: ctx.run(lambda: func(**inputs)))
             
             return result
             
@@ -272,7 +339,7 @@ class SpaceMatcher:
     @classmethod
     async def _llm_intent_match(cls, prompt: str) -> MatchResult:
         """Use LLM to understand user intent and match to spaces."""
-        api_key = os.getenv("GEMINI_API_KEY")
+        api_key = config.get_gemini_api_key()
         if not api_key:
             return MatchResult(matched=False, confidence=0.0)
         
@@ -420,14 +487,21 @@ async def get_space(space_id: str):
     raise HTTPException(status_code=404, detail=f"Space not found: {space_id}")
 
 
-@app.post("/spaces/{space_id}/execute", response_model=SpaceOutput)
-async def execute_space(space_id: str, body: SpaceInput):
+@app.post("/spaces/{space_id}/execute", response_model=SpaceOutput, dependencies=[Depends(_extract_api_keys)])
+async def execute_space(space_id: str, body: SpaceInput, request: Request):
     """Execute a space with the given inputs."""
     # Validate space exists
     space_exists = any(s["id"] == space_id for s in REGISTRY.get("spaces", []))
     if not space_exists:
         raise HTTPException(status_code=404, detail=f"Space not found: {space_id}")
-    
+
+    # Extract API keys from headers and set them directly before execution
+    # (contextvars set in dependencies may not propagate to thread executors)
+    gemini_key = request.headers.get("x-gemini-api-key")
+    openai_key = request.headers.get("x-openai-api-key")
+    if gemini_key or openai_key:
+        config.set_request_keys(gemini_key=gemini_key, openai_key=openai_key)
+
     try:
         result = await SpaceExecutor.execute(space_id, body.inputs)
         return SpaceOutput(**result)
@@ -441,8 +515,46 @@ async def execute_space(space_id: str, body: SpaceInput):
         )
 
 
-@app.post("/match", response_model=MatchResult)
-async def match_prompt(prompt: str, use_llm: bool = True):
+@app.post("/spaces/{space_id}/execute/stream", dependencies=[Depends(_extract_api_keys)])
+async def execute_space_stream(space_id: str, body: SpaceInput, request: Request):
+    """Execute a space with SSE streaming of progress events."""
+    from shared_libs.libs.streaming import set_request_queue, clear_events
+
+    space_exists = any(s["id"] == space_id for s in REGISTRY.get("spaces", []))
+    if not space_exists:
+        raise HTTPException(status_code=404, detail=f"Space not found: {space_id}")
+
+    gemini_key = request.headers.get("x-gemini-api-key")
+    openai_key = request.headers.get("x-openai-api-key")
+    if gemini_key or openai_key:
+        config.set_request_keys(gemini_key=gemini_key, openai_key=openai_key)
+
+    queue = asyncio.Queue()
+    set_request_queue(queue)
+    clear_events()
+
+    async def run_space():
+        try:
+            result = await SpaceExecutor.execute(space_id, body.inputs)
+            await queue.put({"type": "result", **result})
+        except Exception as e:
+            await queue.put({"type": "result", "success": False, "error": str(e), "outputAssets": []})
+        await queue.put(None)  # sentinel
+
+    asyncio.create_task(run_space())
+
+    async def event_stream():
+        while True:
+            event = await queue.get()
+            if event is None:
+                break
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@app.post("/match", response_model=MatchResult, dependencies=[Depends(_extract_api_keys)])
+async def match_prompt(request: Request, prompt: str, use_llm: bool = True):
     """
     Match a user prompt to the best space using intelligent intent detection.
     
@@ -457,8 +569,8 @@ async def match_prompt(prompt: str, use_llm: bool = True):
     return await SpaceMatcher.match(prompt, use_llm=use_llm)
 
 
-@app.post("/match-and-execute", response_model=SpaceOutput)
-async def match_and_execute(prompt: str, body: SpaceInput, use_llm: bool = True):
+@app.post("/match-and-execute", response_model=SpaceOutput, dependencies=[Depends(_extract_api_keys)])
+async def match_and_execute(request: Request, prompt: str, body: SpaceInput, use_llm: bool = True):
     """
     Match a prompt to a space using intelligent intent detection and execute it.
     

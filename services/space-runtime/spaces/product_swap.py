@@ -489,17 +489,21 @@ These instructions MUST be applied to ALL {num_variations} variations and overri
                 log.warning(f"Image generation {i} returned None (generation failed)")
         
         successful_images = len(output_assets)
-        
+
         # Format response to match output schema
         log.info(f"Product swap workflow completed: {successful_images} image(s) generated successfully")
 
-        stream_progress(id="generate-assets", status="completed")
-        metadata = {
-            "workflow": "product_swap",
-            "images_generated": successful_images,
-            "message": f"Successfully generated {successful_images} swapped image(s)"
-        }
-        log.info(f"Product swap workflow completed successfully: {metadata}")
+        stream_progress(id="generate-assets", status="completed" if successful_images > 0 else "failed")
+
+        if successful_images == 0:
+            # Collect error messages from failed generations
+            errors = [str(r) for r in generation_results if isinstance(r, Exception)]
+            error_msg = errors[0] if errors else "All image generations failed"
+            return {
+                "success": False,
+                "outputAssets": [],
+                "error": error_msg
+            }
 
         return {
             "success": True,

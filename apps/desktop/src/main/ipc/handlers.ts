@@ -2049,6 +2049,15 @@ export function registerIPCHandlers(): void {
     return isSpaceRuntimeAvailable();
   });
 
+  // Space Runtime: Check which API keys are available for spaces
+  handle('space-runtime:required-keys', async () => {
+    const { getApiKey } = await import('../store/secureStorage');
+    return {
+      gemini: { exists: Boolean(getApiKey('google')) },
+      openai: { exists: Boolean(getApiKey('openai')) },
+    };
+  });
+
   // Space Runtime: List spaces from remote
   handle('space-runtime:list-remote', async () => {
     const { listSpacesFromRuntime } = await import('../spaces/space-runtime-client');

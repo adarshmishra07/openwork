@@ -21,13 +21,21 @@ async def chat_openai(
     temperature: float = 0.7,
     timeout: float = 120.0,
     max_tokens: Optional[int] = None,
+    api_key: Optional[str] = None,
+    fallback_to_gemini: bool = False,
 ) -> OpenAIResponse:
     """
     Chat with OpenAI model using direct HTTP API.
     """
-    if not config.OPENAI_API_KEY:
-        raise ValueError("OPENAI_API_KEY not configured")
-    
+    effective_key = api_key or config.get_openai_api_key()
+    if not effective_key:
+        if fallback_to_gemini:
+            log.info(f"No OpenAI key available, falling back to Gemini")
+            from shared_libs.utils.chat_gemini import chat_gemini
+            result = await chat_gemini(messages)
+            return OpenAIResponse(content=result.content)
+        raise ValueError("OPENAI_API_KEY not configured and no api_key provided")
+
     log.info(f"Calling OpenAI model: {model}")
     
     # Map model names
@@ -91,7 +99,7 @@ async def chat_openai(
                 json=request_body,
                 headers={
                     "Content-Type": "application/json",
-                    "Authorization": f"Bearer {config.OPENAI_API_KEY}"
+                    "Authorization": f"Bearer {effective_key}"
                 }
             )
         except httpx.TimeoutException as e:

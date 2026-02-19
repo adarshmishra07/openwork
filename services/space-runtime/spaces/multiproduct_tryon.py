@@ -569,6 +569,15 @@ async def _run_multiproduct_tryon_workflow(
         }
         log.info(f"Multi-Product Try-On workflow completed successfully: {metadata}")
 
+        if len(generated_images) == 0:
+            errors = [str(r) for r in task_results if isinstance(r, Exception)]
+            error_msg = errors[0] if errors else "All image generations failed"
+            return {
+                "success": False,
+                "outputAssets": [],
+                "error": error_msg
+            }
+
         return {
             "success": True,
             "outputAssets": generated_images,

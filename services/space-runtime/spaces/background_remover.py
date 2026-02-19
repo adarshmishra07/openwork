@@ -1,128 +1,113 @@
-import requests
+"""
+Background remover space - uses Gemini image generation to remove backgrounds.
+"""
 import asyncio
-from io import BytesIO
-import json
-import traceback
+import base64
+import uuid
+import httpx
+from typing import Dict, Any
 from shared_libs.libs.logger import log
-from shared_libs.libs.streaming import stream_progress, stream_image
-from requests_toolbelt.multipart import decoder
 from shared_libs.libs.storage_client import upload_to_s3, file_from_url
 import config
-from typing import Dict, Any
-from requests.adapters import HTTPAdapter, Retry
-
-# Try to import PIL, but make it optional
-try:
-    from PIL import Image
-    PIL_AVAILABLE = True
-except ImportError:
-    PIL_AVAILABLE = False
-    log.warning("PIL not available - skipping image dimension validation")
-
-# Minimum resolution required by the API
-MIN_WIDTH = 256
-MIN_HEIGHT = 256
-
-async def _remove_background(body: Dict[str, Any]): 
 
 
+async def _remove_background(body: Dict[str, Any]):
     input_image = body.get("input_image", None)
     if input_image is None:
         raise ValueError("input_image is required")
 
-    image_bytes = await file_from_url(input_image)
-
-    stream_progress(id="analyze-request", status="completed", wait_for=15)
-    
-    # Check image dimensions if PIL is available (optional validation)
-    if PIL_AVAILABLE:
-        try:
-            image_bytes.seek(0)  # Reset to beginning
-            img = Image.open(image_bytes)
-            width, height = img.size
-            image_bytes.seek(0)  # Reset again for API call
-            
-            if width < MIN_WIDTH or height < MIN_HEIGHT:
-                raise ValueError(
-                    f"Image resolution too small: {width} x {height} pixels. "
-                    f"Minimum required resolution is {MIN_WIDTH} x {MIN_HEIGHT} pixels. "
-                    f"Please use a larger image or upscale the image first."
-                )
-        except ValueError:
-            raise  # Re-raise validation errors
-        except Exception as e:
-            log.warning(f"Could not validate image dimensions: {e}")
-            image_bytes.seek(0)  # Reset for API call
-    else:
-        # PIL not available, skip dimension check
-        image_bytes.seek(0)
-
-    job = {
-        "type": "inference.remove-background.v1",
-    }
-
-    files = {
-        "job": ("job.json", BytesIO(json.dumps(job).encode("utf-8")), "application/json"),
-        "input": ("input.jpg", image_bytes, "image/jpeg"),
-    }
-
-    prodia_token = config.PRODIA_API_KEY
-    prodia_url = "https://inference.prodia.com/v2/job"
-
     try:
-        session = requests.Session()
-        retries = Retry(
-            total=3,
-            backoff_factor=1,
-            status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["POST"],
+        # Fetch the input image
+        image_bytes_io = await file_from_url(input_image)
+        image_bytes_io.seek(0)
+        img_bytes = image_bytes_io.read()
+        base64_data = base64.b64encode(img_bytes).decode("utf-8")
+
+        # Detect mime type
+        mime_type = "image/jpeg"
+        if img_bytes[:8].startswith(b'\x89PNG'):
+            mime_type = "image/png"
+        elif img_bytes[:4].startswith(b'RIFF'):
+            mime_type = "image/webp"
+
+        api_key = config.get_gemini_api_key()
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY not configured")
+
+        # Use Gemini to remove background
+        prompt = (
+            "Remove the background from this image completely. "
+            "Keep only the main subject/object with a fully transparent background. "
+            "Output a clean PNG with transparent background. "
+            "Do not add any new elements, shadows, or effects."
         )
-        session.mount("https://", HTTPAdapter(max_retries=retries))
-        session.headers.update({"Authorization": f"Bearer {prodia_token}"})
 
-        res = session.post(prodia_url, headers={"Accept": "multipart/form-data"}, files=files)
-
-        # Check if the API call was successful
-        if res.status_code != 200:
-            error_message = f"Background removal API returned status {res.status_code}"
-            try:
-                error_body = res.text
-                if error_body:
-                    error_message += f": {error_body}"
-            except:
-                pass
-            raise Exception(error_message)
-
-        multipart_data = decoder.MultipartDecoder.from_response(res)
-
-        for part in multipart_data.parts:
-            if part.headers.get(b'Content-Type') == b"application/json":
-                continue
-            elif part.headers.get(b'Content-Type', b'').startswith(b"image/"):
-                # return first image as BytesIO - i.e, the first image is the one with removed background
-                file_bytes = part.content
-                filename = f"background_removed.png"
-                url = await upload_to_s3(
-                    filename=filename,
-                    file_bytes=file_bytes,
-                )
-                
-                stream_image(url, "Background removed")
-                stream_progress(id="generate-output", status="completed")
-                return {
-                    "outputAssets": [
-                        {
-                            "type": "image",
-                            "url": url,
+        request_body = {
+            "contents": [{
+                "parts": [
+                    {
+                        "inline_data": {
+                            "mime_type": mime_type,
+                            "data": base64_data
                         }
-                    ],
-                    "success": True,
-                }
+                    },
+                    {"text": prompt}
+                ]
+            }],
+            "generationConfig": {
+                "temperature": 0.2,
+                "responseModalities": ["image", "text"],
+            }
+        }
 
-        # If we reach here, no image was found in the response
-        raise Exception("No image found in background removal API response. The API may have failed to process the image.")
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key={api_key}"
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                url,
+                json=request_body,
+                headers={"Content-Type": "application/json"}
+            )
+
+            if response.status_code != 200:
+                raise Exception(f"Gemini API error: {response.status_code} - {response.text[:200]}")
+
+            result = response.json()
+
+        # Extract image from response
+        candidates = result.get("candidates", [])
+        if candidates:
+            content = candidates[0].get("content", {})
+            for part in content.get("parts", []):
+                if "inlineData" in part:
+                    inline_data = part["inlineData"]
+                    image_data = base64.b64decode(inline_data["data"])
+
+                    unique_id = uuid.uuid4().hex[:8]
+                    filename = f"background_removed_{unique_id}.png"
+                    s3_url = await upload_to_s3(filename, image_data, content_type="image/png")
+
+                    return {
+                        "outputAssets": [
+                            {
+                                "type": "image",
+                                "url": s3_url,
+                            }
+                        ],
+                        "success": True,
+                    }
+
+        # Check for text-only response
+        text_response = ""
+        if candidates:
+            for part in candidates[0].get("content", {}).get("parts", []):
+                if "text" in part:
+                    text_response += part["text"]
+
+        raise Exception(f"No image generated. Response: {text_response[:200]}")
+
     except Exception as e:
-        log.critical(f"Error removing background: {e}\n{traceback.format_exc()}", usecase="background_remover")
+        log.critical(f"Error removing background: {e}", usecase="background_remover")
         return {
             "success": False,
             "error": str(e),

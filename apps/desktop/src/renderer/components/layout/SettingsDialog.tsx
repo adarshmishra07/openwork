@@ -32,35 +32,71 @@ interface SettingsDialogProps {
   initialTab?: string;
 }
 
-// Provider configuration
+// Provider configuration with feature descriptions
 const API_KEY_PROVIDERS = [
+  {
+    id: "google",
+    name: "Google AI (Gemini)",
+    prefix: "AIza",
+    placeholder: "AIza...",
+    required: true,
+    features: [
+      "All image generation spaces",
+      "Product Swap, Steal the Look, Try-On",
+      "Background Remover, Store Banners",
+    ],
+  },
   {
     id: "anthropic",
     name: "Anthropic",
     prefix: "sk-ant-",
     placeholder: "sk-ant-...",
+    features: ["AI agent for complex multi-step tasks"],
   },
-  { id: "openai", name: "OpenAI", prefix: "sk-", placeholder: "sk-..." },
+  {
+    id: "openai",
+    name: "OpenAI",
+    prefix: "sk-",
+    placeholder: "sk-...",
+    features: [
+      "Enhanced Sketch-to-Product analysis",
+      "Enhanced Banner generation prompts",
+    ],
+  },
   {
     id: "openrouter",
     name: "OpenRouter",
     prefix: "sk-or-",
     placeholder: "sk-or-...",
+    features: ["Access to multiple model providers"],
   },
-  { id: "google", name: "Google AI", prefix: "AIza", placeholder: "AIza..." },
-  { id: "xai", name: "xAI (Grok)", prefix: "xai-", placeholder: "xai-..." },
-  { id: "deepseek", name: "DeepSeek", prefix: "sk-", placeholder: "sk-..." },
+  {
+    id: "xai",
+    name: "xAI (Grok)",
+    prefix: "xai-",
+    placeholder: "xai-...",
+    features: ["Alternative AI agent with Grok models"],
+  },
+  {
+    id: "deepseek",
+    name: "DeepSeek",
+    prefix: "sk-",
+    placeholder: "sk-...",
+    features: ["Cost-effective AI agent"],
+  },
   {
     id: "zai",
     name: "Z.AI Coding Plan",
     prefix: "",
     placeholder: "Your Z.AI API key...",
+    features: ["Z.AI GLM models"],
   },
   {
     id: "minimax",
     name: "Minimax",
     prefix: "eyJ",
     placeholder: "Your Minimax API key...",
+    features: ["Minimax models"],
   },
 ] as const;
 
@@ -1602,15 +1638,34 @@ export default function SettingsDialog({
                           <button
                             key={p.id}
                             onClick={() => setProvider(p.id)}
-                            className={`rounded-xl border p-4 text-center transition-all duration-200 ease-accomplish ${
+                            className={`rounded-xl border p-4 text-left transition-all duration-200 ease-accomplish ${
                               provider === p.id
                                 ? "border-primary bg-muted"
                                 : "border-border hover:border-ring"
                             }`}
                           >
-                            <div className="font-medium text-foreground">
-                              {p.name}
+                            <div className="flex items-center justify-between">
+                              <div className="font-medium text-foreground text-sm">
+                                {p.name}
+                              </div>
+                              {"required" in p && p.required && (
+                                <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">
+                                  Required
+                                </span>
+                              )}
                             </div>
+                            {"features" in p && p.features && (
+                              <div className="mt-1.5 space-y-0.5">
+                                {(p.features as readonly string[]).map((f: string) => (
+                                  <div
+                                    key={f}
+                                    className="text-[11px] text-muted-foreground"
+                                  >
+                                    + {f}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </button>
                         ))}
                       </div>
