@@ -338,6 +338,10 @@ const accomplishAPI = {
   isSpaceRuntimeAvailable: (): Promise<boolean> =>
     ipcRenderer.invoke('space-runtime:is-available'),
 
+  // Check which API keys are available for space runtime
+  getSpaceRuntimeKeys: (): Promise<{ gemini: { exists: boolean }; openai: { exists: boolean } }> =>
+    ipcRenderer.invoke('space-runtime:required-keys'),
+
   // List spaces from remote runtime
   listRemoteSpaces: (): Promise<unknown[]> =>
     ipcRenderer.invoke('space-runtime:list-remote'),

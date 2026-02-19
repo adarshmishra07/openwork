@@ -55,7 +55,6 @@ import loadingSymbol from "/assets/loading-symbol.svg";
 import SettingsDialog from "../components/layout/SettingsDialog";
 import { CollapsibleThinking } from "../components/chat/CollapsibleThinking";
 import { CollapsibleToolCall } from "../components/chat/CollapsibleToolCall";
-import { ProgressIndicator } from "../components/chat/ProgressIndicator";
 import { TodoList } from "../components/chat/TodoList";
 import { InlinePermission } from "../components/chat/InlinePermission";
 import {
@@ -1316,57 +1315,38 @@ export default function ExecutionPage() {
                 });
               })()}
 
-              {/* Intent Analysis Indicator */}
+              {/* Thinking / Working indicator - always show bouncing dots + activity label */}
               <AnimatePresence>
-                {intentAnalysisInProgress && (
+                {currentTask.status === "running" && !permissionRequest && (
                   <motion.div
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -8 }}
                     transition={springs.gentle}
-                    data-testid="execution-intent-indicator"
+                    className="flex items-center gap-2"
+                    data-testid="execution-thinking-indicator"
                   >
-                    <ProgressIndicator activity="Understanding Intent" />
+                    <TypingIndicator />
+                    <span className="text-xs text-muted-foreground/60 italic">
+                      {currentTool
+                        ? (() => {
+                            const activity = getActivityInfo(
+                              currentTool,
+                              currentToolInput,
+                            );
+                            const description = (
+                              currentToolInput as { description?: string }
+                            )?.description;
+                            return activity.detail
+                              ? `${activity.label}: ${activity.detail}`
+                              : description || activity.label;
+                          })()
+                        : intentAnalysisInProgress
+                          ? "Understanding Intent"
+                          : "Working on it"}
+                    </span>
                   </motion.div>
                 )}
-              </AnimatePresence>
-
-              <AnimatePresence>
-                {currentTask.status === "running" &&
-                  !permissionRequest &&
-                  !intentAnalysisInProgress && (
-                    <motion.div
-                      initial={{ opacity: 0, x: -8 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -8 }}
-                      transition={springs.gentle}
-                      data-testid="execution-thinking-indicator"
-                    >
-                      <ProgressIndicator
-                        activity={
-                          currentTool
-                            ? (() => {
-                                const activity = getActivityInfo(
-                                  currentTool,
-                                  currentToolInput,
-                                );
-                                const description = (
-                                  currentToolInput as { description?: string }
-                                )?.description;
-                                return activity.detail
-                                  ? `${activity.label}: ${activity.detail}`
-                                  : description || activity.label;
-                              })()
-                            : "Thinking"
-                        }
-                        timingHint={
-                          currentTool
-                            ? (getSpaceToolTimingHint(currentTool) ?? undefined)
-                            : undefined
-                        }
-                      />
-                    </motion.div>
-                  )}
               </AnimatePresence>
 
               {/* Inline Permission Request */}
@@ -1402,7 +1382,7 @@ export default function ExecutionPage() {
                 className="hidden"
               />
 
-              <div className="max-w-4xl mx-auto">
+              <div className="max-w-4xl mx-auto pb-4">
                 <div className="rounded-2xl border border-border/60 bg-white dark:bg-card shadow-sm">
                   {/* Attachment previews */}
                   {attachments.length > 0 && (

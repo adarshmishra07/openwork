@@ -1,9 +1,33 @@
 /**
  * Space Runtime Client - Calls the Python Lambda service
+ * API keys are passed via headers (BYOK model).
  */
 
 import { SpaceDefinition } from './space-registry';
 import type { BrandMemory } from '@shopos/shared';
+import { getApiKey } from '../store/secureStorage';
+
+
+/**
+ * Build headers with API keys for space runtime requests.
+ */
+function getSpaceRuntimeHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  const googleKey = getApiKey('google');
+  if (googleKey) {
+    headers['X-Gemini-Api-Key'] = googleKey;
+  }
+
+  const openaiKey = getApiKey('openai');
+  if (openaiKey) {
+    headers['X-OpenAI-Api-Key'] = openaiKey;
+  }
+
+  return headers;
+}
 
 export interface SpaceExecutionInput {
   [key: string]: unknown;
@@ -83,7 +107,7 @@ export async function isSpaceRuntimeAvailable(): Promise<boolean> {
 export async function listSpacesFromRuntime(): Promise<SpaceDefinition[]> {
   const response = await fetch(`${config.baseUrl}/spaces`, {
     method: 'GET',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getSpaceRuntimeHeaders(),
   });
   
   if (!response.ok) {
@@ -123,7 +147,7 @@ export async function executeSpace(
   try {
     const response = await fetch(`${config.baseUrl}/spaces/${spaceId}/execute`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getSpaceRuntimeHeaders(),
       body: JSON.stringify({ inputs: finalInputs }),
     });
     
@@ -166,7 +190,7 @@ export async function matchAndExecute(
 ): Promise<SpaceExecutionResult> {
   const response = await fetch(`${config.baseUrl}/match-and-execute?prompt=${encodeURIComponent(prompt)}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getSpaceRuntimeHeaders(),
     body: JSON.stringify({ inputs }),
   });
   
@@ -189,7 +213,7 @@ export async function matchPromptRemote(prompt: string): Promise<{
 }> {
   const response = await fetch(`${config.baseUrl}/match?prompt=${encodeURIComponent(prompt)}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getSpaceRuntimeHeaders(),
   });
   
   if (!response.ok) {
@@ -242,7 +266,7 @@ export async function uploadBrandAsset(
   try {
     const response = await fetch(`${config.baseUrl}/upload-brand-asset`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getSpaceRuntimeHeaders(),
       body: JSON.stringify({
         brand_id: input.brandId,
         asset_type: input.assetType,
@@ -314,7 +338,7 @@ export async function uploadChatAttachment(
   try {
     const response = await fetch(`${config.baseUrl}/upload-chat-attachment`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getSpaceRuntimeHeaders(),
       body: JSON.stringify({
         task_id: input.taskId,
         filename: input.filename,
@@ -383,7 +407,7 @@ export async function uploadGeneratedImage(
   try {
     const response = await fetch(`${config.baseUrl}/upload-generated-image`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getSpaceRuntimeHeaders(),
       body: JSON.stringify({
         task_id: input.taskId,
         filename: input.filename,

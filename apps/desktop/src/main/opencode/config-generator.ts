@@ -1589,9 +1589,10 @@ NEVER use placeholder domains like "yourstore.myshopify.com" - always use the ac
         command: ['node', path.join(skillsPath, 'space-runtime', 'dist', 'index.js')],
         enabled: true,
         environment: {
-          // Old API Gateway URL (30s timeout limit): https://8yivyeg6kd.execute-api.ap-south-1.amazonaws.com
-          // Using Lambda Function URL for no timeout limit
           SPACE_RUNTIME_URL: process.env.SPACE_RUNTIME_URL || 'https://mp3a5rmdpmpqphordszcahy5bm0okvjt.lambda-url.ap-south-1.on.aws',
+          // BYOK: Pass API keys so MCP skill can include them in Lambda headers
+          GEMINI_API_KEY: getApiKey('google') || '',
+          OPENAI_API_KEY: getApiKey('openai') || '',
         },
         timeout: 180000, // 3 minutes - spaces can take 60-90s plus network variance
       },

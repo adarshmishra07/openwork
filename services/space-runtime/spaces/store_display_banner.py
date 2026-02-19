@@ -262,7 +262,8 @@ async def run_poster_design_workflow(
         prompt_response = await chat_openai(
             messages=messages,
             model="gpt-4o",
-            temperature=0.8
+            temperature=0.8,
+            fallback_to_gemini=True,
         )
         
         # Parse JSON response

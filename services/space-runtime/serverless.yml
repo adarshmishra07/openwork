@@ -12,9 +12,6 @@ provider:
   
   environment:
     STAGE: ${self:provider.stage}
-    GEMINI_API_KEY: ${env:GEMINI_API_KEY, ''}
-    OPENAI_API_KEY: ${env:OPENAI_API_KEY, ''}
-    PRODIA_API_KEY: ${env:PRODIA_API_KEY, ''}
     AWS_S3_BUCKET: future-me-ai
     AWS_REGION_NAME: ap-south-1
   

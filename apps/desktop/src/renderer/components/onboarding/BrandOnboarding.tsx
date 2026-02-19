@@ -844,16 +844,50 @@ function BetaInfoStep() {
 }
 
 // ============================================
-// API Setup Step
+// API Setup Step - BYOK (Bring Your Own Key)
 // ============================================
 
-type ApiProvider = "anthropic" | "openai" | "google" | "xai";
+type ApiProvider = "anthropic" | "openai" | "google" | "xai" | "deepseek" | "openrouter";
 
-const PROVIDERS: { id: ApiProvider; name: string; description: string }[] = [
-  { id: "anthropic", name: "Anthropic", description: "Claude models" },
-  { id: "openai", name: "OpenAI", description: "GPT models" },
-  { id: "google", name: "Google", description: "Gemini models" },
-  { id: "xai", name: "xAI", description: "Grok models" },
+const AGENT_PROVIDERS: {
+  id: ApiProvider;
+  name: string;
+  description: string;
+  features: string[];
+}[] = [
+  {
+    id: "anthropic",
+    name: "Anthropic",
+    description: "Claude models",
+    features: ["AI agent for complex multi-step tasks"],
+  },
+  {
+    id: "openai",
+    name: "OpenAI",
+    description: "GPT models",
+    features: [
+      "AI agent for task orchestration",
+      "Enhanced Sketch-to-Product & Banners",
+    ],
+  },
+  {
+    id: "xai",
+    name: "xAI",
+    description: "Grok models",
+    features: ["AI agent with Grok"],
+  },
+  {
+    id: "deepseek",
+    name: "DeepSeek",
+    description: "DeepSeek models",
+    features: ["Cost-effective AI agent"],
+  },
+  {
+    id: "openrouter",
+    name: "OpenRouter",
+    description: "Multi-provider access",
+    features: ["Access multiple model providers"],
+  },
 ];
 
 interface ApiSetupStepProps {
@@ -862,22 +896,28 @@ interface ApiSetupStepProps {
 }
 
 function ApiSetupStep({ onValidityChange }: ApiSetupStepProps) {
-  const [provider, setProvider] = useState<ApiProvider>("anthropic");
+  const [section, setSection] = useState<"gemini" | "agent">("gemini");
+  const [agentProvider, setAgentProvider] = useState<ApiProvider>("anthropic");
   const [key, setKey] = useState("");
   const [saved, setSaved] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const accomplish = getAccomplish();
 
+  const hasGemini = saved.includes("google");
+
   // Check for existing API keys on mount
   useEffect(() => {
     const checkExistingKeys = async () => {
       try {
         const keys = await accomplish.getApiKeys();
-        const providers = keys.map((k) => k.provider);
+        const providers = keys.map(
+          (k: { provider: string }) => k.provider,
+        );
         setSaved(providers);
-        if (providers.length > 0) {
+        if (providers.includes("google")) {
           onValidityChange(true);
+          setSection("agent");
         }
       } catch (err) {
         console.error("Failed to fetch API keys:", err);
@@ -886,15 +926,18 @@ function ApiSetupStep({ onValidityChange }: ApiSetupStepProps) {
     checkExistingKeys();
   }, [accomplish, onValidityChange]);
 
+  const currentProvider: ApiProvider =
+    section === "gemini" ? "google" : agentProvider;
+
   const handleAdd = async () => {
     if (!key.trim()) return;
     setLoading(true);
     setError(null);
 
     try {
-      // 1. Validate the API key first
+      // 1. Validate the API key
       const validation = await accomplish.validateApiKeyForProvider(
-        provider,
+        currentProvider,
         key.trim(),
       );
       if (!validation.valid) {
@@ -904,23 +947,29 @@ function ApiSetupStep({ onValidityChange }: ApiSetupStepProps) {
       }
 
       // 2. Store the API key
-      await accomplish.addApiKey(provider, key.trim());
+      await accomplish.addApiKey(currentProvider, key.trim());
 
       // 3. Connect the provider with default model
-      const providerId = provider as ProviderId;
+      const providerId = currentProvider as ProviderId;
       const defaultModel = DEFAULT_MODELS[providerId] || null;
       await accomplish.setConnectedProvider(providerId, {
         providerId,
         connectionStatus: "connected",
         selectedModelId: defaultModel,
-        credentials: { type: "api_key", keyPrefix: key.trim().substring(0, 8) },
+        credentials: {
+          type: "api_key",
+          keyPrefix: key.trim().substring(0, 8),
+        },
         lastConnectedAt: new Date().toISOString(),
       });
 
-      // 4. Always set as active provider (user just selected this one)
-      await accomplish.setActiveProvider(providerId);
+      // 4. Set as active provider for agent execution
+      //    (for agent providers, set them active; for google, only if no other active)
+      if (section === "agent") {
+        await accomplish.setActiveProvider(providerId);
+      }
 
-      // 5. Also set legacy selectedModel for Settings UI compatibility
+      // 5. Set legacy selectedModel
       if (defaultModel) {
         await accomplish.setSelectedModel({
           provider: providerId,
@@ -930,9 +979,17 @@ function ApiSetupStep({ onValidityChange }: ApiSetupStepProps) {
 
       // Update UI
       const keys = await accomplish.getApiKeys();
-      setSaved(keys.map((k) => k.provider));
+      const providers = keys.map(
+        (k: { provider: string }) => k.provider,
+      );
+      setSaved(providers);
       setKey("");
-      onValidityChange(true);
+
+      // Gemini key added - mark as valid and move to agent section
+      if (section === "gemini") {
+        onValidityChange(true);
+        setSection("agent");
+      }
     } catch (e) {
       console.error("Failed to add API key:", e);
       setError("Failed to add API key. Please try again.");
@@ -943,98 +1000,199 @@ function ApiSetupStep({ onValidityChange }: ApiSetupStepProps) {
 
   return (
     <div className="space-y-6">
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold mb-2">Connect AI Provider</h2>
-        <p className="text-muted-foreground">
-          Add an API key to power Shop OS intelligence
+      <div className="text-center mb-6">
+        <h2 className="text-2xl font-bold mb-2">Connect Your API Keys</h2>
+        <p className="text-muted-foreground text-sm">
+          Shop OS uses your own API keys. Your keys are stored securely on your
+          device.
         </p>
       </div>
 
-      {/* Provider Selection */}
-      <div className="space-y-2">
-        <Label>Select Provider</Label>
-        <div className="grid grid-cols-2 gap-2">
-          {PROVIDERS.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => {
-                setProvider(p.id);
-                setError(null);
-              }}
-              className={`p-3 rounded-lg border-2 text-left transition-all ${
-                provider === p.id
-                  ? "border-primary bg-primary/5"
-                  : "border-border hover:border-primary/50"
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-medium text-sm">{p.name}</h3>
-                  <p className="text-xs text-muted-foreground">
-                    {p.description}
-                  </p>
-                </div>
-                {saved.includes(p.id) && (
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
-                )}
-              </div>
-            </button>
-          ))}
+      {/* Section: Required - Gemini */}
+      <div
+        className={`p-4 rounded-xl border-2 transition-all ${
+          section === "gemini" && !hasGemini
+            ? "border-primary bg-primary/5"
+            : hasGemini
+              ? "border-green-500/50 bg-green-500/5"
+              : "border-border"
+        }`}
+      >
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-primary">
+              Required
+            </span>
+            <h3 className="font-semibold text-sm">Google AI (Gemini)</h3>
+          </div>
+          {hasGemini && <CheckCircle2 className="w-5 h-5 text-green-500" />}
         </div>
-      </div>
+        <p className="text-xs text-muted-foreground mb-3">
+          Powers all image generation spaces: Product Swap, Steal the Look,
+          Background Remover, Try-On, Banners, and more.
+        </p>
 
-      {/* API Key Input */}
-      <div className="space-y-2">
-        <Label htmlFor="apiKey">API Key</Label>
-        <div className="flex gap-2">
-          <Input
-            id="apiKey"
-            type="password"
-            value={key}
-            onChange={(e) => {
-              setKey(e.target.value);
-              setError(null);
-            }}
-            placeholder={`Enter your ${PROVIDERS.find((p) => p.id === provider)?.name} API key`}
-            className="flex-1"
-            disabled={loading}
-          />
-          <Button onClick={handleAdd} disabled={!key.trim() || loading}>
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add"}
-          </Button>
-        </div>
-        {error && (
-          <div className="flex items-center gap-2 text-sm text-destructive">
-            <XCircle className="w-4 h-4" />
-            {error}
+        {!hasGemini && section === "gemini" && (
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <Input
+                type="password"
+                value={key}
+                onChange={(e) => {
+                  setKey(e.target.value);
+                  setError(null);
+                }}
+                placeholder="Enter your Google AI / Gemini API key"
+                className="flex-1 text-sm"
+                disabled={loading}
+              />
+              <Button
+                size="sm"
+                onClick={handleAdd}
+                disabled={!key.trim() || loading}
+              >
+                {loading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  "Add"
+                )}
+              </Button>
+            </div>
+            {error && (
+              <div className="flex items-center gap-2 text-xs text-destructive">
+                <XCircle className="w-3 h-3" />
+                {error}
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Saved Keys */}
-      {saved.length > 0 && (
-        <div className="p-4 rounded-lg bg-muted border border-border">
-          <div className="flex items-center gap-2 text-foreground">
-            <CheckCircle2 className="w-5 h-5" />
-            <span className="font-medium">
-              {saved.length} provider{saved.length > 1 ? "s" : ""} connected
+      {/* Section: Optional - Agent Provider */}
+      <div
+        className={`p-4 rounded-xl border-2 transition-all ${
+          section === "agent"
+            ? "border-border bg-background"
+            : "border-border/50 opacity-60"
+        }`}
+      >
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Optional
             </span>
+            <h3 className="font-semibold text-sm">AI Agent Provider</h3>
           </div>
-          <div className="flex flex-wrap gap-2 mt-2">
-            {saved.map((s) => (
-              <span
-                key={s}
-                className="px-2 py-1 rounded bg-foreground/10 text-foreground text-xs font-medium capitalize"
-              >
-                {s}
-              </span>
-            ))}
-          </div>
+          {saved.some((s) =>
+            ["anthropic", "openai", "xai"].includes(s),
+          ) && <CheckCircle2 className="w-5 h-5 text-green-500" />}
+        </div>
+        <p className="text-xs text-muted-foreground mb-3">
+          Your Gemini key will also power the AI agent by default. Add a
+          different provider below if you prefer, or skip and change it later
+          in Settings.
+        </p>
+
+        {section === "agent" && (
+          <>
+            {/* Agent Provider Selection */}
+            <div className="grid grid-cols-3 gap-1.5 mb-3">
+              {AGENT_PROVIDERS.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => {
+                    setAgentProvider(p.id);
+                    setError(null);
+                    setKey("");
+                  }}
+                  className={`p-2.5 rounded-lg border-2 text-left transition-all ${
+                    agentProvider === p.id
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/50"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium text-xs">{p.name}</h4>
+                      <p className="text-[10px] text-muted-foreground">
+                        {p.description}
+                      </p>
+                    </div>
+                    {saved.includes(p.id) && (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Features list */}
+            <div className="text-[11px] text-muted-foreground mb-3 pl-1">
+              {AGENT_PROVIDERS.find((p) => p.id === agentProvider)?.features.map(
+                (f) => (
+                  <div key={f} className="flex items-center gap-1.5">
+                    <span className="text-primary">+</span> {f}
+                  </div>
+                ),
+              )}
+            </div>
+
+            {/* Key Input */}
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <Input
+                  type="password"
+                  value={key}
+                  onChange={(e) => {
+                    setKey(e.target.value);
+                    setError(null);
+                  }}
+                  placeholder={`Enter your ${AGENT_PROVIDERS.find((p) => p.id === agentProvider)?.name} API key`}
+                  className="flex-1 text-sm"
+                  disabled={loading}
+                />
+                <Button
+                  size="sm"
+                  onClick={handleAdd}
+                  disabled={!key.trim() || loading}
+                >
+                  {loading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    "Add"
+                  )}
+                </Button>
+              </div>
+              {error && (
+                <div className="flex items-center gap-2 text-xs text-destructive">
+                  <XCircle className="w-3 h-3" />
+                  {error}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Connected Keys Summary */}
+      {saved.length > 0 && (
+        <div className="flex flex-wrap gap-2 justify-center">
+          {saved.map((s) => (
+            <span
+              key={s}
+              className="px-2.5 py-1 rounded-full bg-green-500/10 text-green-600 text-xs font-medium capitalize flex items-center gap-1"
+            >
+              <CheckCircle2 className="w-3 h-3" />
+              {s === "google" ? "Gemini" : s}
+            </span>
+          ))}
         </div>
       )}
 
-      <p className="text-xs text-muted-foreground text-center">
-        At least one API key is required to use Shop OS
+      <p className="text-[11px] text-muted-foreground text-center">
+        {hasGemini
+          ? "Gemini key connected. You can add an agent key now or skip and add it later."
+          : "A Google AI (Gemini) key is required for image generation features."}
       </p>
     </div>
   );

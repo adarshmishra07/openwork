@@ -52,7 +52,8 @@ async def analyze_image_content(image_url: str) -> dict:
             messages=[HumanMessage(content=message_content)],
             model="gpt-4o-mini",
             temperature=0.2,
-            timeout=45.0
+            timeout=45.0,
+            fallback_to_gemini=True,
         )
 
         description_content = response.content if hasattr(response, "content") else response
@@ -768,7 +769,8 @@ IMPORTANT IMAGE REFERENCE RULES:
                 messages=messages,
                 model="gpt-5.1",
                 temperature=0.7,
-                timeout=120.0
+                timeout=120.0,
+                fallback_to_gemini=True,
             )
             print(f"[DEBUG] chat_openai returned: type={type(response)}, has_content={hasattr(response, 'content')}", flush=True)
         except Exception as e:
