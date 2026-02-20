@@ -18,6 +18,11 @@ export default defineConfig(() => ({
           startup();
         },
         vite: {
+          resolve: {
+            alias: {
+              '@shopos/shared': path.resolve(__dirname, '../../packages/shared/src'),
+            },
+          },
           build: {
             outDir: 'dist-electron/main',
             rollupOptions: {
@@ -61,6 +66,7 @@ export default defineConfig(() => ({
       '@renderer': path.resolve(__dirname, 'src/renderer'),
       '@shared': path.resolve(__dirname, '../../packages/shared/src'),
       '@accomplish/shared': path.resolve(__dirname, '../../packages/shared/src'),
+      '@shopos/shared': path.resolve(__dirname, '../../packages/shared/src'),
     },
   },
   // Build the React renderer

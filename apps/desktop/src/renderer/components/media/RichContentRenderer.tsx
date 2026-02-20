@@ -212,11 +212,7 @@ export function RichContentRenderer({ content, className, imageSelectable, onIma
                   const imgCount = imageChildren.length;
                   const gridClass = imgCount === 1
                     ? 'grid-cols-1 max-w-xs'
-                    : imgCount === 2
-                      ? 'grid-cols-2'
-                      : imgCount === 3
-                        ? 'grid-cols-3'
-                        : 'grid-cols-4';
+                    : 'grid-cols-2';
                   return <div className={`grid ${gridClass} gap-2 py-1.5`}>{children}</div>;
                 }
                 return <div className="text-foreground py-1.5">{children}</div>;

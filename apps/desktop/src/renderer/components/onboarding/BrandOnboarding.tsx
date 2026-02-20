@@ -964,8 +964,9 @@ function ApiSetupStep({ onValidityChange }: ApiSetupStepProps) {
       });
 
       // 4. Set as active provider for agent execution
-      //    (for agent providers, set them active; for google, only if no other active)
-      if (section === "agent") {
+      //    Always set if no active provider exists (e.g., user only adds Gemini key)
+      const currentSettings = await accomplish.getProviderSettings();
+      if (section === "agent" || !currentSettings.activeProviderId) {
         await accomplish.setActiveProvider(providerId);
       }
 

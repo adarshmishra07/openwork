@@ -1539,8 +1539,12 @@ NEVER use placeholder domains like "yourstore.myshopify.com" - always use the ac
     console.log('[OpenCode Config] Z.AI Coding Plan provider configured with models:', Object.keys(zaiModels));
   }
 
+  // Set default model in config to match active provider selection
+  const defaultModel = activeModel?.model || undefined;
+
   const config: OpenCodeConfig = {
     $schema: 'https://opencode.ai/config.json',
+    model: defaultModel,
     default_agent: ACCOMPLISH_AGENT_NAME,
     // Enable all supported providers - providers auto-configure when API keys are set via env vars
     enabled_providers: enabledProviders,
